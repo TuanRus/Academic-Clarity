@@ -1,0 +1,32 @@
+# Build outputs
+bin/
+obj/
+
+# User-specific files
+*.user
+*.suo
+.vs/
+
+# Config chứa credentials (connection string, API key) — KHÔNG commit.
+# Chỉ commit appsettings.example.json làm mẫu; người clone tự tạo bản thật.
+appsettings.json
+appsettings.*.json
+!appsettings.example.json
+
+# Logs
+*.log
+logs/
+
+# Data files (SCImago CSV... — file lớn, import thủ công, không cần trong repo)
+*.csv
+
+# dotnet
+.dotnet/
+global.json
+
+# Claude Code / IDE local
+.claude/
+
+# Ghi chú dev nội bộ (chứa IP NAS, password — không chia sẻ)
+PROJECT_CONTEXT.md
+TODO-AI-PROVIDERS.md
