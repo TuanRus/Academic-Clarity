@@ -30,3 +30,23 @@ global.json
 # Ghi chú dev nội bộ (chứa IP NAS, password — không chia sẻ)
 PROJECT_CONTEXT.md
 TODO-AI-PROVIDERS.md
+FEATURE_Idea_Overlap_Checker.md
+PROJECT_FEATURES.md
+
+# Script nội bộ
+describe-project.ps1
+
+# Secrets / environment
+*.env
+.env
+.env.*
+secrets.json
+*secrets*.json
+launchSettings.json
+
+# Rider / JetBrains
+.idea/
+*.iml
+
+# macOS
+.DS_Store
