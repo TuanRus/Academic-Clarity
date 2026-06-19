@@ -44,6 +44,7 @@ namespace ScientificTrendTracker
             builder.Services.AddScoped<IKeywordExtractionService, KeywordExtractionService>();
             builder.Services.AddScoped<IScimagoImportService, ScimagoImportService>();
             builder.Services.AddScoped<IGraphBuilderService, GraphBuilderService>();
+            builder.Services.AddScoped<ITrendService, TrendService>();
             builder.Services.AddScoped<ISyncOrchestratorService, SyncOrchestratorService>();
             builder.Services.AddSingleton<IKeywordReprocessService, KeywordReprocessService>();
 

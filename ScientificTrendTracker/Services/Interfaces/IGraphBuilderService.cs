@@ -30,6 +30,14 @@ namespace ScientificTrendTracker.Services.Interfaces
         Task<PagedResult<PaperSearchItemDto>> SearchPapersByJournalAsync(string journal, int page, int pageSize);
 
         /// <summary>
+        /// Gợi ý keyword CÓ SẴN trong DB khớp chuỗi gõ vào (autocomplete cho thanh search).
+        /// </summary>
+        /// <param name="q">Chuỗi người dùng đang gõ (contains, không phân biệt hoa thường).</param>
+        /// <param name="limit">Số gợi ý tối đa.</param>
+        /// <returns>List&lt;string&gt; tên keyword, ưu tiên keyword nhiều bài nhất.</returns>
+        Task<List<string>> SuggestKeywordsAsync(string q, int limit);
+
+        /// <summary>
         /// Bước "click vào bài báo → tạo graph": dựng graph cho đúng 1 bài báo theo PaperId.
         /// Khác BuildGraphByPaperAsync (nhận query fuzzy) — đây nhận PaperId chính xác user đã chọn.
         /// </summary>

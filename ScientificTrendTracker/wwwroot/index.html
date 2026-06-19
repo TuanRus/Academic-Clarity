@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <!--
-  ⚠️ DEMO / REFERENCE cho FE — KHÔNG phải FE chính thức.
+   DEMO / REFERENCE cho FE — KHÔNG phải FE chính thức.
   File này minh họa cách gọi API mind map của backend (đọc để hiểu luồng + tham số):
     1. GET tree/keyword?keyword=&maxBranches=&maxSubBranches=
           → cây 3 TẦNG KEYWORD (chủ đề → con → cháu), KHÔNG có bài trên cây.
@@ -9,7 +9,12 @@
             tránh lặp lại "megahit" (bài citation cao) của chủ đề gốc.
     3. GET search?q=  /  search/author?author=  /  search/journal?journal=
           → list bài → click 1 bài → GET graph/paper/{paperId} → mind map quanh bài đó.
-  FE thật xây riêng; tham khảo thứ tự gọi + tham số ở đây. Render dùng vis-network.
+  TREND DASHBOARD (view thứ 2, nút chuyển ở góc phải header):
+    4. GET trend/top?dimension=keyword|author|journal&fromYear=&toYear=&topN=
+          → bảng xếp hạng top entity theo share.
+    5. GET trend/series?dimension=&value=&fromYear=&toYear=&groupBy=year|month
+          → time-series share theo kỳ + slope + direction (line chart Chart.js).
+  FE thật xây riêng; tham khảo thứ tự gọi + tham số ở đây. Render: vis-network (map) + Chart.js (trend).
 -->
 <html lang="vi">
 <head>
@@ -17,6 +22,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Scientific Trend Tracker — Research Mind Map</title>
   <script src="https://unpkg.com/vis-network@9.1.9/standalone/umd/vis-network.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body { margin: 0; font-family: 'Segoe UI', Roboto, sans-serif; background: #0f1117; color: #e6e6e6; }
@@ -28,7 +34,7 @@
       padding: 8px 12px; border-radius: 6px; border: 1px solid #2a2f3a; background: #1c2230; color: #e6e6e6; font-size: 14px;
     }
     .toolbar input[type=text] { width: 240px; }
-    .toolbar input[type=number] { width: 64px; }
+    .toolbar input[type=number] { width: 88px; }
     .toolbar label { font-size: 13px; color: #b6bdca; display: flex; align-items: center; gap: 5px; }
     .toolbar button { background: #2563eb; border-color: #2563eb; cursor: pointer; font-weight: 600; }
     .toolbar button:hover { background: #1d4ed8; }
@@ -42,24 +48,47 @@
     #paperList .item { padding: 10px 12px; border-bottom: 1px solid #2a2f3a; cursor: pointer; font-size: 13px; }
     #paperList .item:hover { background: #1c2230; }
     #paperList .meta { color: #8a93a3; font-size: 11px; margin-top: 3px; }
+    /* View switcher + Trend dashboard */
+    .header-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .switcher { display: flex; gap: 6px; }
+    .viewbtn { padding: 7px 14px; border-radius: 6px; border: 1px solid #2a2f3a; background: #1c2230; color: #b6bdca; cursor: pointer; font-size: 13px; font-weight: 600; }
+    .viewbtn.active { background: #2563eb; border-color: #2563eb; color: #fff; }
+    #trendBody { display: flex; gap: 14px; padding: 14px 20px; height: calc(100vh - 175px); }
+    #trendTop { width: 340px; overflow-y: auto; background: #161a23; border: 1px solid #2a2f3a; border-radius: 8px; flex-shrink: 0; }
+    #trendTop .item { padding: 9px 12px; border-bottom: 1px solid #2a2f3a; cursor: pointer; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+    #trendTop .item:hover { background: #1c2230; }
+    #trendTop .item.head { font-weight: 600; color: #0ea5e9; cursor: default; }
+    #trendTop .bar { color: #8a93a3; font-size: 11px; white-space: nowrap; }
+    #trendChartWrap { flex: 1; background: #161a23; border: 1px solid #2a2f3a; border-radius: 8px; padding: 14px; position: relative; }
   </style>
 </head>
 <body>
   <header>
-    <h1>🔬 Scientific Trend Tracker</h1>
-    <p>Research Roadmap Mind Map — dữ liệu OpenAlex (CS 2022+), keyword bởi AI, Q-rank bởi SCImago</p>
+    <div class="header-row">
+      <div>
+        <h1>Scientific Trend Tracker</h1>
+        <p>Demo — dữ liệu OpenAlex (CS 2022+), keyword bởi AI, Q-rank bởi SCImago</p>
+      </div>
+      <div class="switcher">
+        <button class="viewbtn active" id="btnMindmap">Mind Map</button>
+        <button class="viewbtn" id="btnTrend">Trend Dashboard</button>
+      </div>
+    </div>
   </header>
 
+  <!-- ===== VIEW 1: MIND MAP ===== -->
+  <div id="mindmapView">
   <div class="toolbar">
     <select id="mode">
       <option value="tree">Mind Map cây (chủ đề → con → cháu, click xem bài)</option>
       <option value="paper">Theo bài báo (tìm → chọn)</option>
     </select>
-    <input type="text" id="q" placeholder="vd: large-language-model, deep-learning..." />
+    <input type="text" id="q" list="kwSuggest" autocomplete="off" placeholder="Gõ keyword có trong DB..." />
+    <datalist id="kwSuggest"></datalist>
     <label>Nhánh: <input type="number" id="branches" value="6" min="1" max="15" /></label>
     <label>Cháu/nhánh: <input type="number" id="perBranch" value="3" min="0" max="10" /></label>
     <button id="go">Tạo Mind Map</button>
-    <button id="png" class="ghost">⬇ Lưu ảnh</button>
+    <button id="png" class="ghost">Lưu ảnh</button>
     <span id="status"></span>
   </div>
 
@@ -69,8 +98,38 @@
   <div class="legend">
     <span><span class="dot" style="background:#0ea5e9"></span>Chủ đề trung tâm</span>
     <span><span class="dot" style="background:#10b981"></span>Chủ đề con (đậm = đang hot)</span>
-    <span>👆 Click node chủ đề → xổ danh sách bài bên trái</span>
-    <span>💡 Hover xem chi tiết</span>
+    <span>Click node chủ đề → xổ danh sách bài bên trái</span>
+    <span>Hover xem chi tiết</span>
+  </div>
+  </div><!-- /mindmapView -->
+
+  <!-- ===== VIEW 2: TREND DASHBOARD ===== -->
+  <div id="trendView" style="display:none">
+    <div class="toolbar">
+      <select id="tDim">
+        <option value="keyword">Keyword</option>
+        <option value="author">Author</option>
+        <option value="journal">Journal</option>
+      </select>
+      <input type="text" id="tValue" placeholder="Tên entity (vd: large-language-models) — để trống = top ranking" />
+      <label>Từ năm: <input type="number" id="tFrom" value="2022" min="2000" max="2026" /></label>
+      <label>Đến năm: <input type="number" id="tTo" value="2026" min="2000" max="2026" /></label>
+      <select id="tGroup">
+        <option value="year">Theo năm</option>
+        <option value="month">Theo tháng</option>
+      </select>
+      <select id="tSort">
+        <option value="share">Sắp xếp: nhiều bài nhất</option>
+        <option value="rising">Sắp xếp: đang lên</option>
+        <option value="falling">Sắp xếp: đang xuống</option>
+      </select>
+      <button id="tGo">Xem Trend</button>
+      <span id="tStatus"></span>
+    </div>
+    <div id="trendBody">
+      <div id="trendTop"></div>
+      <div id="trendChartWrap"><canvas id="trendChart"></canvas></div>
+    </div>
   </div>
 
 <script>
@@ -86,6 +145,22 @@ let currentRoot = ''; // keyword gốc đang xem — để click sub-node truy�
 document.getElementById('go').onclick = run;
 document.getElementById('png').onclick = savePng;
 elQ.addEventListener('keydown', e => { if (e.key === 'Enter') run(); });
+
+// Autocomplete: chỉ gợi ý keyword CÓ SẴN trong DB (debounce 180ms khi gõ ≥ 2 ký tự)
+const elKwSuggest = document.getElementById('kwSuggest');
+let suggestTimer = null;
+elQ.addEventListener('input', () => {
+  clearTimeout(suggestTimer);
+  const q = elQ.value.trim();
+  if (q.length < 2) { elKwSuggest.innerHTML = ''; return; }
+  suggestTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/mindmap/keywords/suggest?q=${encodeURIComponent(q)}&limit=10`);
+      const json = await res.json();
+      elKwSuggest.innerHTML = (json?.data || []).map(k => `<option value="${k.replace(/"/g, '&quot;')}"></option>`).join('');
+    } catch {}
+  }, 180);
+});
 
 function run() {
   const q = elQ.value.trim();
@@ -157,7 +232,7 @@ function renderGraph(data, isTree) {
           : { background: trendColor(n.trendScore), border: '#0d9488' },
         font: { color: '#e6e6e6', size: isCentral ? 18 : 14, bold: isCentral },
         _keyword: n.label, _level: n.level ?? 0,
-        title: `${isCentral ? 'CHỦ ĐỀ' : 'CHỦ ĐỀ CON'}: ${n.label}\nSố bài: ${n.paperCount}` + (n.trendScore != null ? `\nTrendScore: ${n.trendScore}` : '') + '\n👆 Click để xem bài'
+        title: `${isCentral ? 'CHỦ ĐỀ' : 'CHỦ ĐỀ CON'}: ${n.label}\nSố bài: ${n.paperCount}` + (n.trendScore != null ? `\nTrendScore: ${n.trendScore}` : '') + '\nClick để xem bài'
       };
     }
     const t = n.label || '';
@@ -207,7 +282,7 @@ async function showNodePapers(keyword, level) {
   const json = await res.json();
   const items = json?.data || [];
   if (!items.length) { elPaperList.innerHTML = `<div class="item">Không có bài cho "${keyword}".</div>`; return; }
-  elPaperList.innerHTML = `<div class="item" style="font-weight:600;color:#0ea5e9">📄 ${items.length} bài · ${keyword}</div>`;
+  elPaperList.innerHTML = `<div class="item" style="font-weight:600;color:#0ea5e9">${items.length} bài · ${keyword}</div>`;
   items.forEach(p => {
     const div = document.createElement('div');
     div.className = 'item';
@@ -226,6 +301,105 @@ function savePng() {
   a.download = 'mindmap.png';
   a.click();
 }
+
+/* ============ VIEW SWITCHER: Mind Map ↔ Trend Dashboard ============ */
+const elMindmapView = document.getElementById('mindmapView');
+const elTrendView = document.getElementById('trendView');
+const btnMindmap = document.getElementById('btnMindmap');
+const btnTrend = document.getElementById('btnTrend');
+btnMindmap.onclick = () => switchView('mindmap');
+btnTrend.onclick = () => switchView('trend');
+function switchView(v) {
+  const isTrend = v === 'trend';
+  elMindmapView.style.display = isTrend ? 'none' : '';
+  elTrendView.style.display = isTrend ? '' : 'none';
+  btnTrend.classList.toggle('active', isTrend);
+  btnMindmap.classList.toggle('active', !isTrend);
+  if (isTrend && !trendChart) loadTrend(); // lần đầu mở dashboard → tự tải
+}
+
+/* ============ TREND DASHBOARD ============ */
+const tDim = document.getElementById('tDim');
+const tValue = document.getElementById('tValue');
+const tFrom = document.getElementById('tFrom');
+const tTo = document.getElementById('tTo');
+const tGroup = document.getElementById('tGroup');
+const tSort = document.getElementById('tSort');
+const tStatus = document.getElementById('tStatus');
+const trendTop = document.getElementById('trendTop');
+let trendChart = null;
+document.getElementById('tGo').onclick = loadTrend;
+tSort.onchange = loadTrend;
+tValue.addEventListener('keydown', e => { if (e.key === 'Enter') loadTrend(); });
+
+async function loadTrend() {
+  const dim = tDim.value, from = tFrom.value, to = tTo.value, group = tGroup.value, sort = tSort.value;
+  tStatus.textContent = 'Đang tải bảng xếp hạng...';
+  // 1) Top ranking (luôn tải)
+  const topRes = await fetch(`/api/trend/top?dimension=${dim}&fromYear=${from}&toYear=${to}&topN=20&minPapers=2&sortBy=${sort}`);
+  const topJson = await topRes.json();
+  const items = topJson?.data || [];
+  renderTop(items, dim);
+  // 2) Time-series: dùng value gõ tay, nếu trống thì lấy top #1
+  let val = tValue.value.trim();
+  if (!val && items.length) val = items[0].name;
+  if (val) await loadSeries(dim, val, from, to, group);
+  else { tStatus.textContent = 'Không có dữ liệu.'; clearChart(); }
+}
+
+async function loadSeries(dim, val, from, to, group) {
+  tStatus.textContent = `Đang tải trend "${val}"...`;
+  const res = await fetch(`/api/trend/series?dimension=${dim}&value=${encodeURIComponent(val)}&fromYear=${from}&toYear=${to}&groupBy=${group}`);
+  const json = await res.json();
+  if (!json.success || !json.data) { tStatus.textContent = `Không có trend cho "${val}".`; clearChart(); return; }
+  renderChart(json.data);
+  const arrow = json.data.direction === 'rising' ? 'đang lên' : json.data.direction === 'falling' ? 'đang xuống' : 'ổn định';
+  tStatus.textContent = `${dim} "${json.data.value}": ${arrow} · ${json.data.series.length} kỳ · tổng ${json.data.totalPapers} bài`;
+}
+
+function renderTop(items, dim) {
+  trendTop.innerHTML = `<div class="item head"><span>TOP ${dim.toUpperCase()}</span><span>bài · share</span></div>`;
+  if (!items.length) { trendTop.innerHTML += '<div class="item">Không có dữ liệu.</div>'; return; }
+  items.forEach((it, i) => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    const name = it.name.length > 28 ? it.name.slice(0, 28) + '…' : it.name;
+    const mark = it.direction === 'rising' ? '<span style="color:#10b981">▲</span>'
+      : it.direction === 'falling' ? '<span style="color:#ef4444">▼</span>'
+      : '<span style="color:#6b7280">–</span>';
+    div.innerHTML = `<span>${i + 1}. ${name}</span><span class="bar">${mark} ${it.count} · ${(it.share * 100).toFixed(2)}%</span>`;
+    div.onclick = () => { tValue.value = it.name; loadSeries(tDim.value, it.name, tFrom.value, tTo.value, tGroup.value); };
+    trendTop.appendChild(div);
+  });
+}
+
+function renderChart(data) {
+  const labels = data.series.map(p => p.period);
+  const shares = data.series.map(p => +(p.share * 100).toFixed(3));
+  const totals = data.series.map(p => p.periodTotal);
+  const counts = data.series.map(p => p.count);
+  clearChart();
+  trendChart = new Chart(document.getElementById('trendChart'), {
+    type: 'bar',
+    data: { labels, datasets: [{
+      label: `Share % — ${data.value}`, data: shares,
+      backgroundColor: '#0ea5e9', borderColor: '#0369a1', borderWidth: 1, borderRadius: 3
+    }] },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#e6e6e6' } },
+        tooltip: { callbacks: { afterLabel: ctx => `Bài: ${counts[ctx.dataIndex]} / ${totals[ctx.dataIndex]} (tổng kỳ)` } }
+      },
+      scales: {
+        x: { ticks: { color: '#8a93a3' }, grid: { color: '#2a2f3a' } },
+        y: { ticks: { color: '#8a93a3' }, grid: { color: '#2a2f3a' }, title: { display: true, text: 'Share (%)', color: '#8a93a3' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+function clearChart() { if (trendChart) { trendChart.destroy(); trendChart = null; } }
 
 elQ.value = 'large-language-model';
 run();

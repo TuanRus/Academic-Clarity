@@ -100,6 +100,23 @@ namespace ScientificTrendTracker.Controllers
         }
 
         /// <summary>
+        /// Autocomplete: gợi ý keyword CÓ SẴN trong DB khớp chuỗi gõ vào (cho thanh search).
+        /// </summary>
+        /// <param name="q">string - FE truyền qua query (?q=) - Chuỗi đang gõ.</param>
+        /// <param name="limit">int - FE truyền qua query (?limit=10) - Số gợi ý tối đa, mặc định 10.</param>
+        /// <returns>
+        /// Chuỗi JSON (ApiResponse&lt;List&lt;string&gt;&gt;) - Data là mảng tên keyword khớp, sắp theo số bài giảm dần.
+        /// Rỗng nếu q trống hoặc không khớp.
+        /// </returns>
+        [HttpGet("keywords/suggest")]
+        public async Task<IActionResult> SuggestKeywords([FromQuery] string q, [FromQuery] int limit = 10)
+        {
+            if (limit < 1 || limit > 25) limit = 10;
+            var items = await _graphBuilderService.SuggestKeywordsAsync(q, limit);
+            return Ok(ApiResponse<List<string>>.Ok(items, $"{items.Count} gợi ý."));
+        }
+
+        /// <summary>
         /// Search theo TÊN TÁC GIẢ → trả về DANH SÁCH bài báo của tác giả đó (sắp theo citation giảm dần).
         /// Click 1 bài rồi gọi /api/mindmap/graph/paper/{paperId} để xem mindmap.
         /// </summary>

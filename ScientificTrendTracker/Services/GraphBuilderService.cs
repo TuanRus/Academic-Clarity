@@ -297,6 +297,25 @@ namespace ScientificTrendTracker.Services
                 .ToListAsync();
         }
 
+        /// <summary>
+        /// Gợi ý keyword có sẵn trong DB khớp chuỗi gõ vào, ưu tiên keyword nhiều bài nhất (autocomplete).
+        /// </summary>
+        /// <param name="q">string - Controller truyền vào - Chuỗi đang gõ (contains, lowercase).</param>
+        /// <param name="limit">int - Controller truyền vào - Số gợi ý tối đa.</param>
+        /// <returns>List&lt;string&gt; - Tên keyword khớp, sắp theo số bài giảm dần.</returns>
+        public async Task<List<string>> SuggestKeywordsAsync(string q, int limit)
+        {
+            var lowered = (q ?? string.Empty).Trim().ToLower();
+            if (lowered.Length == 0) return new List<string>();
+
+            return await _dbContext.Keywords
+                .Where(k => k.KeywordName.Contains(lowered))
+                .OrderByDescending(k => k.PaperKeywords.Count)
+                .Take(limit)
+                .Select(k => k.KeywordName)
+                .ToListAsync();
+        }
+
         /// <summary>Tìm keyword: ưu tiên exact, fallback contains theo paperCount cao nhất.</summary>
         private async Task<Models.Entities.Keyword> FindKeywordAsync(string keyword)
         {
