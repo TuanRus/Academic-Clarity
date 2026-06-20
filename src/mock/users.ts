@@ -9,7 +9,7 @@ export const MOCK_USERS: User[] = [
     id: 'u1',
     fullName: 'Hoàng Tiến Đạt',
     email: 'dat.ht@university.edu.vn',
-    role: Role.STUDENT,
+    role: Role.EDU,
     accessTier: AccessTier.BASIC,
   },
   {
@@ -21,10 +21,19 @@ export const MOCK_USERS: User[] = [
     subscriptionValidUntil: '2026-12-31',
   },
   {
+    id: 'u5',
+    fullName: 'Jane Cooper',
+    email: 'jane.cooper@gmail.com',
+    // User cá nhân (email không .edu) chưa nâng cấp - giá Premium chuẩn 99.000đ
+    // (khác u2 đã PREMIUM, dùng để test luồng nâng cấp với giá standard).
+    role: Role.RESEARCHER,
+    accessTier: AccessTier.BASIC,
+  },
+  {
     id: 'u3',
     fullName: 'Mark R. Thorne',
     email: 'mark.thorne@university.edu.vn',
-    role: Role.LECTURER,
+    role: Role.EDU,
     accessTier: AccessTier.BASIC,
   },
   {

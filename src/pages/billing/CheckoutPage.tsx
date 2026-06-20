@@ -1,17 +1,26 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
+import { Role } from '../../types/auth';
+import { getPremiumMonthlyPrice, getPremiumYearlyPrice, formatVnd } from '../../lib/pricing';
 
 type PlanKey = 'monthly' | 'yearly';
 
-const PLANS: Record<PlanKey, { label: string; price: string; badge?: string }> = {
-  monthly: { label: 'Premium Plan (1 tháng)', price: '99.000₫' },
-  yearly: { label: 'Premium Plan (1 năm)', price: '999.000₫', badge: 'Tiết kiệm 16%' },
-};
-
 const CheckoutPage = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [selectedPlan, setSelectedPlan] = useState<PlanKey>('monthly');
   const [isProcessing, setIsProcessing] = useState(false);
+
+  // BR mới: tài khoản EDU (mail .edu) được áp giá Premium ưu đãi - xem lib/pricing.ts.
+  const PLANS: Record<PlanKey, { label: string; price: string; badge?: string }> = {
+    monthly: { label: 'Premium Plan (1 tháng)', price: formatVnd(getPremiumMonthlyPrice(user)) },
+    yearly: {
+      label: 'Premium Plan (1 năm)',
+      price: formatVnd(getPremiumYearlyPrice(user)),
+      badge: user?.role === Role.EDU ? 'Giá EDU · Tiết kiệm 16%' : 'Tiết kiệm 16%',
+    },
+  };
 
   const plan = PLANS[selectedPlan];
 

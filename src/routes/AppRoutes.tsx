@@ -1,6 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import MainLayout from '../components/layout/MainLayout';
 import RequireAuth from './RequireAuth';
+import RequireAdmin from './RequireAdmin';
 
 import LoginPage from '../pages/auth/LoginPage';
 import RegisterPage from '../pages/auth/RegisterPage';
@@ -16,6 +17,7 @@ import TrendDashboardPage from '../pages/dashboard/TrendDashboardPage';
 import PricingPage from '../pages/billing/PricingPage';
 import CheckoutPage from '../pages/billing/CheckoutPage';
 import PaymentReturnPage from '../pages/billing/PaymentReturnPage';
+import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
 
 const AppRoutes = () => {
   return (
@@ -46,6 +48,11 @@ const AppRoutes = () => {
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/checkout" element={<CheckoutPage />} />
           <Route path="/payment/return" element={<PaymentReturnPage />} />
+
+          {/* FR-27/28: khu vực quản trị - chỉ role = ADMIN truy cập được */}
+          <Route element={<RequireAdmin />}>
+            <Route path="/admin" element={<AdminDashboardPage />} />
+          </Route>
         </Route>
       </Route>
 

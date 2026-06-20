@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { AccessTier } from '../../types/auth';
+import { AccessTier, Role } from '../../types/auth';
+import { getPremiumMonthlyPrice, formatVnd } from '../../lib/pricing';
+import { getRoleLabel } from '../../lib/role';
 
 // MỚI · Pricing Screen
 // So sánh quyền BASIC vs PREMIUM theo tier_permissions (mục 7.4 tài liệu quyết định).
@@ -16,6 +18,7 @@ const FEATURES: { label: string; basic: boolean; premium: boolean; fr: string }[
 
 const PricingPage = () => {
   const { user } = useAuth();
+  const premiumPrice = getPremiumMonthlyPrice(user);
 
   return (
     <div className="space-y-6">
@@ -23,7 +26,7 @@ const PricingPage = () => {
         <h1 className="text-2xl font-bold text-gray-900">Choose your plan</h1>
         <p className="text-sm text-gray-500">
           Quyền truy cập tính năng được xác định theo <code>access_tier</code>, không phụ thuộc vào
-          academic role của bạn ({user?.role}).
+          academic role của bạn ({user ? getRoleLabel(user.role) : '—'}).
         </p>
       </div>
 
@@ -52,8 +55,14 @@ const PricingPage = () => {
         <div className="rounded-xl border border-indigo-700 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-indigo-700">Premium</h2>
           <p className="mt-1 text-2xl font-bold text-gray-900">
-            99.000₫<span className="text-sm font-normal text-gray-500"> / tháng</span>
+            {formatVnd(premiumPrice)}
+            <span className="text-sm font-normal text-gray-500"> / tháng</span>
           </p>
+          {user?.role === Role.EDU && (
+            <span className="mt-1 inline-block rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+              Giá ưu đãi cho tài khoản EDU
+            </span>
+          )}
           <ul className="mt-4 space-y-2 text-sm text-gray-700">
             {FEATURES.map((f) => (
               <li key={f.label}>✓ {f.label}</li>

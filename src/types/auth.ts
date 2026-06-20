@@ -1,9 +1,10 @@
 // Trục 1: Role - chỉ dùng để hiển thị danh tính học thuật (S-03, S-04)
 // và gate khu vực quản trị (FR-27/28). KHÔNG dùng để quyết định feature access.
+// EDU = gộp chung LECTURER + STUDENT, tự suy ra từ domain email khi đăng ký (mail .edu) -
+// xem inferRoleFromEmail() trong src/lib/email.ts. Không còn cho user chọn role ở Register.
 export const Role = {
   RESEARCHER: 'RESEARCHER',
-  LECTURER: 'LECTURER',
-  STUDENT: 'STUDENT',
+  EDU: 'EDU',
   ADMIN: 'ADMIN',
 } as const;
 export type Role = typeof Role[keyof typeof Role];

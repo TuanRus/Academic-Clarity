@@ -1,3 +1,6 @@
+# Claude AI files
+.claude/
+
 # Dependencies
 node_modules/
 

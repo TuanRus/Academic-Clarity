@@ -1,10 +1,13 @@
 import { createContext, useState, type ReactNode } from 'react';
 import { type User, AccessTier } from '../types/auth';
 import { MOCK_USERS } from '../mock/users';
+import { inferRoleFromEmail } from '../lib/email';
 
 interface AuthContextValue {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
+  /** S-01: tạo account mới (demo, mock array) - role tự suy ra từ email (xem inferRoleFromEmail). */
+  register: (fullName: string, email: string, password: string) => Promise<void>;
   logout: () => void;
   /** Demo only: đổi nhanh user để test các tổ hợp role/tier */
   loginAsMock: (userId: string) => void;
@@ -23,6 +26,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, _password: string) => {
     const found = MOCK_USERS.find((u) => u.email === email) ?? MOCK_USERS[0];
     setUser(found);
+  };
+
+  const register = async (fullName: string, email: string, _password: string) => {
+    const newUser: User = {
+      id: `u${Date.now()}`,
+      fullName,
+      email,
+      role: inferRoleFromEmail(email),
+      accessTier: AccessTier.BASIC,
+    };
+    // Demo only: chưa có backend thật, push thẳng vào mock array để login/dev-switcher dùng được ngay.
+    MOCK_USERS.push(newUser);
   };
 
   const logout = () => setUser(null);
@@ -46,7 +61,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, login, logout, loginAsMock, upgradeToPremium, downgradeToBasic }}
+      value={{ user, login, register, logout, loginAsMock, upgradeToPremium, downgradeToBasic }}
     >
       {children}
     </AuthContext.Provider>
