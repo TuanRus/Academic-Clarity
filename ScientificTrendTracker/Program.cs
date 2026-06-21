@@ -47,6 +47,8 @@ namespace ScientificTrendTracker
             builder.Services.AddScoped<ITrendService, TrendService>();
             builder.Services.AddScoped<ISyncOrchestratorService, SyncOrchestratorService>();
             builder.Services.AddSingleton<IKeywordReprocessService, KeywordReprocessService>();
+            builder.Services.AddScoped<IBookmarkService, BookmarkService>();
+            builder.Services.AddScoped<ISearchHistoryService, SearchHistoryService>();
 
             // Background Services
             builder.Services.AddHostedService<WeeklySyncService>();
