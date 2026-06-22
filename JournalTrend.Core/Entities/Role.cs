@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace JournalTrend.Core.Entities
 {
-    [Table("roles")]
+    [Table("Roles")]
     public class Role
     {
         [Key]

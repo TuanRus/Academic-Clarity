@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace JournalTrend.Core.Entities
 {
-    [Table("users")]
+    [Table("Users")]
     public class User
     {
         [Key]

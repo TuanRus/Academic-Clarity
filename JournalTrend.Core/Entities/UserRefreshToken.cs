@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace JournalTrend.Core.Entities
 {
-    [Table("user_refresh_tokens")]
+    [Table("User_refresh_tokens")]
     public class UserRefreshToken
     {
         [Key]

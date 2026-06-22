@@ -4,10 +4,19 @@ using JournalTrend.Core.DTOs;
 
 namespace JournalTrend.Services.Interfaces
 {
-    /// <summary>Hợp đồng quản lý luồng tính toán quét tệp người dùng tương tác.</summary>
+    /// <summary>
+    /// Giao diện định nghĩa các nghiệp vụ liên quan đến 
+    /// hệ thống thông báo và hộp chuông cấu hình real-time.
+    /// </summary>
     public interface INotificationService
     {
-        /// <summary>Quét follower hệ thống và thực hiện Bulk Insert. Trả về danh sách mảng UserId nhận thông báo, hoặc list rỗng.</summary>
+        /// <summary>
+        /// Quét danh sách học giả đang theo dõi chuyên mục/tạp chí 
+        /// liên quan đến bài báo mới, tiến hành lưu vết lịch sử 
+        /// thông báo xuống cơ sở dữ liệu MySQL.
+        /// </summary>
+        /// <param name="trigger">Gói DTO chứa thông tin bài báo mới phát hành.</param>
+        /// <returns>Danh sách thô chứa các mã UserId cần nhận thông báo real-time.</returns>
         Task<List<int>> CheckAndPushAsync(NotificationTriggerDto trigger);
     }
 }

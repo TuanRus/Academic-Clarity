@@ -1,58 +1,102 @@
-﻿using JournalTrend.Core.DTOs;
-using JournalTrend.Infrastructure;
-using JournalTrend.Services.Interfaces;
-using Microsoft.EntityFrameworkCore;
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using JournalTrend.Core.DTOs;
+using JournalTrend.Core.Entities;
+using JournalTrend.Services.Interfaces;
+using JournalTrend.Infrastructure;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace JournalTrend.Services.Implementations
 {
-    /// <summary>Dịch vụ trần tính toán trích xuất danh sách tệp người dùng thỏa mãn điều kiện theo dõi.</summary>
+    /// <summary>
+    /// Lớp thực thi các nghiệp vụ quản lý và phân phối thông báo hệ thống.
+    /// </summary>
     public class NotificationService : INotificationService
     {
         private readonly DataContext _context;
+        private readonly ILogger<NotificationService> _logger;
 
-        public NotificationService(DataContext context)
+        public NotificationService(
+            DataContext context,
+            ILogger<NotificationService> logger)
         {
             _context = context;
+            _logger = logger;
         }
 
-        public async Task<List<int>> CheckAndPushAsync(NotificationTriggerDto trigger)
+        /// <summary>
+        /// Thực hiện quét đối tượng theo dõi đa hình và bulk insert thông báo.
+        /// </summary>
+        public async Task<List<int>> CheckAndPushAsync(
+            NotificationTriggerDto trigger)
         {
-            // Quét móng bảng followed_items theo cấu trúc DB v7 đã được thiết lập Index kép tối ưu
-            var userIdsToNotify = await _context.FollowedItems
-                .Where(f => (f.TargetType == "journal" && f.JournalId == trigger.JournalId) ||
-                            (f.TargetType == "topic" && trigger.TopicIds.Contains(f.TopicId!)))
-                .Select(f => f.UserId)
-                .Distinct()
+            // Ép lowercase + trim vì dữ liệu từ hệ thống thu thập tự động 
+            // và form admin không đồng nhất về định dạng khoảng trắng.
+            string? journalIdClean = trigger.JournalId?.Trim().ToLower();
+            string paperIdClean = trigger.PaperId?.Trim() ?? string.Empty;
+            bool hasJournal = !string.IsNullOrEmpty(journalIdClean);
+
+            List<string> topicIdsClean = trigger.TopicIds?
+                .Select(id => id.Trim().ToLower())
+                .Where(id => !string.IsNullOrEmpty(id))
+                .ToList() ?? new List<string>();
+
+            // Chỉ kích hoạt điều kiện lọc khi thực sự tồn tại JournalId hoặc TopicId 
+            // nhằm triệt tiêu rủi ro quét nhầm dữ liệu trống rỗng dưới DB.
+            var followedItems = await _context.FollowedItems
+                .Where(f =>
+                    (hasJournal && f.TargetType == "journal"
+                        && f.JournalId == journalIdClean) ||
+                    (topicIdsClean.Any() && f.TargetType == "topic"
+                        && topicIdsClean.Contains(f.TopicId ?? string.Empty)))
+                .Select(f => new { f.UserId, f.FollowId })
                 .ToListAsync();
 
-            if (!userIdsToNotify.Any()) return userIdsToNotify; // Trả về list rỗng nếu không có ai theo dõi
-
-            string notifTitle = "New Publication Detected!";
-            string notifMessage = $"The paper '{trigger.PaperTitle}' has been published matching your followed journals or topics.";
-
-            var newNotifications = new List<JournalTrend.Core.Entities.Notification>();
-            foreach (var userId in userIdsToNotify)
+            if (followedItems.Count == 0)
             {
-                newNotifications.Add(new JournalTrend.Core.Entities.Notification
+                _logger.LogInformation(
+                    "Không có học giả nào đăng ký nhận tin cho bài báo này.");
+                return new List<int>(); // [Mục 5] Trả về mảng rỗng thô thay vì ném ngoại lệ
+            }
+
+            var notificationsToCreate = new List<Notification>();
+            string titleMsg = "Bài báo nghiên cứu mới phát hành";
+            string contentMsg = $"Bài báo '{trigger.PaperTitle}' vừa được xuất bản.";
+
+            foreach (var item in followedItems)
+            {
+                notificationsToCreate.Add(new Notification
                 {
-                    UserId = userId,
-                    Title = notifTitle,
-                    Message = notifMessage,
-                    RelatedPaperId = trigger.PaperId,
+                    UserId = item.UserId,
+                    FollowedItemId = item.FollowId,
+                    Title = titleMsg,
+                    Message = contentMsg,
+                    RelatedPaperId = paperIdClean,
                     IsRead = false,
-                    CreatedAt = DateTime.UtcNow
+                    CreatedAt = DateTime.UtcNow // [Mục 7] Đồng bộ giờ UTC tránh lệch múi giờ
                 });
             }
 
-            // Găm chặt lịch sử chuông thông báo vào ổ đĩa Linux thông qua cơ chế Bulk Insert AddRange
-            _context.Notifications.AddRange(newNotifications);
+            // Dùng AddRange để EF Core gom cụm lệnh insert vào 1 transaction duy nhất,
+            // triệt tiêu chi phí round-trip đường truyền mạng ảo qua Tailscale.
+            await _context.Notifications.AddRangeAsync(notificationsToCreate);
             await _context.SaveChangesAsync();
 
-            return userIdsToNotify;
+            _logger.LogInformation(
+                "Đã bulk insert thành công {Count} thông báo vào hệ thống.",
+                notificationsToCreate.Count);
+
+            // Gom cụm Distinct ở RAM sau khi insert xong để bảo đảm trích xuất 
+            // danh sách UserId duy nhất đẩy lên Hub kích nổ real-time.
+            var uniqueUserIds = followedItems
+                .Select(item => item.UserId)
+                .Distinct()
+                .ToList();
+
+            return uniqueUserIds; // [Mục 1] Trả về raw type đúng phân tách trách nhiệm
         }
     }
 }
