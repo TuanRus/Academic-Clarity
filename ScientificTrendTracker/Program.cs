@@ -49,7 +49,10 @@ namespace ScientificTrendTracker
             builder.Services.AddSingleton<IKeywordReprocessService, KeywordReprocessService>();
             builder.Services.AddScoped<IBookmarkService, BookmarkService>();
             builder.Services.AddScoped<ISearchHistoryService, SearchHistoryService>();
-
+            builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
+            builder.Services.AddScoped<IApiSyncLogService, ApiSyncLogService>();
+            builder.Services.AddScoped<IAdminActivityLogService, AdminActivityLogService>();
+            
             // Background Services
             builder.Services.AddHostedService<WeeklySyncService>();
 
