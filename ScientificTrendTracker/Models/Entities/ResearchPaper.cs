@@ -27,11 +27,6 @@
         [MaxLength(500)]
         public string SourceUrl { get; set; }
 
-        // Chủ đề chính (primary_topic.display_name) từ OpenAlex — LƯU DB để phân loại/lọc nhanh.
-        // Subfield/Field/Domain KHÔNG lưu, lấy on-demand từ OpenAlex ở màn chi tiết.
-        [MaxLength(255)]
-        public string Topic { get; set; }
-
         public bool IsAiProcessed { get; set; } = false;
 
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

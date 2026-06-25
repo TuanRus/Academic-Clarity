@@ -10,10 +10,8 @@ namespace ScientificTrendTracker.Services
         private readonly ILogger<OpenAlexService> _logger;
         private readonly IConfiguration _configuration;
 
-        // Computer Science FIELD trong taxonomy Topics của OpenAlex (fields/17).
-        // Lọc theo primary_topic.field (chủ đề CHÍNH) thay vì concepts (tag phụ) → bài đúng ngành CS,
-        // tránh lọt bài chỉ "dính" CS ở mức phụ (lạc scope).
-        private const string CsFieldId = "fields/17";
+        // Computer Science concept ID trên OpenAlex
+        private const string CsConceptId = "C41008148";
 
         public OpenAlexService(HttpClient httpClient, ILogger<OpenAlexService> logger, IConfiguration configuration)
         {
@@ -52,9 +50,8 @@ namespace ScientificTrendTracker.Services
         /// </returns>
         public async Task<List<OpenAlexPaper>> FetchPapersAsync(
             int page, int pageSize = 200, int fromYear = 2022, int minCitedExclusive = 2,
-            bool recentFirst = false, int toYear = 0)
+            bool recentFirst = false, int toYear = 2026)
         {
-            if (toYear <= 0) toYear = DateTime.UtcNow.Year; // mặc định = năm hiện tại (không hardcode)
             var email = _configuration["OpenAlex:Email"];
             var baseUrl = _configuration["OpenAlex:BaseUrl"];
 
@@ -65,13 +62,13 @@ namespace ScientificTrendTracker.Services
             // cần cho bài 2026 mới ra). Mặc định 2 = ">2" (>=3 citation) như filter top-cited gốc.
             var citationFilter = minCitedExclusive >= 0 ? $",cited_by_count:>{minCitedExclusive}" : "";
 
-            // Quality gate: chỉ bài báo + kỷ yếu hội nghị (CS coi trọng NeurIPS/CVPR...), BẮT BUỘC có abstract
-            // (cần để trích keyword), và CHỈ tiếng Anh (language:en) → lọc dataset/erratum/preprint/bài ngoại ngữ.
-            const string qualityFilter = ",type:article|proceedings-article,has_abstract:true,language:en";
+            // Quality gate: chỉ bài báo + kỷ yếu hội nghị (CS coi trọng NeurIPS/CVPR...), và BẮT BUỘC có abstract
+            // (cần để trích keyword) → lọc dataset/erratum/preprint rác ngay đầu vào.
+            const string qualityFilter = ",type:article|proceedings-article,has_abstract:true";
 
             var url = $"{baseUrl}/works" +
-                      $"?filter=primary_topic.field.id:{CsFieldId},publication_year:{fromYear}-{toYear}{qualityFilter}{citationFilter}" +
-                      $"&select=id,doi,title,publication_year,publication_date,cited_by_count,abstract_inverted_index,primary_location,authorships,primary_topic,keywords" +
+                      $"?filter=concepts.id:{CsConceptId},publication_year:{fromYear}-{toYear}{qualityFilter}{citationFilter}" +
+                      $"&select=id,doi,title,publication_year,publication_date,cited_by_count,abstract_inverted_index,primary_location,authorships" +
                       $"&sort={sort}" +
                       $"&page={page}&per-page={pageSize}" +
                       $"&mailto={email}";
@@ -116,9 +113,7 @@ namespace ScientificTrendTracker.Services
                     CitedByCount = raw.CitedByCount,
                     AbstractReconstructed = abstractText,
                     PrimaryLocation = MapLocation(raw.PrimaryLocation),
-                    Authorships = MapAuthorships(raw.Authorships),
-                    Topic = raw.PrimaryTopic?.DisplayName,
-                    Keywords = MapKeywords(raw.Keywords)
+                    Authorships = MapAuthorships(raw.Authorships)
                 };
 
                 papers.Add(paper);
@@ -164,57 +159,6 @@ namespace ScientificTrendTracker.Services
             catch (Exception ex)
             {
                 _logger.LogWarning(ex, "Không fetch được abstract cho {OpenAlexId}", openAlexId);
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// Lấy chi tiết bổ sung của 1 bài (abstract + primary_topic + open_access + institutions) trong 1 request.
-        /// Dùng cho màn Paper Detail của FE. Trả null nếu API lỗi.
-        /// </summary>
-        public async Task<OpenAlexWorkDetail> FetchWorkDetailAsync(string openAlexId)
-        {
-            var email = _configuration["OpenAlex:Email"];
-            var baseUrl = _configuration["OpenAlex:BaseUrl"];
-            // Chuẩn hoá: chấp nhận cả "W..." lẫn URL đầy đủ.
-            var id = openAlexId?.Replace("https://openalex.org/", "").Trim();
-            var url = $"{baseUrl}/works/{id}" +
-                      $"?select=abstract_inverted_index,primary_topic,open_access,authorships&mailto={email}";
-
-            try
-            {
-                var response = await _httpClient.GetAsync(url);
-                if (!response.IsSuccessStatusCode) return null;
-
-                var json = await response.Content.ReadAsStringAsync();
-                var raw = JsonSerializer.Deserialize<OpenAlexRawWork>(json, new JsonSerializerOptions
-                {
-                    PropertyNameCaseInsensitive = true
-                });
-                if (raw == null) return null;
-
-                // Institution: gộp distinct theo thứ tự xuất hiện, bỏ rỗng.
-                var institutions = (raw.Authorships ?? new List<OpenAlexRawAuthorship>())
-                    .SelectMany(a => a.Institutions ?? new List<OpenAlexRawInstitution>())
-                    .Select(i => i.DisplayName)
-                    .Where(n => !string.IsNullOrWhiteSpace(n))
-                    .Distinct()
-                    .ToList();
-
-                return new OpenAlexWorkDetail
-                {
-                    Abstract = raw.AbstractInvertedIndex != null ? ReconstructAbstract(raw.AbstractInvertedIndex) : null,
-                    Topic = raw.PrimaryTopic?.DisplayName,
-                    Subfield = raw.PrimaryTopic?.Subfield?.DisplayName,
-                    Field = raw.PrimaryTopic?.Field?.DisplayName,
-                    Domain = raw.PrimaryTopic?.Domain?.DisplayName,
-                    OpenAccessStatus = raw.OpenAccess?.OaStatus,
-                    Institutions = institutions
-                };
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Không fetch được chi tiết OpenAlex cho {OpenAlexId}", openAlexId);
                 return null;
             }
         }
@@ -267,28 +211,6 @@ namespace ScientificTrendTracker.Services
             };
         }
 
-        /// <summary>
-        /// Map keyword OpenAlex: lấy slug đã chuẩn hoá từ id ("keywords/&lt;slug&gt;"), lọc theo score,
-        /// bỏ slug quá ngắn/generic, giữ tối đa 8. Đây là nguồn keyword chất lượng, không cần AI.
-        /// </summary>
-        private static List<string> MapKeywords(List<OpenAlexRawKeyword> raw)
-        {
-            if (raw == null) return new List<string>();
-            const double minScore = 0.45; // dưới ngưỡng này keyword thường nhiễu/quá chung
-            return raw
-                .Where(k => k.Score >= minScore && !string.IsNullOrWhiteSpace(k.Id))
-                .Select(k =>
-                {
-                    var idx = k.Id.LastIndexOf('/');
-                    var slug = idx >= 0 ? k.Id[(idx + 1)..] : k.DisplayName;
-                    return KeywordNormalizer.Normalize(slug);
-                })
-                .Where(s => s.Length >= 3 && !KeywordStopwords.IsGeneric(s)) // bỏ generic/tên ngành (nhiễu mindmap)
-                .Distinct()
-                .Take(8)
-                .ToList();
-        }
-
         /// <summary>Map danh sách authorship thô (JSON OpenAlex) sang OpenAlexAuthorship gọn (tác giả + affiliation).</summary>
         /// <param name="rawList">List&lt;OpenAlexRawAuthorship&gt; - Deserialize từ JSON - Danh sách thô, có thể null.</param>
         /// <returns>List&lt;OpenAlexAuthorship&gt; - List rỗng nếu rawList null.</returns>
@@ -310,6 +232,87 @@ namespace ScientificTrendTracker.Services
             }).ToList();
         }
 
-        // Raw JSON models đã tách sang OpenAlexRawModels.cs (cùng namespace).
+        // --- Raw JSON models (chỉ dùng nội bộ để deserialize) ---
+
+        private class OpenAlexResponse
+        {
+            [JsonPropertyName("results")]
+            public List<OpenAlexRawWork> Results { get; set; }
+        }
+
+        private class OpenAlexRawWork
+        {
+            [JsonPropertyName("id")]
+            public string Id { get; set; }
+
+            [JsonPropertyName("doi")]
+            public string Doi { get; set; }
+
+            [JsonPropertyName("title")]
+            public string Title { get; set; }
+
+            [JsonPropertyName("publication_year")]
+            public int? PublicationYear { get; set; }
+
+            [JsonPropertyName("publication_date")]
+            public string PublicationDate { get; set; }
+
+            [JsonPropertyName("cited_by_count")]
+            public int CitedByCount { get; set; }
+
+            [JsonPropertyName("abstract_inverted_index")]
+            public Dictionary<string, List<int>> AbstractInvertedIndex { get; set; }
+
+            [JsonPropertyName("primary_location")]
+            public OpenAlexRawLocation PrimaryLocation { get; set; }
+
+            [JsonPropertyName("authorships")]
+            public List<OpenAlexRawAuthorship> Authorships { get; set; }
+        }
+
+        private class OpenAlexRawLocation
+        {
+            [JsonPropertyName("source")]
+            public OpenAlexRawSource Source { get; set; }
+        }
+
+        private class OpenAlexRawSource
+        {
+            [JsonPropertyName("id")]
+            public string Id { get; set; }
+
+            [JsonPropertyName("display_name")]
+            public string DisplayName { get; set; }
+
+            [JsonPropertyName("issn_l")]
+            public string IssnL { get; set; }
+
+            [JsonPropertyName("issn")]
+            public List<string> Issn { get; set; }
+        }
+
+        private class OpenAlexRawAuthorship
+        {
+            [JsonPropertyName("author")]
+            public OpenAlexRawAuthor Author { get; set; }
+
+            [JsonPropertyName("institutions")]
+            public List<OpenAlexRawInstitution> Institutions { get; set; }
+        }
+
+        private class OpenAlexRawAuthor
+        {
+            [JsonPropertyName("id")]
+            public string Id { get; set; }
+
+            [JsonPropertyName("display_name")]
+            public string DisplayName { get; set; }
+        }
+
+        private class OpenAlexRawInstitution
+        {
+            [JsonPropertyName("display_name")]
+            public string DisplayName { get; set; }
+        }
     }
 }
