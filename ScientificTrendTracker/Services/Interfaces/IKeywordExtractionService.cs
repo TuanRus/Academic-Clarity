@@ -3,8 +3,7 @@ namespace ScientificTrendTracker.Services.Interfaces
     public interface IKeywordExtractionService
     {
         /// <summary>
-        /// Gửi abstract bài báo lên Gemini AI để trích xuất keyword kỹ thuật đặc trưng.
-        /// Tự động fallback sang ApiKey2 nếu ApiKey1 bị rate limit (HTTP 429).
+        /// Trích keyword kỹ thuật từ abstract bằng AI local (Ollama, OpenAI-compatible).
         /// Abstract chỉ tồn tại trong memory, KHÔNG được lưu vào DB.
         /// </summary>
         /// <param name="abstract">
@@ -12,37 +11,16 @@ namespace ScientificTrendTracker.Services.Interfaces
         /// Full text abstract đã ghép lại từ inverted index. Truyền null hoặc rỗng sẽ trả về list rỗng ngay.
         /// </param>
         /// <param name="paperTitle">
-        /// string - OpenAlexPaper.Title lấy từ OpenAlex API -
-        /// Tiêu đề bài báo, bổ sung context giúp Gemini extract keyword chính xác hơn.
+        /// string - OpenAlexPaper.Title - Tiêu đề bài báo, bổ sung context giúp AI trích chính xác hơn.
+        /// </param>
+        /// <param name="seedKeywords">
+        /// IReadOnlyList&lt;string&gt; (tùy chọn) - Keyword OpenAlex sẵn có của bài (controlled vocabulary).
+        /// Khi có, được nhúng vào prompt làm "mẫu" để AI bám phong cách OpenAlex: ưu tiên tái dùng/chuẩn hoá
+        /// các term này, chỉ bổ sung thêm term kỹ thuật mới cùng style. Null/rỗng = trích thuần như cũ.
         /// </param>
         /// <returns>
-        /// List&lt;string&gt; - Danh sách keyword kỹ thuật do Gemini trích xuất.
-        /// Mỗi keyword là:
-        /// - (string): Lowercase, dùng hyphen cho cụm từ (vd: "machine-learning", "large-language-model")
-        /// - Tối đa 8 keyword mỗi bài
-        /// - Chỉ chứa thuật ngữ kỹ thuật đặc trưng (loại bỏ từ generic như "study", "result")
-        /// Trả về list rỗng nếu abstract null, Gemini lỗi, hoặc tất cả API key đều thất bại.
+        /// List&lt;string&gt; - Keyword (lowercase + dấu cách, tối đa 8). List rỗng nếu abstract null hoặc AI lỗi.
         /// </returns>
-        Task<List<string>> ExtractKeywordsAsync(string @abstract, string paperTitle);
-
-        /// <summary>
-        /// Trả về trạng thái circuit-breaker hiện tại của từng AI provider.
-        /// Dùng để debug: provider nào đang bị tắt do hết quota/rate limit và đến khi nào.
-        /// </summary>
-        /// <returns>
-        /// Dictionary&lt;string, DateTime&gt; - Key là tên provider (gemini-key1, groq...),
-        /// Value là thời điểm UTC provider đó được bật lại. Rỗng nếu không có provider nào đang cooldown.
-        /// </returns>
-        IReadOnlyDictionary<string, DateTime> GetProviderCooldowns();
-    }
-
-    /// <summary>
-    /// Ném ra khi MỌI AI provider đều không phản hồi được (đang cooldown hoặc trả 429).
-    /// Khác với việc provider có phản hồi nhưng trả về 0 keyword (lúc đó trả list rỗng).
-    /// Bulk processor bắt exception này để DỪNG lại (chờ quota reset) thay vì đánh dấu nhầm bài là đã xử lý.
-    /// </summary>
-    public class AllProvidersExhaustedException : Exception
-    {
-        public AllProvidersExhaustedException(string message) : base(message) { }
+        Task<List<string>> ExtractKeywordsAsync(string @abstract, string paperTitle, IReadOnlyList<string> seedKeywords = null);
     }
 }

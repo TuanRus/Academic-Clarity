@@ -6,13 +6,10 @@ namespace ScientificTrendTracker.Services.Interfaces
         /// Bắt đầu reprocess keyword cho TẤT CẢ bài báo IsAiProcessed=false ở chế độ chạy nền.
         /// Idempotent: nếu đang có job chạy thì không khởi động job mới.
         /// </summary>
-        /// <param name="delayMs">
-        /// int - Caller truyền vào - Delay giữa mỗi paper (ms) để tránh rate limit AI. Mặc định 4000 (~15 req/phút).
-        /// </param>
         /// <returns>
         /// bool - true nếu job vừa được khởi động, false nếu đã có job đang chạy.
         /// </returns>
-        bool StartBackground(int delayMs = 4000);
+        bool StartBackground();
 
         /// <summary>
         /// Lấy trạng thái job reprocess hiện tại để theo dõi tiến độ. Trả về bản copy (thread-safe).

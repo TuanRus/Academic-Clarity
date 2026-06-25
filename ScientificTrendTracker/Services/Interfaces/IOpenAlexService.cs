@@ -30,7 +30,7 @@ namespace ScientificTrendTracker.Services.Interfaces
         /// </returns>
         Task<List<OpenAlexPaper>> FetchPapersAsync(
             int page, int pageSize = 200, int fromYear = 2022, int minCitedExclusive = 2,
-            bool recentFirst = false, int toYear = 2026);
+            bool recentFirst = false, int toYear = 0);
 
         /// <summary>
         /// Fetch abstract của một bài báo cụ thể từ OpenAlex theo OpenAlexId.
@@ -43,6 +43,15 @@ namespace ScientificTrendTracker.Services.Interfaces
         /// string - Abstract đã reconstruct, hoặc null nếu không có abstract hoặc API lỗi.
         /// </returns>
         Task<string> FetchAbstractByIdAsync(string openAlexId);
+
+        /// <summary>
+        /// Lấy chi tiết bổ sung của 1 bài từ OpenAlex trong MỘT request: abstract + primary_topic
+        /// (topic/subfield/field/domain) + open_access status + danh sách institution của tác giả.
+        /// Dùng cho màn Paper Detail. Các trường này lấy on-demand (Topic được lưu DB lúc sync, còn lại không).
+        /// </summary>
+        /// <param name="openAlexId">string - ResearchPaper.OpenAlexId (dạng "W..." hoặc URL OpenAlex).</param>
+        /// <returns>OpenAlexWorkDetail - các trường có thể null nếu OpenAlex không có; null nếu API lỗi.</returns>
+        Task<OpenAlexWorkDetail> FetchWorkDetailAsync(string openAlexId);
 
         /// <summary>
         /// Reconstruct full text abstract từ abstract_inverted_index trả về bởi OpenAlex.
@@ -75,6 +84,26 @@ namespace ScientificTrendTracker.Services.Interfaces
         public string AbstractReconstructed { get; set; }
         public OpenAlexLocation PrimaryLocation { get; set; }
         public List<OpenAlexAuthorship> Authorships { get; set; } = new();
+
+        /// <summary>Chủ đề chính (primary_topic.display_name) — lưu vào ResearchPaper.Topic khi sync.</summary>
+        public string Topic { get; set; }
+
+        /// <summary>Keyword do OpenAlex gán (đã chuẩn hóa slug) — nguồn keyword chất lượng, không cần AI.</summary>
+        public List<string> Keywords { get; set; } = new();
+    }
+
+    /// <summary>
+    /// Chi tiết bổ sung lấy on-demand từ OpenAlex cho màn Paper Detail (không lưu DB).
+    /// </summary>
+    public class OpenAlexWorkDetail
+    {
+        public string Abstract { get; set; }
+        public string Topic { get; set; }
+        public string Subfield { get; set; }
+        public string Field { get; set; }
+        public string Domain { get; set; }
+        public string OpenAccessStatus { get; set; }
+        public List<string> Institutions { get; set; } = new();
     }
 
     public class OpenAlexLocation

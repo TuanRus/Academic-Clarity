@@ -1,12 +1,11 @@
 using Microsoft.EntityFrameworkCore;
 using ScientificTrendTracker.Data;
-using ScientificTrendTracker.Models.Entities;
 using ScientificTrendTracker.Services.Interfaces;
 
 namespace ScientificTrendTracker.Services
 {
     /// <summary>
-    /// Singleton: chạy nền reprocess keyword cho toàn bộ bài báo chưa xử lý.
+    /// Singleton: chạy nền reprocess keyword cho toàn bộ bài báo chưa xử lý (IsAiProcessed=false).
     /// Dùng IServiceScopeFactory để lấy scoped service (DbContext, AI service) trong background task.
     /// </summary>
     public class KeywordReprocessService : IKeywordReprocessService
@@ -24,7 +23,7 @@ namespace ScientificTrendTracker.Services
             _logger = logger;
         }
 
-        public bool StartBackground(int delayMs = 4000)
+        public bool StartBackground()
         {
             lock (_lock)
             {
@@ -40,7 +39,7 @@ namespace ScientificTrendTracker.Services
                 _state.StopReason = null;
             }
 
-            _ = Task.Run(() => RunAsync(delayMs));
+            _ = Task.Run(RunAsync);
             return true;
         }
 
@@ -65,11 +64,10 @@ namespace ScientificTrendTracker.Services
         }
 
         /// <summary>
-        /// Vòng lặp chạy nền: lấy từng batch bài IsAiProcessed=false → fetch abstract → trích keyword → lưu DB,
-        /// cập nhật _state. Khi mọi provider cooldown phút thì nghỉ rồi retry; cooldown ngày thì dừng hẳn.
+        /// Vòng lặp chạy nền: lấy từng batch bài IsAiProcessed=false → fetch abstract → trích keyword (AI local)
+        /// → lưu DB, cập nhật _state. Lỗi 1 bài thì đánh dấu failed và chạy tiếp.
         /// </summary>
-        /// <param name="delayMs">int - StartBackground truyền vào - Delay giữa mỗi paper (ms); 0 cho Ollama local.</param>
-        private async Task RunAsync(int delayMs)
+        private async Task RunAsync()
         {
             _logger.LogInformation("=== Bắt đầu reprocess-all (background) ===");
             try
@@ -79,10 +77,11 @@ namespace ScientificTrendTracker.Services
                 var openAlexService = scope.ServiceProvider.GetRequiredService<IOpenAlexService>();
                 var keywordService = scope.ServiceProvider.GetRequiredService<IKeywordExtractionService>();
 
+                var totalAtStart = await dbContext.ResearchPapers.CountAsync(p => !p.IsAiProcessed);
                 lock (_lock)
                 {
-                    _state.TotalAtStart = dbContext.ResearchPapers.Count(p => !p.IsAiProcessed);
-                    _state.Remaining = _state.TotalAtStart;
+                    _state.TotalAtStart = totalAtStart;
+                    _state.Remaining = totalAtStart;
                 }
 
                 while (true)
@@ -103,14 +102,11 @@ namespace ScientificTrendTracker.Services
                         break;
                     }
 
-                    var pausedByQuota = false;
-
                     foreach (var paper in papers)
                     {
-                        var calledAi = false; // chỉ delay khi đã thực sự gọi AI
                         try
                         {
-                            // Flow: tải abstract (in-memory, KHÔNG lưu DB) → extract keyword → bỏ abstract
+                            // Tải abstract (in-memory, KHÔNG lưu DB) → trích keyword → bỏ abstract
                             var abstract_ = await openAlexService.FetchAbstractByIdAsync(paper.OpenAlexId);
 
                             // Không có abstract → không đoán bừa từ title, đánh dấu processed để khỏi retry
@@ -120,11 +116,15 @@ namespace ScientificTrendTracker.Services
                                 paper.UpdatedAt = DateTime.UtcNow;
                                 await dbContext.SaveChangesAsync();
                                 lock (_lock) { _state.Failed++; }
-                                continue; // không gọi AI → finally không delay
+                                continue;
                             }
 
-                            calledAi = true; // sắp gọi AI
-                            var keywords = await keywordService.ExtractKeywordsAsync(abstract_, paper.Title);
+                            // Seed = keyword OpenAlex sẵn có của bài → AI bám controlled vocabulary.
+                            var seedKeywords = await dbContext.PaperKeywords
+                                .Where(pk => pk.PaperId == paper.PaperId)
+                                .Select(pk => pk.Keyword.KeywordName)
+                                .ToListAsync();
+                            var keywords = await keywordService.ExtractKeywordsAsync(abstract_, paper.Title, seedKeywords);
 
                             if (keywords.Count > 0)
                                 await SaveKeywordsAsync(dbContext, paper.PaperId, keywords);
@@ -139,48 +139,13 @@ namespace ScientificTrendTracker.Services
                                 else _state.Failed++;
                             }
                         }
-                        catch (AllProvidersExhaustedException)
-                        {
-                            // Mọi provider đang cooldown. Phân biệt: rate-limit PHÚT (đợi 1 chút rồi chạy tiếp)
-                            // vs hết quota NGÀY (dừng hẳn tới 00:00 UTC). KHÔNG đánh dấu bài processed.
-                            var cooldowns = keywordService.GetProviderCooldowns();
-                            var now = DateTime.UtcNow;
-                            // Thời điểm provider sớm nhất hồi lại. Rỗng (race: vừa hết cooldown) → retry ngay.
-                            var earliest = cooldowns.Count > 0 ? cooldowns.Values.Min() : now;
-                            var wait = earliest - now;
-
-                            // Ngưỡng: cooldown ≤ 10 phút coi là rate-limit phút → đợi rồi retry chính bài này.
-                            if (wait <= TimeSpan.FromMinutes(10))
-                            {
-                                var sleep = wait > TimeSpan.Zero ? wait + TimeSpan.FromSeconds(2) : TimeSpan.FromSeconds(2);
-                                _logger.LogWarning("Mọi provider chạm rate-limit phút. Nghỉ {Sec:F0}s rồi chạy tiếp (bài {PaperId} retry).",
-                                    sleep.TotalSeconds, paper.PaperId);
-                                await Task.Delay(sleep);
-                                // break foreach (không set pausedByQuota) → vòng while re-query đúng các bài chưa xử lý → retry
-                                break;
-                            }
-
-                            // Cooldown dài (kiểu ngày) → dừng hẳn, chờ quota reset
-                            _logger.LogWarning("Reprocess-all DỪNG: mọi AI provider hết quota NGÀY. Bài {PaperId} sẽ chạy lại sau.", paper.PaperId);
-                            SetStopReason("Tạm dừng do hết quota AI — chạy lại sau khi quota reset (00:00 UTC).");
-                            pausedByQuota = true;
-                            break;
-                        }
                         catch (Exception ex)
                         {
                             _logger.LogError(ex, "Reprocess-all lỗi paper {PaperId}: {Message}", paper.PaperId, ex.Message);
                             dbContext.ChangeTracker.Clear();
                             lock (_lock) { _state.Failed++; _state.LastError = ex.Message; }
                         }
-                        finally
-                        {
-                            // ĐẶT Ở FINALLY: luôn delay sau khi gọi AI, kể cả khi try ném exception → không spin
-                            if (calledAi)
-                                await Task.Delay(delayMs);
-                        }
                     }
-
-                    if (pausedByQuota) break;
 
                     _logger.LogInformation("Reprocess-all tiến độ: processed={P} failed={F} remaining={R}",
                         _state.Processed, _state.Failed, _state.Remaining);
@@ -205,7 +170,6 @@ namespace ScientificTrendTracker.Services
         }
 
         /// <summary>Ghi lý do dừng job vào state (thread-safe) để hiển thị ở reprocess-status.</summary>
-        /// <param name="reason">string - Caller truyền vào - Mô tả lý do dừng (vd "Hoàn thành — không còn bài").</param>
         private void SetStopReason(string reason)
         {
             lock (_lock) { _state.StopReason = reason; }
@@ -214,39 +178,43 @@ namespace ScientificTrendTracker.Services
         /// <summary>
         /// Lưu keyword của 1 bài: tạo Keyword mới nếu chưa có (dedup theo tên), rồi link qua PaperKeywords.
         /// </summary>
-        /// <param name="dbContext">AppDbContext - Truyền từ scope của job nền - DbContext để ghi DB.</param>
-        /// <param name="paperId">string - Caller truyền vào - PaperId của bài để tạo link.</param>
-        /// <param name="keywords">List&lt;string&gt; - AI trả về - Keyword đã chuẩn hóa (lowercase-hyphen).</param>
         private static async Task SaveKeywordsAsync(AppDbContext dbContext, string paperId, List<string> keywords)
         {
-            foreach (var keywordName in keywords)
+            var names = keywords.Distinct().ToList();
+            if (names.Count == 0) return;
+
+            // 1 query: nạp các keyword đã tồn tại (thay vì FirstOrDefault từng cái — tránh N+1)
+            var existing = await dbContext.Keywords
+                .Where(k => names.Contains(k.KeywordName))
+                .ToDictionaryAsync(k => k.KeywordName, k => k);
+
+            // Tạo keyword mới cho phần chưa có
+            foreach (var name in names)
             {
-                var keyword = await dbContext.Keywords
-                    .FirstOrDefaultAsync(k => k.KeywordName == keywordName);
-
-                if (keyword == null)
+                if (existing.ContainsKey(name)) continue;
+                var kw = new Models.Entities.Keyword
                 {
-                    keyword = new Keyword
-                    {
-                        KeywordId = Guid.NewGuid().ToString("N")[..20],
-                        KeywordName = keywordName,
-                        CreatedAt = DateTime.UtcNow
-                    };
-                    dbContext.Keywords.Add(keyword);
-                    await dbContext.SaveChangesAsync();
-                }
+                    KeywordId = Guid.NewGuid().ToString("N")[..20],
+                    KeywordName = name,
+                    CreatedAt = DateTime.UtcNow
+                };
+                dbContext.Keywords.Add(kw);
+                existing[name] = kw;
+            }
+            await dbContext.SaveChangesAsync(); // lưu keyword mới để có KeywordId
 
-                var linkExists = await dbContext.PaperKeywords
-                    .AnyAsync(pk => pk.PaperId == paperId && pk.KeywordId == keyword.KeywordId);
+            // 1 query: các link đã tồn tại cho bài này
+            var keywordIds = existing.Values.Select(k => k.KeywordId).ToList();
+            var linkedIds = (await dbContext.PaperKeywords
+                .Where(pk => pk.PaperId == paperId && keywordIds.Contains(pk.KeywordId))
+                .Select(pk => pk.KeywordId)
+                .ToListAsync()).ToHashSet();
 
-                if (!linkExists)
-                {
-                    dbContext.PaperKeywords.Add(new PaperKeyword
-                    {
-                        PaperId = paperId,
-                        KeywordId = keyword.KeywordId
-                    });
-                }
+            foreach (var name in names)
+            {
+                var id = existing[name].KeywordId;
+                if (!linkedIds.Contains(id))
+                    dbContext.PaperKeywords.Add(new Models.Entities.PaperKeyword { PaperId = paperId, KeywordId = id });
             }
             await dbContext.SaveChangesAsync();
         }

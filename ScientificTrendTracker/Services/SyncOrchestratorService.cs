@@ -65,8 +65,6 @@ namespace ScientificTrendTracker.Services
                     break;
                 }
 
-                var pausedByQuota = false;
-
                 foreach (var paper in papers)
                 {
                     if (cancellationToken.IsCancellationRequested) break;
@@ -85,14 +83,6 @@ namespace ScientificTrendTracker.Services
                         // Chỉ throttle khi vừa gọi AI (Added + không skip). Fetch-only thì không delay → nạp nhanh.
                         if (outcome == ProcessOutcome.Added && !skipKeywords)
                             throttle = true;
-                    }
-                    catch (AllProvidersExhaustedException)
-                    {
-                        // Hết quota AI → dừng sync, paper chưa lưu sẽ được fetch lại lần sync sau
-                        _logger.LogWarning("Sync DỪNG: mọi AI provider hết quota.");
-                        _dbContext.ChangeTracker.Clear();
-                        pausedByQuota = true;
-                        break;
                     }
                     catch (Exception ex)
                     {
@@ -114,8 +104,6 @@ namespace ScientificTrendTracker.Services
                     "Page {Page}: added={Added} exists={Exists} noTitle={NoTitle} errors={Errors}",
                     page, result.Added, result.AlreadyExists, result.NoTitle, result.Errors);
 
-                if (pausedByQuota) break;
-
                 if (page < maxPages)
                     await Task.Delay(DelayBetweenPagesMs, cancellationToken);
             }
@@ -133,7 +121,7 @@ namespace ScientificTrendTracker.Services
         /// Xem doc tham số đầy đủ ở ISyncOrchestratorService.
         /// </summary>
         /// <returns>SyncResult - Added, AlreadyExists, NoTitle, Errors cộng dồn qua các năm.</returns>
-        public async Task<SyncResult> RunBalancedBackfillAsync(int perYearCap = 2500, int fromYear = 2022,
+        public async Task<SyncResult> RunBalancedBackfillAsync(int perYearCap = 1000, int fromYear = 2022,
             int toYear = 2026, bool skipKeywords = true, CancellationToken cancellationToken = default)
         {
             _logger.LogInformation("=== Backfill cân bằng: {From}-{To}, {Cap} bài/năm, skipKeywords={Skip} ===",
@@ -187,13 +175,6 @@ namespace ScientificTrendTracker.Services
                                 case ProcessOutcome.AlreadyExists: result.AlreadyExists++; break;
                                 case ProcessOutcome.NoTitle:       result.NoTitle++;       break;
                             }
-                        }
-                        catch (AllProvidersExhaustedException)
-                        {
-                            // Chỉ xảy ra khi skipKeywords=false. Dừng hẳn, phần còn lại để reprocess-all xử lý.
-                            _logger.LogWarning("Backfill DỪNG: mọi AI provider hết quota.");
-                            _dbContext.ChangeTracker.Clear();
-                            return result;
                         }
                         catch (Exception ex)
                         {
@@ -264,10 +245,15 @@ namespace ScientificTrendTracker.Services
                 journalId = journal.JournalId;
             }
 
-            // Fetch-only: bỏ qua AI, lưu paper với IsAiProcessed=false để reprocess-all xử lý keyword sau
-            var keywords = new List<string>();
+            // Keyword nền lấy từ OpenAlex (chuẩn, không cần GPU) — luôn có sẵn ngay khi fetch.
+            // Nếu skipKeywords=false thì hợp nhất thêm keyword AI (hybrid: OpenAlex ∪ AI).
+            var keywords = new List<string>(paper.Keywords ?? new List<string>());
             if (!skipKeywords && !string.IsNullOrWhiteSpace(paper.AbstractReconstructed))
-                keywords = await _keywordService.ExtractKeywordsAsync(paper.AbstractReconstructed, paper.Title);
+            {
+                // Hybrid: đưa keyword OpenAlex làm seed → AI bám controlled vocabulary, ít rác, nhất quán.
+                var aiKeywords = await _keywordService.ExtractKeywordsAsync(paper.AbstractReconstructed, paper.Title, keywords);
+                keywords = keywords.Concat(aiKeywords).Distinct().ToList();
+            }
 
             var newPaper = new ResearchPaper
             {
@@ -280,7 +266,10 @@ namespace ScientificTrendTracker.Services
                 CitationCount = paper.CitedByCount,
                 JournalId = journalId,
                 SourceUrl = paper.Id,
-                IsAiProcessed = keywords.Count > 0,
+                Topic = paper.Topic?[..Math.Min(255, paper.Topic.Length)],
+                // Chỉ coi là "đã xử lý AI" khi THỰC SỰ chạy AI (skipKeywords=false).
+                // Backfill (skipKeywords=true) chỉ có keyword OpenAlex nền → để false cho reprocess đào AI sau.
+                IsAiProcessed = !skipKeywords && keywords.Count > 0,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -337,7 +326,7 @@ namespace ScientificTrendTracker.Services
         /// <summary>
         /// Lưu keyword của bài: tạo Keyword mới nếu chưa có (dedup theo KeywordName), rồi link qua PaperKeywords.
         /// </summary>
-        /// <param name="keywords">List&lt;string&gt; - AI trả về - Danh sách keyword đã chuẩn hóa (lowercase-hyphen).</param>
+        /// <param name="keywords">List&lt;string&gt; - AI trả về - Danh sách keyword đã chuẩn hóa (lowercase + dấu cách).</param>
         /// <param name="paperId">string - Caller truyền vào - PaperId của ResearchPaper để tạo link.</param>
         private async Task SaveKeywordsAsync(List<string> keywords, string paperId)
         {
