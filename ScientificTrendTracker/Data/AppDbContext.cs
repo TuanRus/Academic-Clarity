@@ -14,6 +14,13 @@ namespace ScientificTrendTracker.Data
         public DbSet<PaperAuthor> PaperAuthors { get; set; }
         public DbSet<PaperKeyword> PaperKeywords { get; set; }
         public DbSet<PaperCitation> PaperCitations { get; set; }
+        public DbSet<Bookmark> Bookmarks { get; set; }
+        public DbSet<SearchHistory> SearchHistories { get; set; }
+        public DbSet<UserSubscription> UserSubscriptions { get; set; }
+        public DbSet<SubscriptionPlan> SubscriptionPlans { get; set; }
+        public DbSet<ApiDataSource> ApiDataSources { get; set; }
+        public DbSet<ApiSyncLog> ApiSyncLogs { get; set; }
+        public DbSet<AdminActivityLog> AdminActivityLogs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -59,6 +66,15 @@ namespace ScientificTrendTracker.Data
                 .WithMany(p => p.CitationsReceived)
                 .HasForeignKey(pc => pc.CitedPaperId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Map tên bảng cho các thực thể mới
+            modelBuilder.Entity<Bookmark>().ToTable("Bookmarks");
+            modelBuilder.Entity<SearchHistory>().ToTable("SearchHistories");
+            modelBuilder.Entity<UserSubscription>().ToTable("UserSubscriptions");
+            modelBuilder.Entity<SubscriptionPlan>().ToTable("SubscriptionPlans");
+            modelBuilder.Entity<ApiDataSource>().ToTable("ApiDataSources");
+            modelBuilder.Entity<ApiSyncLog>().ToTable("ApiSyncLogs");
+            modelBuilder.Entity<AdminActivityLog>().ToTable("AdminActivityLogs");
         }
     }
 }

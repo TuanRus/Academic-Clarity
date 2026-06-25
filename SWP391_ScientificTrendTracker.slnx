@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="JournalTrend.API/JournalTrend.API.csproj" />
+  <Project Path="JournalTrend.Core/JournalTrend.Core.csproj" />
+  <Project Path="JournalTrend.Infrastructure/JournalTrend.Infrastructure.csproj" />
+  <Project Path="JournalTrend.Services/JournalTrend.Services.csproj" />
+</Solution>

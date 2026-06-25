@@ -3,6 +3,9 @@ using Microsoft.EntityFrameworkCore;
 using ScientificTrendTracker.Data;
 using ScientificTrendTracker.Models.Common;
 using ScientificTrendTracker.Models.Entities;
+using ScientificTrendTracker.Models.DTOs.Subscription;
+using ScientificTrendTracker.Models.DTOs.SyncLog;
+using ScientificTrendTracker.Models.DTOs.ActivityLog;
 using ScientificTrendTracker.Services.Interfaces;
 
 namespace ScientificTrendTracker.Controllers
@@ -14,6 +17,9 @@ namespace ScientificTrendTracker.Controllers
         private readonly IScimagoImportService _scimagoImportService;
         private readonly ISyncOrchestratorService _syncOrchestrator;
         private readonly IKeywordReprocessService _reprocessService;
+        private readonly ISubscriptionService _subscriptionService;
+        private readonly IApiSyncLogService _apiSyncLogService;
+        private readonly IAdminActivityLogService _adminActivityLogService;
         private readonly AppDbContext _dbContext;
         private readonly ILogger<AdminController> _logger;
 
@@ -21,12 +27,18 @@ namespace ScientificTrendTracker.Controllers
             IScimagoImportService scimagoImportService,
             ISyncOrchestratorService syncOrchestrator,
             IKeywordReprocessService reprocessService,
+            ISubscriptionService subscriptionService,
+            IApiSyncLogService apiSyncLogService,
+            IAdminActivityLogService adminActivityLogService,
             AppDbContext dbContext,
             ILogger<AdminController> logger)
         {
             _scimagoImportService = scimagoImportService;
             _syncOrchestrator = syncOrchestrator;
             _reprocessService = reprocessService;
+            _subscriptionService = subscriptionService;
+            _apiSyncLogService = apiSyncLogService;
+            _adminActivityLogService = adminActivityLogService;
             _dbContext = dbContext;
             _logger = logger;
         }
@@ -115,6 +127,10 @@ namespace ScientificTrendTracker.Controllers
             _logger.LogWarning("Reset keywords: xoá {Links} link, {Kw} keyword, reset {Papers} paper.",
                 linksDeleted, keywordsDeleted, papersReset);
 
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "RESET_KEYWORDS", 
+                $"Đã reset từ khóa hệ thống: xóa {linksDeleted} liên kết, {keywordsDeleted} từ khóa, đặt lại {papersReset} bài báo.", ip);
+
             return Ok(ApiResponse<object>.Ok(
                 new { LinksDeleted = linksDeleted, KeywordsDeleted = keywordsDeleted, PapersReset = papersReset },
                 $"Đã reset: xoá {linksDeleted} link, {keywordsDeleted} keyword, {papersReset} paper về chưa xử lý."));
@@ -152,11 +168,15 @@ namespace ScientificTrendTracker.Controllers
         /// HTTP 202 nếu job vừa khởi động, 409 nếu đã có job đang chạy.
         /// </returns>
         [HttpPost("reprocess-all")]
-        public IActionResult ReprocessAll()
+        public async Task<IActionResult> ReprocessAll()
         {
             var started = _reprocessService.StartBackground();
             if (!started)
                 return Conflict(ApiResponse<object>.Fail(409, "Đã có job reprocess đang chạy. Xem /api/admin/reprocess-status."));
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "REPROCESS_KEYWORDS",
+                "Khởi chạy tiến trình đào từ khóa nền (AI local).", ip);
 
             return Accepted(ApiResponse<object>.Ok(_reprocessService.GetState(),
                 "Đã khởi động reprocess-all chạy nền. Theo dõi qua /api/admin/reprocess-status."));
@@ -194,6 +214,10 @@ namespace ScientificTrendTracker.Controllers
 
             // Bước 2: tự đào keyword nền (AI local)
             var started = _reprocessService.StartBackground();
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "RUN_WEEKLY_SYNC", 
+                $"Chạy tay tiến trình đồng bộ hàng tuần: fetch {result.Added} bài mới, {result.AlreadyExists} bài trùng.", ip);
 
             return Ok(ApiResponse<object>.Ok(new
             {
@@ -311,6 +335,11 @@ namespace ScientificTrendTracker.Controllers
             // B2: tự khởi động đào keyword hybrid AI (Ollama + seed OpenAlex) chạy nền.
             var started = _reprocessService.StartBackground();
 
+            // Ghi nhật ký hoạt động admin (theo convention của team).
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "REBUILD_CORPUS",
+                $"Chạy rebuild corpus năm {fromYear}-{toYear} (tối đa {perYear} bài/năm): thêm {result.Added} bài mới, {result.AlreadyExists} bài trùng.", ip);
+
             return Ok(ApiResponse<object>.Ok(new
             {
                 result.Added,
@@ -341,12 +370,145 @@ namespace ScientificTrendTracker.Controllers
             using var stream = System.IO.File.OpenRead(path);
             var result = await _scimagoImportService.ImportFromCsvAsync(stream);
 
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "IMPORT_SCIMAGO", 
+                $"Nhập danh sách SCImago từ đường dẫn file: {path}. Đọc {result.TotalRowsRead} dòng, cập nhật {result.UpdatedCount} journal.", ip);
+
             return Ok(ApiResponse<object>.Ok(new
             {
                 result.TotalRowsRead,
                 result.UpdatedCount,
                 result.SkippedCount
             }, $"Import hoàn thành: {result.UpdatedCount} journals đã được cập nhật Q-rank."));
+        }
+
+        /// <summary>
+        /// Lấy toàn bộ danh sách gói cước hiện có trong hệ thống (bao gồm cả các gói đã khóa) để quản trị.
+        /// </summary>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime tự động cung cấp.</param>
+        /// <returns>
+        /// Trả về đối tượng ApiResponse bọc danh sách AdminSubscriptionPlanDto.
+        /// - isSuccess (bool): true nếu lấy danh sách thành công.
+        /// - statusCode (int): 200 OK.
+        /// - data (Array): Danh sách cấu hình đầy đủ các gói cước.
+        /// </returns>
+        [HttpGet("subscriptions/plans")]
+        public async Task<IActionResult> GetPlansForAdminAsync(CancellationToken ct)
+        {
+            var result = await _subscriptionService.GetAllPlansForAdminAsync(ct);
+            return Ok(ApiResponse<List<AdminSubscriptionPlanDto>>.Ok(result, "Lấy danh sách quản trị gói cước thành công."));
+        }
+
+        /// <summary>
+        /// Tạo mới một gói cước dịch vụ (ví dụ: gói Premium, gói VIP...).
+        /// </summary>
+        /// <param name="dto">CreateSubscriptionPlanDto - NGUỒN: FE truyền qua Body (JSON) chứa PlanName, PriceAmount, DurationDays.</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>
+        /// Trả về đối tượng ApiResponse báo kết quả tạo mới.
+        /// - isSuccess (bool): true nếu tạo thành công, false nếu bị trùng tên gói.
+        /// - statusCode (int): 200 OK hoặc 400 Bad Request.
+        /// </returns>
+        [HttpPost("subscriptions/plans")]
+        public async Task<IActionResult> CreatePlanAsync([FromBody] CreateSubscriptionPlanDto dto, CancellationToken ct)
+        {
+            var success = await _subscriptionService.CreatePlanAsync(dto, ct);
+            if (!success)
+            {
+                return BadRequest(ApiResponse<object>.Fail(400, "Tạo gói cước thất bại. Tên gói cước đã tồn tại trong hệ thống."));
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "CREATE_SUBSCRIPTION_PLAN", 
+                $"Tạo gói cước mới: '{dto.PlanName}' với giá {dto.PriceAmount} VNĐ, thời hạn {dto.DurationDays} ngày.", ip);
+
+            return Ok(ApiResponse<object>.Ok(null, "Tạo gói cước mới thành công!"));
+        }
+
+        /// <summary>
+        /// Cập nhật thông tin chi tiết (tên, giá tiền, thời hạn, trạng thái kích hoạt) của một gói cước đang có.
+        /// </summary>
+        /// <param name="planId">Số nguyên Int - NGUỒN: FE truyền qua Route Parameter. ID của gói cước cần sửa.</param>
+        /// <param name="dto">UpdateSubscriptionPlanDto - NGUỒN: FE truyền qua Body (JSON).</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>
+        /// Trả về đối tượng ApiResponse thông báo kết quả.
+        /// - isSuccess (bool): true nếu cập nhật thành công.
+        /// - statusCode (int): 200 OK hoặc 400 Bad Request.
+        /// </returns>
+        [HttpPut("subscriptions/plans/{planId:int}")]
+        public async Task<IActionResult> UpdatePlanAsync(int planId, [FromBody] UpdateSubscriptionPlanDto dto, CancellationToken ct)
+        {
+            var success = await _subscriptionService.UpdatePlanAsync(planId, dto, ct);
+            if (!success)
+            {
+                return BadRequest(ApiResponse<object>.Fail(400, "Cập nhật thất bại. Gói cước không tồn tại hoặc tên mới bị trùng với gói khác."));
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "UPDATE_SUBSCRIPTION_PLAN", 
+                $"Cập nhật thông tin gói cước ID {planId} (Tên mới: '{dto.PlanName}', Giá mới: {dto.PriceAmount} VNĐ).", ip);
+
+            return Ok(ApiResponse<object>.Ok(null, "Cập nhật thông tin gói cước thành công!"));
+        }
+
+        /// <summary>
+        /// Thay đổi nhanh trạng thái hoạt động (bật kích hoạt hoặc ngưng kích hoạt/Soft Delete) của một gói cước.
+        /// </summary>
+        /// <param name="planId">Số nguyên Int - NGUỒN: FE truyền qua Route Parameter. ID của gói cước cần đổi trạng thái.</param>
+        /// <param name="isActive">Boolean - NGUỒN: FE truyền qua Query string (?isActive=true/false).</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>
+        /// Trả về đối tượng ApiResponse thông báo kết quả.
+        /// - isSuccess (bool): true nếu đổi trạng thái thành công.
+        /// - statusCode (int): 200 OK hoặc 400 Bad Request.
+        /// </returns>
+        [HttpPatch("subscriptions/plans/{planId:int}/toggle")]
+        public async Task<IActionResult> TogglePlanStatusAsync(int planId, [FromQuery] bool isActive, CancellationToken ct)
+        {
+            var success = await _subscriptionService.TogglePlanStatusAsync(planId, isActive, ct);
+            if (!success)
+            {
+                return BadRequest(ApiResponse<object>.Fail(400, "Không tìm thấy gói cước với ID yêu cầu."));
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "TOGGLE_SUBSCRIPTION_PLAN", 
+                $"Thay đổi trạng thái gói cước ID {planId} thành {(isActive ? "Hoạt động" : "Tạm ngưng")}.", ip);
+
+            return Ok(ApiResponse<object>.Ok(null, $"Thay đổi trạng thái hoạt động của gói cước thành {isActive} thành công."));
+        }
+
+        /// <summary>
+        /// Lấy danh sách lịch sử đồng bộ dữ liệu tự động của hệ thống (có phân trang).
+        /// </summary>
+        /// <param name="page">Số nguyên Int - NGUỒN: FE truyền lên qua Query String. Số trang hiện tại (mặc định = 1).</param>
+        /// <param name="pageSize">Số nguyên Int - NGUỒN: FE truyền lên qua Query String. Số dòng trên trang (mặc định = 10, max = 100).</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime tự động cung cấp.</param>
+        /// <returns>
+        /// Trả về đối tượng ApiResponse bọc PagedResult của ApiSyncLogResponseDto.
+        /// </returns>
+        [HttpGet("sync-logs")]
+        public async Task<IActionResult> GetSyncLogsAsync([FromQuery] int page = 1, [FromQuery] int pageSize = 10, CancellationToken ct = default)
+        {
+            var result = await _apiSyncLogService.GetSyncLogsAsync(page, pageSize, ct);
+            return Ok(ApiResponse<PagedResult<ApiSyncLogResponseDto>>.Ok(result, "Lấy danh sách nhật ký đồng bộ thành công."));
+        }
+
+        /// <summary>
+        /// Lấy danh sách nhật ký ghi nhận các hành động thay đổi dữ liệu của Admin (có phân trang).
+        /// </summary>
+        /// <param name="page">Số nguyên Int - NGUỒN: FE truyền lên qua Query String. Số trang hiện tại (mặc định = 1).</param>
+        /// <param name="pageSize">Số nguyên Int - NGUỒN: FE truyền lên qua Query String. Số dòng trên trang (mặc định = 10, max = 100).</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime tự động cung cấp.</param>
+        /// <returns>
+        /// Trả về đối tượng ApiResponse bọc PagedResult của AdminActivityLogResponseDto.
+        /// </returns>
+        [HttpGet("activity-logs")]
+        public async Task<IActionResult> GetActivityLogsAsync([FromQuery] int page = 1, [FromQuery] int pageSize = 10, CancellationToken ct = default)
+        {
+            var result = await _adminActivityLogService.GetActivityLogsAsync(page, pageSize, ct);
+            return Ok(ApiResponse<PagedResult<AdminActivityLogResponseDto>>.Ok(result, "Lấy danh sách nhật ký hoạt động Admin thành công."));
         }
     }
 }
