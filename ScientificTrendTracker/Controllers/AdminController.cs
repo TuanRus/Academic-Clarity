@@ -6,6 +6,8 @@ using ScientificTrendTracker.Models.Entities;
 using ScientificTrendTracker.Models.DTOs.Subscription;
 using ScientificTrendTracker.Models.DTOs.SyncLog;
 using ScientificTrendTracker.Models.DTOs.ActivityLog;
+using ScientificTrendTracker.Models.DTOs.Paper;
+using ScientificTrendTracker.Models.DTOs.Keyword;
 using ScientificTrendTracker.Services.Interfaces;
 
 namespace ScientificTrendTracker.Controllers
@@ -21,6 +23,8 @@ namespace ScientificTrendTracker.Controllers
         private readonly ISubscriptionService _subscriptionService;
         private readonly IApiSyncLogService _apiSyncLogService;
         private readonly IAdminActivityLogService _adminActivityLogService;
+        private readonly IPaperService _paperService;
+        private readonly IKeywordService _keywordService;
         private readonly AppDbContext _dbContext;
         private readonly ILogger<AdminController> _logger;
 
@@ -32,6 +36,8 @@ namespace ScientificTrendTracker.Controllers
             ISubscriptionService subscriptionService,
             IApiSyncLogService apiSyncLogService,
             IAdminActivityLogService adminActivityLogService,
+            IPaperService paperService,
+            IKeywordService keywordService,
             AppDbContext dbContext,
             ILogger<AdminController> logger)
         {
@@ -42,6 +48,8 @@ namespace ScientificTrendTracker.Controllers
             _subscriptionService = subscriptionService;
             _apiSyncLogService = apiSyncLogService;
             _adminActivityLogService = adminActivityLogService;
+            _paperService = paperService;
+            _keywordService = keywordService;
             _dbContext = dbContext;
             _logger = logger;
         }
@@ -436,5 +444,206 @@ namespace ScientificTrendTracker.Controllers
             var result = await _adminActivityLogService.GetActivityLogsAsync(page, pageSize, ct);
             return Ok(ApiResponse<PagedResult<AdminActivityLogResponseDto>>.Ok(result, "Lấy danh sách nhật ký hoạt động Admin thành công."));
         }
+
+        #region Paper CRUD Admin
+
+        /// <summary>
+        /// Admin lấy danh sách các bài báo khoa học trong hệ thống (có phân trang và bộ lọc).
+        /// </summary>
+        /// <param name="search">Chuỗi String - NGUỒN: FE truyền lên qua Query. Từ khóa tìm kiếm theo tiêu đề.</param>
+        /// <param name="year">Số nguyên Int - NGUỒN: FE truyền lên qua Query. Lọc theo năm xuất bản.</param>
+        /// <param name="journalId">Chuỗi String - NGUỒN: FE truyền lên qua Query. Lọc theo mã tạp chí.</param>
+        /// <param name="page">Số nguyên Int - NGUỒN: FE truyền qua Query. Số trang hiện tại (mặc định = 1).</param>
+        /// <param name="pageSize">Số nguyên Int - NGUỒN: FE truyền qua Query. Số dòng/trang (mặc định = 10).</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>Trả về ApiResponse bọc PagedResult của PaperAdminDto.</returns>
+        [HttpGet("papers")]
+        public async Task<IActionResult> GetPapersAsync(
+            [FromQuery] string search,
+            [FromQuery] int? year,
+            [FromQuery] string journalId,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 10,
+            CancellationToken ct = default)
+        {
+            var result = await _paperService.GetPapersForAdminAsync(search, year, journalId, page, pageSize, ct);
+            return Ok(ApiResponse<PagedResult<PaperAdminDto>>.Ok(result, "Lấy danh sách bài báo thành công."));
+        }
+
+        /// <summary>
+        /// Admin xem thông tin chi tiết của một bài báo cụ thể (bao gồm danh sách tác giả, từ khóa).
+        /// </summary>
+        /// <param name="paperId">Chuỗi String - NGUỒN: FE truyền qua Route Parameter. ID của bài báo.</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>Trả về ApiResponse chứa thông tin chi tiết bài báo.</returns>
+        [HttpGet("papers/{paperId}")]
+        public async Task<IActionResult> GetPaperDetailAsync(string paperId, CancellationToken ct)
+        {
+            var result = await _paperService.GetPaperDetailAsync(paperId, ct);
+            if (result == null)
+            {
+                return NotFound(ApiResponse<object>.Fail(404, $"Không tìm thấy bài báo với ID: {paperId}"));
+            }
+            return Ok(ApiResponse<PaperDetailDto>.Ok(result, "Lấy chi tiết bài báo thành công."));
+        }
+
+        /// <summary>
+        /// Admin tự điền thông tin và thêm một bài báo hay vào hệ thống.
+        /// </summary>
+        /// <param name="dto">CreatePaperDto - NGUỒN: FE truyền lên qua Body (JSON).</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>Trả về ApiResponse thông báo kết quả tạo mới.</returns>
+        [HttpPost("papers")]
+        public async Task<IActionResult> CreatePaperAsync([FromBody] CreatePaperDto dto, CancellationToken ct)
+        {
+            var success = await _paperService.CreatePaperAsync(dto, ct);
+            if (!success)
+            {
+                return BadRequest(ApiResponse<object>.Fail(400, "Tạo bài báo thất bại. Tiêu đề bài báo có thể đã tồn tại."));
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "CREATE_PAPER", 
+                $"Đăng tải bài báo thủ công: '{dto.Title}'. Tạp chí: '{dto.JournalName}'.", ip);
+
+            return Ok(ApiResponse<object>.Ok(null, "Thêm mới bài báo thành công!"));
+        }
+
+        /// <summary>
+        /// Admin cập nhật thông tin và cập nhật lại danh sách liên kết tác giả, từ khóa của bài báo.
+        /// </summary>
+        /// <param name="paperId">Chuỗi String - NGUỒN: FE truyền qua Route Parameter. ID bài báo cần sửa.</param>
+        /// <param name="dto">UpdatePaperDto - NGUỒN: FE truyền lên qua Body (JSON).</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>Trả về ApiResponse thông báo kết quả.</returns>
+        [HttpPut("papers/{paperId}")]
+        public async Task<IActionResult> UpdatePaperAsync(string paperId, [FromBody] UpdatePaperDto dto, CancellationToken ct)
+        {
+            var success = await _paperService.UpdatePaperAsync(paperId, dto, ct);
+            if (!success)
+            {
+                return BadRequest(ApiResponse<object>.Fail(400, "Cập nhật bài báo thất bại. Không tìm thấy bài viết hoặc tiêu đề mới bị trùng lặp."));
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "UPDATE_PAPER", 
+                $"Cập nhật bài báo thủ công ID: {paperId} (Tiêu đề mới: '{dto.Title}').", ip);
+
+            return Ok(ApiResponse<object>.Ok(null, "Cập nhật thông tin bài báo thành công!"));
+        }
+
+        /// <summary>
+        /// Admin thực hiện xóa một bài báo ra khỏi hệ thống (đồng thời dọn các bảng liên kết).
+        /// </summary>
+        /// <param name="paperId">Chuỗi String - NGUỒN: FE truyền qua Route Parameter. ID bài báo cần xóa.</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>Trả về ApiResponse thông báo kết quả.</returns>
+        [HttpDelete("papers/{paperId}")]
+        public async Task<IActionResult> DeletePaperAsync(string paperId, CancellationToken ct)
+        {
+            var success = await _paperService.DeletePaperAsync(paperId, ct);
+            if (!success)
+            {
+                return NotFound(ApiResponse<object>.Fail(404, "Không tìm thấy bài báo cần xóa."));
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "DELETE_PAPER", 
+                $"Xóa bài báo thủ công ID: {paperId}.", ip);
+
+            return Ok(ApiResponse<object>.Ok(null, "Xóa bài báo thành công!"));
+        }
+
+        #endregion
+
+        #region Keyword CRUD Admin
+
+        /// <summary>
+        /// Admin lấy danh sách các từ khóa hiện có (có phân trang và tìm kiếm).
+        /// </summary>
+        /// <param name="search">Chuỗi String - NGUỒN: FE truyền qua Query. Tìm kiếm theo tên từ khóa.</param>
+        /// <param name="page">Số nguyên Int - NGUỒN: FE truyền qua Query. Số trang hiện tại.</param>
+        /// <param name="pageSize">Số nguyên Int - NGUỒN: FE truyền qua Query. Số dòng/trang.</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>Trả về ApiResponse bọc PagedResult của KeywordAdminDto.</returns>
+        [HttpGet("keywords")]
+        public async Task<IActionResult> GetKeywordsAsync(
+            [FromQuery] string search,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 10,
+            CancellationToken ct = default)
+        {
+            var result = await _keywordService.GetKeywordsForAdminAsync(search, page, pageSize, ct);
+            return Ok(ApiResponse<PagedResult<KeywordAdminDto>>.Ok(result, "Lấy danh sách từ khóa thành công."));
+        }
+
+        /// <summary>
+        /// Admin tạo mới một từ khóa trong danh mục hệ thống.
+        /// </summary>
+        /// <param name="dto">CreateKeywordDto - NGUỒN: FE truyền qua Body (JSON).</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>Trả về ApiResponse thông báo kết quả.</returns>
+        [HttpPost("keywords")]
+        public async Task<IActionResult> CreateKeywordAsync([FromBody] CreateKeywordDto dto, CancellationToken ct)
+        {
+            var success = await _keywordService.CreateKeywordAsync(dto, ct);
+            if (!success)
+            {
+                return BadRequest(ApiResponse<object>.Fail(400, "Tạo từ khóa thất bại. Tên từ khóa đã tồn tại."));
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "CREATE_KEYWORD", 
+                $"Tạo mới từ khóa hệ thống: '{dto.KeywordName}'.", ip);
+
+            return Ok(ApiResponse<object>.Ok(null, "Tạo từ khóa mới thành công!"));
+        }
+
+        /// <summary>
+        /// Admin chỉnh sửa tên của một từ khóa có sẵn.
+        /// </summary>
+        /// <param name="keywordId">Chuỗi String - NGUỒN: FE truyền qua Route Parameter. ID của từ khóa.</param>
+        /// <param name="dto">UpdateKeywordDto - NGUỒN: FE truyền qua Body (JSON).</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>Trả về ApiResponse thông báo kết quả.</returns>
+        [HttpPut("keywords/{keywordId}")]
+        public async Task<IActionResult> UpdateKeywordAsync(string keywordId, [FromBody] UpdateKeywordDto dto, CancellationToken ct)
+        {
+            var success = await _keywordService.UpdateKeywordAsync(keywordId, dto, ct);
+            if (!success)
+            {
+                return BadRequest(ApiResponse<object>.Fail(400, "Cập nhật từ khóa thất bại. Không tìm thấy ID hoặc tên mới bị trùng."));
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "UPDATE_KEYWORD", 
+                $"Cập nhật từ khóa ID: {keywordId} thành: '{dto.KeywordName}'.", ip);
+
+            return Ok(ApiResponse<object>.Ok(null, "Cập nhật tên từ khóa thành công!"));
+        }
+
+        /// <summary>
+        /// Admin thực hiện xóa một từ khóa ra khỏi hệ thống (đồng thời dọn các bảng liên kết).
+        /// </summary>
+        /// <param name="keywordId">Chuỗi String - NGUỒN: FE truyền qua Route parameter. ID từ khóa cần xóa.</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>Trả về ApiResponse thông báo kết quả.</returns>
+        [HttpDelete("keywords/{keywordId}")]
+        public async Task<IActionResult> DeleteKeywordAsync(string keywordId, CancellationToken ct)
+        {
+            var success = await _keywordService.DeleteKeywordAsync(keywordId, ct);
+            if (!success)
+            {
+                return NotFound(ApiResponse<object>.Fail(404, "Không tìm thấy từ khóa cần xóa."));
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "DELETE_KEYWORD", 
+                $"Xóa từ khóa hệ thống ID: {keywordId}.", ip);
+
+            return Ok(ApiResponse<object>.Ok(null, "Xóa từ khóa thành công!"));
+        }
+
+        #endregion
     }
 }

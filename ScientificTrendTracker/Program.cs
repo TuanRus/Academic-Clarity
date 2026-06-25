@@ -53,6 +53,8 @@ namespace ScientificTrendTracker
             builder.Services.AddScoped<IApiSyncLogService, ApiSyncLogService>();
             builder.Services.AddScoped<IAdminActivityLogService, AdminActivityLogService>();
             builder.Services.AddScoped<IDashboardService, DashboardService>();
+            builder.Services.AddScoped<IPaperService, PaperService>();
+            builder.Services.AddScoped<IKeywordService, KeywordService>();
             
             // Background Services
             builder.Services.AddHostedService<WeeklySyncService>();
