@@ -52,10 +52,10 @@ namespace ScientificTrendTracker.BackgroundServices
                     fromYear: recentFromYear, minCitedExclusive: -1, recentFirst: true,
                     cancellationToken: stoppingToken);
 
-                // Sau khi fetch xong → tự đào keyword cho bài mới (AI local).
+                // Sau khi fetch xong → tự đào keyword cho bài mới (delayMs=0 vì Ollama local không rate-limit).
                 // BỀN với AI tắt: nếu Ollama off, job reprocess dừng êm (không crash), bài giữ IsAiProcessed=false
                 // và sẽ được đào ở lần sync sau hoặc khi chạy reprocess-all thủ công.
-                reprocess.StartBackground();
+                reprocess.StartBackground(delayMs: 0);
                 _logger.LogInformation("Weekly sync xong fetch, đã kích hoạt đào keyword nền cho bài mới.");
             }
         }

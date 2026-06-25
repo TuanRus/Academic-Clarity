@@ -10,7 +10,6 @@ namespace ScientificTrendTracker.Services
     {
         private readonly AppDbContext _dbContext;
         private readonly ILogger<GraphBuilderService> _logger;
-        private readonly IOpenAlexService _openAlexService;
 
         // Bài báo từ năm này trở đi được tính là "gần đây" để tính TrendScore
         private const int RecentYearThreshold = 2023;
@@ -18,80 +17,10 @@ namespace ScientificTrendTracker.Services
         // Keyword phụ chỉ hiện nếu xuất hiện ở >= ngần này bài — lọc keyword "một lần" gây nhiễu graph
         private const int MinKeywordPaperCount = 2;
 
-        public GraphBuilderService(AppDbContext dbContext, ILogger<GraphBuilderService> logger, IOpenAlexService openAlexService)
+        public GraphBuilderService(AppDbContext dbContext, ILogger<GraphBuilderService> logger)
         {
             _dbContext = dbContext;
             _logger = logger;
-            _openAlexService = openAlexService;
-        }
-
-        /// <summary>
-        /// Chi tiết đầy đủ 1 bài báo cho màn Paper Detail của FE.
-        /// Thông tin cốt lõi từ DB; Abstract reconstruct on-demand từ OpenAlex (func có sẵn, không lưu DB).
-        /// </summary>
-        public async Task<PaperDetailDto> GetPaperDetailAsync(string paperId)
-        {
-            var paper = await _dbContext.ResearchPapers
-                .Include(p => p.Journal)
-                .Include(p => p.PaperKeywords)
-                    .ThenInclude(pk => pk.Keyword)
-                .Include(p => p.PaperAuthors)
-                    .ThenInclude(pa => pa.Author)
-                .FirstOrDefaultAsync(p => p.PaperId == paperId);
-
-            if (paper == null)
-            {
-                _logger.LogInformation("Không tìm thấy paper detail với PaperId '{PaperId}'.", paperId);
-                return null;
-            }
-
-            // OpenAlex: 1 request lấy abstract + topic/subfield/field/domain + OA status + institutions.
-            // (Topic đã lưu DB lúc sync; subfield/field/domain/OA/institutions lấy on-demand.)
-            OpenAlexWorkDetail oaDetail = null;
-            if (!string.IsNullOrWhiteSpace(paper.OpenAlexId))
-            {
-                try
-                {
-                    oaDetail = await _openAlexService.FetchWorkDetailAsync(paper.OpenAlexId);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogWarning(ex, "Không lấy được chi tiết OpenAlex cho '{OpenAlexId}'.", paper.OpenAlexId);
-                }
-            }
-
-            return new PaperDetailDto
-            {
-                PaperId = paper.PaperId,
-                OpenAlexId = paper.OpenAlexId,
-                Doi = paper.Doi,
-                Title = paper.Title,
-                PublicationYear = paper.PublicationYear,
-                PublicationDate = paper.PublicationDate?.ToString("yyyy-MM-dd"),
-                CitationCount = paper.CitationCount,
-                SourceUrl = paper.SourceUrl,
-                JournalName = paper.Journal?.JournalName,
-                Quartile = paper.Journal?.QuartileRank,
-                Publisher = paper.Journal?.Publisher,
-                ImpactFactor = paper.Journal?.ImpactFactor,
-                Authors = paper.PaperAuthors
-                    .OrderBy(pa => pa.AuthorOrder)
-                    .Select(pa => pa.Author.FullName)
-                    .Where(n => !string.IsNullOrWhiteSpace(n))
-                    .ToList(),
-                Keywords = paper.PaperKeywords
-                    .Select(pk => pk.Keyword.KeywordName)
-                    .Where(n => !string.IsNullOrWhiteSpace(n))
-                    .ToList(),
-                // Topic ưu tiên DB; fallback OpenAlex live cho bài cũ chưa sync lại cột Topic.
-                Topic = !string.IsNullOrWhiteSpace(paper.Topic) ? paper.Topic : oaDetail?.Topic,
-                Subfield = oaDetail?.Subfield,
-                Field = oaDetail?.Field,
-                Domain = oaDetail?.Domain,
-                OpenAccessStatus = oaDetail?.OpenAccessStatus,
-                Institutions = oaDetail?.Institutions ?? new List<string>(),
-                Abstract = oaDetail?.Abstract,
-            };
         }
 
         /// <summary>
@@ -236,13 +165,9 @@ namespace ScientificTrendTracker.Services
         public async Task<PagedResult<PaperSearchItemDto>> SearchPapersAsync(string query, int page, int pageSize)
         {
             var q = (query ?? string.Empty).Trim();
-            // Keyword luu dang co gach noi (vd "large-language-models") -> chuan hoa de khop ca khi go dau cach.
-            var kw = KeywordNormalizer.Normalize(q);
 
             var baseQuery = _dbContext.ResearchPapers
-                .Where(p => p.Title.Contains(q)
-                         || (p.Doi != null && p.Doi.Contains(q))
-                         || p.PaperKeywords.Any(pk => pk.Keyword.KeywordName.Contains(kw)));
+                .Where(p => p.Title.Contains(q) || (p.Doi != null && p.Doi.Contains(q)));
 
             return await ToPagedPapersAsync(baseQuery, page, pageSize);
         }
@@ -380,8 +305,7 @@ namespace ScientificTrendTracker.Services
         /// <returns>List&lt;string&gt; - Tên keyword khớp, sắp theo số bài giảm dần.</returns>
         public async Task<List<string>> SuggestKeywordsAsync(string q, int limit)
         {
-            // Keyword luu dang co gach noi (vd "big-data") -> user go "big d"/"big data" cung khop.
-            var lowered = KeywordNormalizer.Normalize(q);
+            var lowered = (q ?? string.Empty).Trim().ToLower();
             if (lowered.Length == 0) return new List<string>();
 
             return await _dbContext.Keywords
@@ -395,7 +319,7 @@ namespace ScientificTrendTracker.Services
         /// <summary>Tìm keyword: ưu tiên exact, fallback contains theo paperCount cao nhất.</summary>
         private async Task<Models.Entities.Keyword> FindKeywordAsync(string keyword)
         {
-            var lowered = KeywordNormalizer.Normalize(keyword);
+            var lowered = keyword.Trim().ToLower();
             return await _dbContext.Keywords.FirstOrDefaultAsync(k => k.KeywordName == lowered)
                 ?? await _dbContext.Keywords
                     .Where(k => k.KeywordName.Contains(lowered))
@@ -403,5 +327,124 @@ namespace ScientificTrendTracker.Services
                     .FirstOrDefaultAsync();
         }
 
+        public async Task<MindmapGraphDto> BuildGraphByPaperIdAsync(string paperId, int maxSiblings = 5)
+        {
+            var graph = new MindmapGraphDto { SearchQuery = paperId };
+
+            var paper = await _dbContext.ResearchPapers
+                .Include(p => p.Journal)
+                .Include(p => p.PaperKeywords)
+                    .ThenInclude(pk => pk.Keyword)
+                .FirstOrDefaultAsync(p => p.PaperId == paperId);
+
+            if (paper == null)
+            {
+                _logger.LogInformation("Không tìm thấy paper với PaperId '{PaperId}'.", paperId);
+                return graph;
+            }
+
+            return await BuildPaperGraphCoreAsync(paper, graph, maxSiblings);
+        }
+
+        /// <summary>
+        /// Core dựng graph từ một entity paper đã load sẵn (kèm Journal + PaperKeywords.Keyword).
+        /// Dùng cho BuildGraphByPaperIdAsync sau khi đã tìm được bài theo PaperId.
+        /// </summary>
+        private async Task<MindmapGraphDto> BuildPaperGraphCoreAsync(
+            Models.Entities.ResearchPaper paper, MindmapGraphDto graph, int maxSiblings)
+        {
+            var addedNodeIds = new HashSet<string>();
+            var paperNodeId = $"p_{paper.PaperId}";
+
+            // Thêm paper gốc
+            graph.Nodes.Add(MapPaperNode(paper));
+            addedNodeIds.Add(paperNodeId);
+
+            foreach (var pk in paper.PaperKeywords)
+            {
+                var kwNodeId = $"kw_{pk.KeywordId}";
+
+                var totalCount = await _dbContext.PaperKeywords
+                    .CountAsync(x => x.KeywordId == pk.KeywordId);
+
+                // Lọc keyword "một lần" — không hiện keyword chỉ xuất hiện ở đúng bài này (nhiễu)
+                if (totalCount < MinKeywordPaperCount) continue;
+
+                var recentCount = await _dbContext.PaperKeywords
+                    .CountAsync(x => x.KeywordId == pk.KeywordId
+                                  && x.Paper.PublicationYear >= RecentYearThreshold);
+
+                // Thêm Keyword node
+                if (!addedNodeIds.Contains(kwNodeId))
+                {
+                    graph.Nodes.Add(new MindmapNodeDto
+                    {
+                        Id = kwNodeId,
+                        Type = "keyword",
+                        Label = pk.Keyword.KeywordName,
+                        PaperCount = totalCount,
+                        TrendScore = totalCount > 0 ? Math.Round((double)recentCount / totalCount, 2) : 0
+                    });
+                    addedNodeIds.Add(kwNodeId);
+                }
+
+                graph.Edges.Add(new MindmapEdgeDto
+                {
+                    Source = paperNodeId,
+                    Target = kwNodeId
+                });
+
+                // Lấy sibling papers cùng keyword (loại bỏ paper gốc)
+                var siblings = await _dbContext.PaperKeywords
+                    .Where(spk => spk.KeywordId == pk.KeywordId
+                               && spk.PaperId != paper.PaperId)
+                    .Include(spk => spk.Paper)
+                        .ThenInclude(p => p.Journal)
+                    .OrderByDescending(spk => spk.Paper.CitationCount)
+                    .Take(maxSiblings)
+                    .ToListAsync();
+
+                foreach (var sibling in siblings)
+                {
+                    var siblingNodeId = $"p_{sibling.PaperId}";
+                    if (!addedNodeIds.Contains(siblingNodeId))
+                    {
+                        graph.Nodes.Add(MapPaperNode(sibling.Paper));
+                        addedNodeIds.Add(siblingNodeId);
+                    }
+
+                    graph.Edges.Add(new MindmapEdgeDto
+                    {
+                        Source = siblingNodeId,
+                        Target = kwNodeId
+                    });
+                }
+            }
+
+            graph.TotalNodes = graph.Nodes.Count;
+            graph.TotalEdges = graph.Edges.Count;
+
+            _logger.LogInformation(
+                "Graph by paper '{Query}': {Nodes} nodes, {Edges} edges.",
+                graph.SearchQuery, graph.TotalNodes, graph.TotalEdges);
+
+            return graph;
+        }
+
+        private MindmapNodeDto MapPaperNode(Models.Entities.ResearchPaper paper)
+        {
+            return new MindmapNodeDto
+            {
+                Id = $"p_{paper.PaperId}",
+                Type = "paper",
+                Label = paper.Title.Length > 80
+                    ? paper.Title[..80] + "..."
+                    : paper.Title,
+                Year = paper.PublicationYear,
+                CitationCount = paper.CitationCount,
+                Quartile = paper.Journal?.QuartileRank,
+                SourceUrl = paper.SourceUrl
+            };
+        }
     }
 }

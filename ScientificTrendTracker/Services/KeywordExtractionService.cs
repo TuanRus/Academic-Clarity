@@ -1,17 +1,22 @@
+#pragma warning disable SKEXP0070 // Gemini connector là experimental trong SK 1.x
+
+using System.Collections.Concurrent;
 using Microsoft.SemanticKernel;
-using Microsoft.SemanticKernel.Connectors.OpenAI;
+using Microsoft.SemanticKernel.Connectors.Google;
 using ScientificTrendTracker.Services.Interfaces;
 
 namespace ScientificTrendTracker.Services
 {
-    /// <summary>
-    /// Trích keyword bằng AI local (Ollama / OpenAI-compatible) đọc từ section "AiProviders".
-    /// Thử lần lượt từng provider; provider đầu trả keyword thì dùng luôn. Không có cloud/quota/rate-limit.
-    /// </summary>
     public class KeywordExtractionService : IKeywordExtractionService
     {
         private readonly IConfiguration _configuration;
         private readonly ILogger<KeywordExtractionService> _logger;
+
+        // Circuit-breaker: khi 1 provider trả 429 (hết quota ngày), tắt nó đến thời điểm lưu ở đây.
+        // static để trạng thái tồn tại xuyên suốt process — service là Scoped, mỗi paper tạo instance mới.
+        private static readonly ConcurrentDictionary<string, DateTime> _cooldownUntilUtc = new();
+
+        // Model được đọc từ config theo từng key
 
         private const string PromptTemplate = """
             You are a Computer Science research assistant.
@@ -21,11 +26,9 @@ namespace ScientificTrendTracker.Services
             - Return ONLY a JSON array of strings, no explanation.
             - Maximum 8 keywords.
             - Keywords must be specific technical terms (not generic words like "study", "result", "method").
-            - All lowercase, use spaces for multi-word terms (e.g. "machine learning", "large language model").
-            - Match the style of a controlled vocabulary: concise canonical noun phrases (1-4 words),
-              singular, no acronyms-only, no author names, no metrics/numbers.
+            - All lowercase, use hyphens for multi-word terms (e.g. "machine-learning", "large-language-model").
             - Focus on: algorithms, architectures, tasks, datasets, domains.
-            {{$seed}}
+
             Paper title: {{$title}}
             Abstract: {{$abstract}}
 
@@ -39,8 +42,28 @@ namespace ScientificTrendTracker.Services
             _logger = logger;
         }
 
-        /// <inheritdoc/>
-        public async Task<List<string>> ExtractKeywordsAsync(string @abstract, string paperTitle, IReadOnlyList<string> seedKeywords = null)
+        /// <summary>
+        /// Gửi abstract bài báo lên Gemini AI để trích xuất keyword kỹ thuật đặc trưng.
+        /// Tự động fallback sang ApiKey2 nếu ApiKey1 bị rate limit (HTTP 429).
+        /// Abstract chỉ tồn tại trong memory, KHÔNG được lưu vào DB.
+        /// </summary>
+        /// <param name="abstract">
+        /// string - OpenAlexService.ReconstructAbstract() trả về -
+        /// Full text abstract đã ghép từ inverted index. Null hoặc rỗng sẽ trả về list rỗng ngay.
+        /// </param>
+        /// <param name="paperTitle">
+        /// string - OpenAlexPaper.Title từ OpenAlex API -
+        /// Tiêu đề bài báo, bổ sung context giúp Gemini extract chính xác hơn.
+        /// </param>
+        /// <returns>
+        /// List&lt;string&gt; - Danh sách keyword kỹ thuật do Gemini trích xuất.
+        /// Mỗi keyword là:
+        /// - (string): Lowercase, hyphen cho cụm từ (vd: "machine-learning", "large-language-model")
+        /// - Tối đa 8 keyword mỗi bài
+        /// - Chỉ thuật ngữ kỹ thuật, loại bỏ từ generic ("study", "result", "method")
+        /// Trả về list rỗng nếu abstract null, Gemini lỗi, hoặc tất cả API key đều thất bại.
+        /// </returns>
+        public async Task<List<string>> ExtractKeywordsAsync(string @abstract, string paperTitle)
         {
             if (string.IsNullOrWhiteSpace(@abstract))
             {
@@ -48,57 +71,195 @@ namespace ScientificTrendTracker.Services
                 return new List<string>();
             }
 
-            var seed = BuildSeedInstruction(seedKeywords);
+            // Theo dõi: có provider nào thực sự PHẢN HỒI không (HTTP 200, dù trả 0 keyword)?
+            // Nếu mọi provider đều cooldown/429 → ném AllProvidersExhaustedException để bulk processor dừng.
+            var anyProviderResponded = false;
 
-            // Thử lần lượt từng provider local trong "AiProviders" (thường chỉ 1: Ollama).
-            foreach (var p in LoadOpenAiProviders())
+            // Thử lần lượt từng Gemini key (đọc từ mảng Gemini:Keys) → Groq (fallback cuối)
+            var geminiKeys = LoadGeminiKeys();
+
+            foreach (var (config, index) in geminiKeys.Select((c, i) => (c, i)))
             {
-                if (string.IsNullOrEmpty(p.BaseUrl) || string.IsNullOrEmpty(p.Model)) continue;
+                if (string.IsNullOrEmpty(config.ApiKey)) continue;
+                var provider = $"gemini-key{index + 1}";
+                if (IsInCooldown(provider)) continue; // Bỏ qua key đã hết quota — không bắn request rác
+
                 try
                 {
-                    var result = await InvokeOpenAICompatibleAsync(p.BaseUrl, p.ApiKey, p.Model, @abstract, paperTitle, seed);
+                    var result = await InvokeGeminiAsync(config.ApiKey, config.Model, @abstract, paperTitle);
+                    anyProviderResponded = true;
                     if (result.Count > 0) return result;
+                }
+                catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("quota") || ex.Message.Contains("RESOURCE_EXHAUSTED"))
+                {
+                    // Phân biệt giới hạn NGÀY (PerDay) vs PHÚT (PerMinute/RPM/TPM)
+                    var isDailyLimit = ex.Message.Contains("PerDay") || ex.Message.Contains("per day");
+                    if (isDailyLimit)
+                    {
+                        TripBreakerUntilNextUtcMidnight(provider);
+                        _logger.LogWarning("{Provider} hết quota NGÀY (429), tắt đến 00:00 UTC.", provider);
+                    }
+                    else
+                    {
+                        // Chạm RPM/TPM → chỉ cần nghỉ ngắn, không phí key cả ngày
+                        _cooldownUntilUtc[provider] = DateTime.UtcNow.AddSeconds(60);
+                        _logger.LogWarning("{Provider} chạm rate limit phút (429), tắt 60s.", provider);
+                    }
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogError(ex, "Lỗi AI provider {Provider} model={Model}: {Message}", p.Name, p.Model, ex.Message);
+                    _logger.LogError(ex, "Lỗi {Provider} model={Model}: {Message}", provider, config.Model, ex.Message);
                 }
             }
 
-            _logger.LogWarning("AI không trích được keyword cho paper '{Title}'.", paperTitle);
+            // Fallback: lần lượt từng Groq key (đọc từ mảng Groq:Keys) qua OpenAI-compatible connector
+            var groqKeys = LoadGroqKeys();
+
+            foreach (var (config, index) in groqKeys.Select((c, i) => (c, i)))
+            {
+                if (string.IsNullOrEmpty(config.ApiKey)) continue;
+                var provider = $"groq-key{index + 1}";
+                if (IsInCooldown(provider)) continue;
+
+                try
+                {
+                    var result = await InvokeGroqAsync(config.ApiKey, config.Model, @abstract, paperTitle);
+                    anyProviderResponded = true;
+                    if (result.Count > 0) return result;
+                }
+                catch (Exception ex) when (ex.Message.Contains("429") || ex.Message.Contains("rate"))
+                {
+                    // Groq daily limit reset 00:00 UTC. Phân biệt giới hạn ngày vs phút.
+                    var isDailyLimit = ex.Message.Contains("per day") || ex.Message.Contains("RPD")
+                        || ex.Message.Contains("daily") || ex.Message.Contains("tokens per day") || ex.Message.Contains("TPD");
+                    if (isDailyLimit)
+                    {
+                        TripBreakerUntilNextUtcMidnight(provider);
+                        _logger.LogWarning("{Provider} hết quota NGÀY (429), tắt đến 00:00 UTC.", provider);
+                    }
+                    else
+                    {
+                        _cooldownUntilUtc[provider] = DateTime.UtcNow.AddSeconds(60);
+                        _logger.LogWarning("{Provider} chạm rate limit phút (429), tắt 60s.", provider);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Lỗi {Provider} model={Model}: {Message}", provider, config.Model, ex.Message);
+                }
+            }
+
+            // OpenAI-compatible providers (Cerebras, SambaNova, Ollama local...) đọc từ "AiProviders"
+            var openAiProviders = LoadOpenAiProviders();
+
+            foreach (var p in openAiProviders)
+            {
+                if (string.IsNullOrEmpty(p.BaseUrl) || string.IsNullOrEmpty(p.Model)) continue;
+                if (IsInCooldown(p.Name)) continue;
+
+                // Ollama local (localhost) không bao giờ 429 → fallback vô hạn, không tính vào "exhausted"
+                var isLocal = p.BaseUrl.Contains("localhost") || p.BaseUrl.Contains("127.0.0.1");
+
+                try
+                {
+                    var result = await InvokeOpenAICompatibleAsync(p.BaseUrl, p.ApiKey, p.Model, @abstract, paperTitle);
+                    anyProviderResponded = true;
+                    if (result.Count > 0) return result;
+                }
+                catch (Exception ex) when (!isLocal && (ex.Message.Contains("429") || ex.Message.Contains("rate")
+                    || ex.Message.Contains("quota") || ex.Message.Contains("RESOURCE_EXHAUSTED")))
+                {
+                    // Mặc định coi 429 là giới hạn NGÀY chỉ khi chắc chắn; còn lại nghỉ ngắn 60s
+                    var isDailyLimit = ex.Message.Contains("per day") || ex.Message.Contains("RPD")
+                        || ex.Message.Contains("daily") || ex.Message.Contains("TPD");
+                    if (isDailyLimit)
+                    {
+                        TripBreakerUntilNextUtcMidnight(p.Name);
+                        _logger.LogWarning("{Provider} hết quota NGÀY (429), tắt đến 00:00 UTC.", p.Name);
+                    }
+                    else
+                    {
+                        _cooldownUntilUtc[p.Name] = DateTime.UtcNow.AddSeconds(60);
+                        _logger.LogWarning("{Provider} chạm rate limit phút (429), tắt 60s.", p.Name);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Lỗi {Provider} model={Model}: {Message}", p.Name, p.Model, ex.Message);
+                }
+            }
+
+            // Không provider nào phản hồi → tất cả đang cooldown/429 → báo để bulk processor DỪNG
+            if (!anyProviderResponded)
+                throw new AllProvidersExhaustedException(
+                    $"Mọi AI provider đều hết quota/đang cooldown khi xử lý '{paperTitle}'.");
+
+            // Có provider phản hồi nhưng trả 0 keyword → thật sự không extract được
+            _logger.LogWarning("AI phản hồi nhưng 0 keyword cho paper '{Title}'.", paperTitle);
             return new List<string>();
         }
 
         /// <summary>
-        /// Dựng đoạn hướng dẫn "seed" từ keyword OpenAlex sẵn có để AI bám controlled vocabulary.
-        /// Rỗng nếu không có seed → prompt hoạt động như cũ.
+        /// Đọc danh sách Gemini key từ config. Ưu tiên mảng Gemini:Keys[],
+        /// fallback về format cũ ApiKey1/ApiKey2 nếu mảng rỗng (giữ tương thích ngược).
         /// </summary>
-        private static string BuildSeedInstruction(IReadOnlyList<string> seedKeywords)
+        private List<(string ApiKey, string Model)> LoadGeminiKeys()
         {
-            if (seedKeywords == null || seedKeywords.Count == 0) return string.Empty;
-            var cleaned = seedKeywords
-                .Where(k => !string.IsNullOrWhiteSpace(k))
-                .Select(k => k.Trim())
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Take(12)
-                .ToList();
-            if (cleaned.Count == 0) return string.Empty;
+            var keys = new List<(string ApiKey, string Model)>();
 
-            var list = string.Join(", ", cleaned);
-            return $"""
+            // Format mới: mảng "Gemini:Keys": [ { "ApiKey": "...", "Model": "..." } ]
+            var section = _configuration.GetSection("Gemini:Keys");
+            foreach (var child in section.GetChildren())
+            {
+                var apiKey = child["ApiKey"];
+                if (string.IsNullOrEmpty(apiKey)) continue;
+                keys.Add((apiKey, child["Model"] ?? "gemini-2.0-flash"));
+            }
 
-                Reference keywords (from OpenAlex's controlled vocabulary for THIS paper): [{list}].
-                Treat these as the gold-standard style and vocabulary:
-                - REUSE these reference terms when they fit the abstract (keep them in the output).
-                - You MAY add a few extra specific technical terms ONLY if they are clearly central to the
-                  paper and follow the SAME canonical style as the references.
-                - Do NOT output generic, vague, or off-topic words. Stay close to this vocabulary.
-                """;
+            if (keys.Count > 0) return keys;
+
+            // Format cũ: ApiKey1/Model1, ApiKey2/Model2
+            var key1 = _configuration["Gemini:ApiKey1"];
+            if (!string.IsNullOrEmpty(key1))
+                keys.Add((key1, _configuration["Gemini:Model1"] ?? "gemini-2.0-flash"));
+
+            var key2 = _configuration["Gemini:ApiKey2"];
+            if (!string.IsNullOrEmpty(key2))
+                keys.Add((key2, _configuration["Gemini:Model2"] ?? "gemini-2.0-flash-lite"));
+
+            return keys;
+        }
+
+        /// <summary>
+        /// Đọc danh sách Groq key từ config. Ưu tiên mảng Groq:Keys[],
+        /// fallback về Groq:ApiKey đơn (giữ tương thích ngược). Nhiều key = nhân quota ngày.
+        /// </summary>
+        private List<(string ApiKey, string Model)> LoadGroqKeys()
+        {
+            var defaultModel = _configuration["Groq:Model"] ?? "llama-3.3-70b-versatile";
+            var keys = new List<(string ApiKey, string Model)>();
+
+            var section = _configuration.GetSection("Groq:Keys");
+            foreach (var child in section.GetChildren())
+            {
+                var apiKey = child["ApiKey"];
+                if (string.IsNullOrEmpty(apiKey)) continue;
+                keys.Add((apiKey, child["Model"] ?? defaultModel));
+            }
+
+            if (keys.Count > 0) return keys;
+
+            // Fallback: format cũ Groq:ApiKey đơn
+            var single = _configuration["Groq:ApiKey"];
+            if (!string.IsNullOrEmpty(single))
+                keys.Add((single, defaultModel));
+
+            return keys;
         }
 
         /// <summary>
         /// Đọc danh sách provider OpenAI-compatible từ section "AiProviders".
-        /// Mỗi item: { Name, BaseUrl, ApiKey, Model }.
+        /// Mỗi item: { Name, BaseUrl, ApiKey, Model }. Dùng chung cho Cerebras/SambaNova/Ollama.
         /// </summary>
         private List<(string Name, string BaseUrl, string ApiKey, string Model)> LoadOpenAiProviders()
         {
@@ -113,7 +274,7 @@ namespace ScientificTrendTracker.Services
             return list;
         }
 
-        private async Task<List<string>> InvokeOpenAICompatibleAsync(string baseUrl, string apiKey, string model, string @abstract, string paperTitle, string seed)
+        private async Task<List<string>> InvokeOpenAICompatibleAsync(string baseUrl, string apiKey, string model, string @abstract, string paperTitle)
         {
             var kernel = Kernel.CreateBuilder()
                 .AddOpenAIChatCompletion(
@@ -124,39 +285,83 @@ namespace ScientificTrendTracker.Services
 
             var function = kernel.CreateFunctionFromPrompt(PromptTemplate);
 
-            // Tất định: cùng abstract → cùng keyword (ổn định, lặp lại được khi demo/đánh giá).
-            var settings = new OpenAIPromptExecutionSettings { Temperature = 0, TopP = 1, Seed = 42 };
-
-            var result = await kernel.InvokeAsync(function, new KernelArguments(settings)
+            var result = await kernel.InvokeAsync(function, new KernelArguments
             {
                 ["title"] = paperTitle,
-                ["abstract"] = @abstract,
-                ["seed"] = seed ?? string.Empty
+                ["abstract"] = @abstract
             });
 
             return ParseKeywords(result.ToString().Trim(), paperTitle);
         }
 
-        /// <summary>Loại keyword rác: quá ngắn, chỉ chứa số/dấu, hoặc là từ generic (stoplist dùng chung).</summary>
-        private static bool IsQualityKeyword(string kw)
+        public IReadOnlyDictionary<string, DateTime> GetProviderCooldowns()
         {
-            if (string.IsNullOrWhiteSpace(kw) || kw.Length < 3) return false;
-            if (kw.All(c => char.IsDigit(c) || c == '-' || c == ' ')) return false;
-            if (KeywordStopwords.IsGeneric(kw)) return false;
-            return true;
+            // Chỉ trả về provider còn đang trong cooldown (chưa tới giờ bật lại)
+            var now = DateTime.UtcNow;
+            return _cooldownUntilUtc
+                .Where(kv => kv.Value > now)
+                .ToDictionary(kv => kv.Key, kv => kv.Value);
+        }
+
+        private bool IsInCooldown(string provider)
+        {
+            return _cooldownUntilUtc.TryGetValue(provider, out var until) && DateTime.UtcNow < until;
+        }
+
+        private void TripBreakerUntilNextUtcMidnight(string provider)
+        {
+            _cooldownUntilUtc[provider] = DateTime.UtcNow.Date.AddDays(1);
+        }
+
+        private async Task<List<string>> InvokeGeminiAsync(string apiKey, string model, string @abstract, string paperTitle)
+        {
+            var kernel = Kernel.CreateBuilder()
+                .AddGoogleAIGeminiChatCompletion(model, apiKey)
+                .Build();
+
+            var function = kernel.CreateFunctionFromPrompt(PromptTemplate);
+
+            var result = await kernel.InvokeAsync(function, new KernelArguments
+            {
+                ["title"] = paperTitle,
+                ["abstract"] = @abstract
+            });
+
+            var rawResponse = result.ToString().Trim();
+            return ParseKeywords(rawResponse, paperTitle);
+        }
+
+        private async Task<List<string>> InvokeGroqAsync(string apiKey, string model, string @abstract, string paperTitle)
+        {
+            var kernel = Kernel.CreateBuilder()
+                .AddOpenAIChatCompletion(
+                    modelId: model,
+                    apiKey: apiKey,
+                    httpClient: new HttpClient { BaseAddress = new Uri("https://api.groq.com/openai/v1/") })
+                .Build();
+
+            var function = kernel.CreateFunctionFromPrompt(PromptTemplate);
+
+            var result = await kernel.InvokeAsync(function, new KernelArguments
+            {
+                ["title"] = paperTitle,
+                ["abstract"] = @abstract
+            });
+
+            return ParseKeywords(result.ToString().Trim(), paperTitle);
         }
 
         private List<string> ParseKeywords(string rawResponse, string paperTitle)
         {
             try
             {
-                // Tách phần JSON array ra khỏi response (model đôi khi thêm text thừa)
+                // Tách phần JSON array ra khỏi response (Gemini đôi khi thêm text thừa)
                 var start = rawResponse.IndexOf('[');
                 var end = rawResponse.LastIndexOf(']');
 
                 if (start == -1 || end == -1 || end <= start)
                 {
-                    _logger.LogWarning("AI trả về format không hợp lệ cho '{Title}': {Response}", paperTitle, rawResponse);
+                    _logger.LogWarning("Gemini trả về format không hợp lệ cho '{Title}': {Response}", paperTitle, rawResponse);
                     return new List<string>();
                 }
 
@@ -165,16 +370,14 @@ namespace ScientificTrendTracker.Services
 
                 return keywords?
                     .Where(k => !string.IsNullOrWhiteSpace(k))
-                    // Chuẩn hóa giống toàn hệ thống: lowercase + dấu cách (tránh "big data" vs "big-data")
-                    .Select(KeywordNormalizer.Normalize)
-                    .Where(IsQualityKeyword)
+                    .Select(k => k.ToLower().Trim())
                     .Distinct()
                     .Take(8)
                     .ToList() ?? new List<string>();
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "Lỗi parse keyword JSON cho '{Title}': {Message}", paperTitle, ex.Message);
+                _logger.LogWarning(ex, "Parse keyword thất bại cho paper '{Title}'. Raw: {Response}", paperTitle, rawResponse);
                 return new List<string>();
             }
         }

@@ -146,11 +146,10 @@ namespace ScientificTrendTracker.Services
         private IQueryable<ResearchPaper> EntityPapers(string dimension, string value)
         {
             var v = (value ?? string.Empty).Trim();
-            var kw = KeywordNormalizer.Normalize(v); // keyword khớp chính xác theo dạng đã chuẩn hóa
             return dimension.ToLower() switch
             {
                 "keyword" => _dbContext.ResearchPapers
-                    .Where(p => p.PaperKeywords.Any(pk => pk.Keyword.KeywordName == kw)),
+                    .Where(p => p.PaperKeywords.Any(pk => pk.Keyword.KeywordName == v.ToLower())),
                 "author" => _dbContext.ResearchPapers
                     .Where(p => p.PaperAuthors.Any(pa => pa.Author.FullName.Contains(v))),
                 "journal" => _dbContext.ResearchPapers
