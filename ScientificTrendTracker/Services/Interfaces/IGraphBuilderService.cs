@@ -7,7 +7,6 @@ namespace ScientificTrendTracker.Services.Interfaces
     {
         /// <summary>
         /// Bước "search → hiện danh sách": tìm bài báo theo tiêu đề/DOI gần đúng, trả về list phân trang.
-        /// User chọn 1 bài rồi gọi BuildGraphByPaperIdAsync để xem graph.
         /// </summary>
         /// <param name="query">
         /// string - FE truyền lên - Từ khóa tìm trong Title hoặc Doi (contains, không phân biệt hoa thường).
@@ -38,21 +37,6 @@ namespace ScientificTrendTracker.Services.Interfaces
         Task<List<string>> SuggestKeywordsAsync(string q, int limit);
 
         /// <summary>
-        /// Bước "click vào bài báo → tạo graph": dựng graph cho đúng 1 bài báo theo PaperId.
-        /// Khác BuildGraphByPaperAsync (nhận query fuzzy) — đây nhận PaperId chính xác user đã chọn.
-        /// </summary>
-        /// <param name="paperId">
-        /// string - PaperId lấy từ kết quả SearchPapersAsync.
-        /// </param>
-        /// <param name="maxSiblings">
-        /// int - Số sibling paper tối đa mỗi keyword, mặc định 5.
-        /// </param>
-        /// <returns>
-        /// MindmapGraphDto - Graph xoay quanh bài báo đó. Nodes/Edges rỗng nếu PaperId không tồn tại.
-        /// </returns>
-        Task<MindmapGraphDto> BuildGraphByPaperIdAsync(string paperId, int maxSiblings = 5);
-
-        /// <summary>
         /// Dựng mind map dạng CÂY 3 tầng KEYWORD (kiểu sơ đồ tư duy):
         /// Tầng 0 = chủ đề trung tâm → Tầng 1 = chủ đề con (keyword đồng xuất hiện với gốc)
         /// → Tầng 2 = chủ đề cháu (keyword đồng xuất hiện với từng chủ đề con).
@@ -75,5 +59,14 @@ namespace ScientificTrendTracker.Services.Interfaces
         /// <param name="distinctFrom">Keyword root đang xem; null khi click chính node root.</param>
         /// <param name="limit">Số bài tối đa, mặc định 10.</param>
         Task<List<PaperSearchItemDto>> GetTopPapersByKeywordAsync(string keyword, string distinctFrom = null, int limit = 10);
+
+        /// <summary>
+        /// Chi tiết đầy đủ 1 bài báo (Paper Detail của FE): thông tin cốt lõi từ DB
+        /// (title, doi, năm, citation, journal + quartile, tác giả, keyword) + Abstract
+        /// reconstruct on-demand từ OpenAlex (không lưu DB).
+        /// </summary>
+        /// <param name="paperId">string - PaperId lấy từ kết quả search.</param>
+        /// <returns>PaperDetailDto, hoặc null nếu PaperId không tồn tại.</returns>
+        Task<PaperDetailDto> GetPaperDetailAsync(string paperId);
     }
 }

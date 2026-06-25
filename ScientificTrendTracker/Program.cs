@@ -4,7 +4,6 @@ using ScientificTrendTracker.Middleware;
 using ScientificTrendTracker.BackgroundServices;
 using ScientificTrendTracker.Services;
 using ScientificTrendTracker.Services.Interfaces;
-#pragma warning disable SKEXP0070
 
 namespace ScientificTrendTracker
 {
@@ -16,11 +15,28 @@ namespace ScientificTrendTracker
 
             builder.Services.AddControllers();
 
-            if (builder.Environment.IsDevelopment())
+            // Swagger bật cho mọi môi trường để cả profile local lẫn remote đều có UI test API.
+            builder.Services.AddEndpointsApiExplorer();
+            builder.Services.AddSwaggerGen(c =>
             {
-                builder.Services.AddEndpointsApiExplorer();
-                builder.Services.AddSwaggerGen();
-            }
+                // Nạp mô tả từ XML doc comment (summary -> note hiển thị trên Swagger).
+                var xml = Path.Combine(AppContext.BaseDirectory,
+                    $"{System.Reflection.Assembly.GetExecutingAssembly().GetName().Name}.xml");
+                if (File.Exists(xml)) c.IncludeXmlComments(xml, includeControllerXmlComments: true);
+            });
+
+            // CORS — cho phép FE (React/Vite) gọi API. Origin lấy từ config "Cors:AllowedOrigins"
+            // (mảng string trong appsettings); mặc định cổng dev của Vite nếu chưa cấu hình.
+            const string CorsPolicy = "FrontendCors";
+            var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+                ?? new[] { "http://localhost:5173", "http://localhost:3000" };
+            builder.Services.AddCors(options =>
+            {
+                options.AddPolicy(CorsPolicy, policy =>
+                    policy.WithOrigins(allowedOrigins)
+                          .AllowAnyHeader()
+                          .AllowAnyMethod());
+            });
 
             // Database
             var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
@@ -46,6 +62,7 @@ namespace ScientificTrendTracker
             builder.Services.AddScoped<IGraphBuilderService, GraphBuilderService>();
             builder.Services.AddScoped<ITrendService, TrendService>();
             builder.Services.AddScoped<ISyncOrchestratorService, SyncOrchestratorService>();
+            builder.Services.AddScoped<IIdeaOverlapService, IdeaOverlapService>();
             builder.Services.AddSingleton<IKeywordReprocessService, KeywordReprocessService>();
 
             // Background Services
@@ -56,17 +73,13 @@ namespace ScientificTrendTracker
             // Middleware — GlobalExceptionMiddleware phải đặt trước MapControllers
             app.UseMiddleware<GlobalExceptionMiddleware>();
 
-            if (app.Environment.IsDevelopment())
-            {
-                app.UseSwagger();
-                app.UseSwaggerUI();
-            }
+            app.UseSwagger();
+            app.UseSwaggerUI();
 
             app.UseHttpsRedirection();
 
-            // Phục vụ file tĩnh trong wwwroot (trang demo mind map) — cùng origin nên không lỗi CORS
-            app.UseDefaultFiles();
-            app.UseStaticFiles();
+            // CORS phải đặt trước UseAuthorization và MapControllers
+            app.UseCors(CorsPolicy);
 
             app.UseAuthorization();
             app.MapControllers();

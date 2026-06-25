@@ -50,9 +50,10 @@ namespace ScientificTrendTracker.Controllers
             [FromQuery] string dimension,
             [FromQuery] string value,
             [FromQuery] int fromYear = 2022,
-            [FromQuery] int toYear = 2026,
+            [FromQuery] int toYear = 0,
             [FromQuery] string groupBy = "year")
         {
+            if (toYear <= 0) toYear = DateTime.UtcNow.Year; // mặc định = năm hiện tại (không hardcode)
             if (!IsValidDimension(dimension))
                 return BadRequest(ApiResponse<object>.Fail(400, "dimension phải là keyword / author / journal."));
             if (string.IsNullOrWhiteSpace(value))
@@ -99,11 +100,12 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> GetTop(
             [FromQuery] string dimension,
             [FromQuery] int fromYear = 2022,
-            [FromQuery] int toYear = 2026,
+            [FromQuery] int toYear = 0,
             [FromQuery] int topN = 20,
             [FromQuery] int minPapers = 3,
             [FromQuery] string sortBy = "share")
         {
+            if (toYear <= 0) toYear = DateTime.UtcNow.Year; // mặc định = năm hiện tại (không hardcode)
             if (!IsValidDimension(dimension))
                 return BadRequest(ApiResponse<object>.Fail(400, "dimension phải là keyword / author / journal."));
             if (fromYear > toYear)
