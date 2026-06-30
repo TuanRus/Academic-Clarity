@@ -1,0 +1,40 @@
+# ===== Build artifacts =====
+**/bin/
+**/obj/
+[Bb]in/
+[Oo]bj/
+**/wwwroot/
+
+# ===== Node / Vite =====
+**/node_modules/
+**/dist/
+**/.vite/
+
+# ===== IDE / editor =====
+**/.vs/
+**/.vscode/
+**/.idea/
+*.user
+*.suo
+
+# ===== Secrets / local config =====
+**/appsettings.json
+**/appsettings.Development.json
+!**/appsettings.example.json
+**/.env
+!**/.env.example
+**/global.json
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== Local tooling =====
+.claude/
+**/.claude/
+**/settings.local.json
+.cursor/
+
+# ===== Markdown docs (khong push) =====
+*.md
+**/*.md
