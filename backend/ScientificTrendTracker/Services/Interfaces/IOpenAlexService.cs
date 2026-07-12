@@ -57,6 +57,14 @@ namespace ScientificTrendTracker.Services.Interfaces
         Task<OpenAlexWorkDetail> FetchWorkDetailAsync(string openAlexId);
 
         /// <summary>
+        /// Lấy TOÀN BỘ metadata của 1 bài từ OpenAlex để Admin thêm thủ công qua link/DOI/ID.
+        /// Chấp nhận: URL "https://openalex.org/W...", ID trần "W...", URL "https://doi.org/10..." hoặc DOI trần "10...".
+        /// </summary>
+        /// <param name="idOrDoiOrUrl">string - Admin dán vào - Link OpenAlex, link DOI, ID work hoặc DOI.</param>
+        /// <returns>OpenAlexPaper đã map (title/doi/năm/tạp chí/tác giả/keyword); null nếu không tìm thấy hoặc API lỗi.</returns>
+        Task<OpenAlexPaper> FetchSingleWorkAsync(string idOrDoiOrUrl);
+
+        /// <summary>
         /// Reconstruct full text abstract từ abstract_inverted_index trả về bởi OpenAlex.
         /// OpenAlex lưu dạng inverted index (word → [positions]) thay vì full text để tránh bản quyền.
         /// Abstract chỉ dùng trong memory để extract keyword, tuyệt đối KHÔNG lưu vào DB.

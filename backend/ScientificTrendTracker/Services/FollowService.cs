@@ -65,13 +65,15 @@ namespace ScientificTrendTracker.Services
                 return null;
             }
 
-            var existingFollow = await _context.FollowedItems
-                .FirstOrDefaultAsync(f =>
-                    f.UserId == userId &&
-                    f.TargetType == typeClean &&
-                    (typeClean == "topic"
-                        ? f.TopicId == idClean
-                        : f.JournalId == idClean));
+            bool isTopic = typeClean == "topic";
+
+            // Tách rõ 2 nhánh thay vì dùng ternary trong biểu thức LINQ: EF Core dịch conditional
+            // so sánh 2 cột khác nhau (TopicId/JournalId) sang SQL không ổn định, dễ trả sai bản ghi.
+            var existingFollow = isTopic
+                ? await _context.FollowedItems.FirstOrDefaultAsync(f =>
+                    f.UserId == userId && f.TargetType == typeClean && f.TopicId == idClean)
+                : await _context.FollowedItems.FirstOrDefaultAsync(f =>
+                    f.UserId == userId && f.TargetType == typeClean && f.JournalId == idClean);
 
             bool isFollowingResult;
 
@@ -106,12 +108,11 @@ namespace ScientificTrendTracker.Services
             await _context.SaveChangesAsync();
 
             // Thực hiện hoàn toàn dưới Database để giảm băng thông truyền dữ liệu và tối ưu RAM máy chủ
-            int totalFollowers = await _context.FollowedItems
-                .CountAsync(f =>
-                    f.TargetType == typeClean &&
-                    (typeClean == "topic"
-                        ? f.TopicId == idClean
-                        : f.JournalId == idClean));
+            int totalFollowers = isTopic
+                ? await _context.FollowedItems.CountAsync(f =>
+                    f.TargetType == typeClean && f.TopicId == idClean)
+                : await _context.FollowedItems.CountAsync(f =>
+                    f.TargetType == typeClean && f.JournalId == idClean);
 
             return new FollowResultDto
             {

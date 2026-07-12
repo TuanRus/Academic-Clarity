@@ -14,17 +14,20 @@ namespace ScientificTrendTracker.Services
         private readonly IKeywordExtractionService _keywordService;
         private readonly AppDbContext _dbContext;
         private readonly ILogger<SyncOrchestratorService> _logger;
+        private readonly ISyncProgressTracker _progress;
 
         public SyncOrchestratorService(
             IOpenAlexService openAlexService,
             IKeywordExtractionService keywordService,
             AppDbContext dbContext,
-            ILogger<SyncOrchestratorService> logger)
+            ILogger<SyncOrchestratorService> logger,
+            ISyncProgressTracker progress)
         {
             _openAlexService = openAlexService;
             _keywordService = keywordService;
             _dbContext = dbContext;
             _logger = logger;
+            _progress = progress;
         }
 
         /// <summary>
@@ -56,6 +59,7 @@ namespace ScientificTrendTracker.Services
             var result = new SyncResult();
             try
             {
+                _progress.Begin(syncLog.SyncLogId);
                 for (int page = 1; page <= maxPages; page++)
                 {
                     if (cancellationToken.IsCancellationRequested) break;
@@ -96,6 +100,9 @@ namespace ScientificTrendTracker.Services
                                 case ProcessOutcome.NoTitle:       result.NoTitle++;       break;
                             }
 
+                            _progress.Push(paper.Title, outcome == ProcessOutcome.Added ? "Success"
+                                : outcome == ProcessOutcome.AlreadyExists ? "Exists" : "NoTitle");
+
                             // Chỉ throttle khi vừa gọi AI (Added + không skip). Fetch-only thì không delay → nạp nhanh.
                             if (outcome == ProcessOutcome.Added && !skipKeywords)
                                 throttle = true;
@@ -104,6 +111,7 @@ namespace ScientificTrendTracker.Services
                         {
                             _logger.LogError(ex, "Lỗi xử lý paper '{Title}': {Message}", paper.Title, ex.Message);
                             result.Errors++;
+                            _progress.Push(paper.Title, "Error");
                             // Reset EF change tracker để paper tiếp theo không bị ảnh hưởng bởi state lỗi
                             _dbContext.ChangeTracker.Clear();
                             throttle = true; // lỗi (có thể do AI/mạng) → vẫn back off, tránh spin bắn liên tục
@@ -145,6 +153,7 @@ namespace ScientificTrendTracker.Services
             }
             finally
             {
+                _progress.End();
                 syncLog.SyncFinishedAt = DateTime.UtcNow;
                 syncLog.RecordsImported = result.Added;
 
@@ -275,6 +284,7 @@ namespace ScientificTrendTracker.Services
             }
             finally
             {
+                _progress.End();
                 syncLog.SyncFinishedAt = DateTime.UtcNow;
                 syncLog.RecordsImported = result.Added;
 

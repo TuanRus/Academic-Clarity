@@ -1,10 +1,17 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import AdminBadge from '../../components/admin/AdminBadge';
 import AdminModal from '../../components/admin/AdminModal';
 import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
 import AdminToast from '../../components/admin/AdminToast';
-import { getSyncLogs, runWeeklySync, type PipelineEvent } from '../../lib/api/admin';
+import { getSyncLogs, startLiveSync, getSyncProgress, getSyncedPapers, type PipelineEvent, type SyncedPaper, type SyncProgress } from '../../lib/api/admin';
+
+// Màu chữ trạng thái realtime.
+const statusColor = (s: string) =>
+  s === 'Success' ? 'font-bold text-emerald-700'
+  : s === 'Error' ? 'font-bold text-red-600'
+  : s === 'Exists' ? 'text-slate-500'
+  : 'text-amber-600';
 
 const AdminPipelinesPage = () => {
   const [history, setHistory] = useState<PipelineEvent[]>([]);
@@ -18,31 +25,69 @@ const AdminPipelinesPage = () => {
   const [showExportModal, setShowExportModal] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const pushHistory = (event: PipelineEvent) => {
-    setHistory((current) => [event, ...current].slice(0, 6));
+  // Modal "Detail": liệt kê bài báo đã sync của 1 lần chạy.
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailTitle, setDetailTitle] = useState('');
+  const [detailPapers, setDetailPapers] = useState<SyncedPaper[]>([]);
+  const [detailLoading, setDetailLoading] = useState(false);
+
+  const openDetail = async (event: PipelineEvent) => {
+    if (event.id == null) return;
+    setDetailTitle(event.title);
+    setDetailPapers([]);
+    setDetailOpen(true);
+    setDetailLoading(true);
+    try {
+      setDetailPapers(await getSyncedPapers(event.id));
+    } catch {
+      setDetailPapers([]);
+    } finally {
+      setDetailLoading(false);
+    }
   };
+
+  // ----- Live Sync Monitor (chạy nền + poll realtime) -----
+  const [liveOpen, setLiveOpen] = useState(false);
+  const [live, setLive] = useState<SyncProgress | null>(null);
+  const pollRef = useRef<number | null>(null);
+
+  const stopPolling = () => {
+    if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; }
+  };
+  const startPolling = () => {
+    stopPolling();
+    const tick = async () => {
+      try {
+        const p = await getSyncProgress();
+        setLive(p);
+        if (!p.isRunning) {
+          stopPolling();
+          setIsSyncing(false);
+          getSyncLogs().then(setHistory).catch(() => {});
+        }
+      } catch { /* ignore 1 nhịp lỗi */ }
+    };
+    tick();
+    pollRef.current = window.setInterval(tick, 1500);
+  };
+  const openLive = () => { setLiveOpen(true); startPolling(); };
+  const closeLive = () => { setLiveOpen(false); stopPolling(); };
+  useEffect(() => () => stopPolling(), []);
 
   const runSync = async (title = 'Manual Trigger') => {
     if (!endpointActive) {
       setToast('Endpoint is inactive. Turn on OpenAlex API before syncing.');
       return;
     }
-
     setIsSyncing(true);
-    pushHistory({ title, time: 'Just now', status: 'PENDING' });
-    setToast(`${title} started…`);
-
     try {
-      // Gọi BE thật: fetch bài mới từ OpenAlex + đào keyword nền.
-      const res = await runWeeklySync();
-      setToast(`${title} done. Added ${res.added}, already existed ${res.alreadyExists}, errors ${res.errors}.`);
-      // Tải lại lịch sử sync thật từ bảng api_sync_logs.
+      await startLiveSync(2); // chạy nền
+      setToast(`${title} started — watching live…`);
       getSyncLogs().then(setHistory).catch(() => {});
+      openLive();
     } catch {
-      setHistory((current) => current.map((event, index) => (index === 0 ? { ...event, status: 'FAILED', time: 'Just now' } : event)));
-      setToast(`${title} failed. Check backend logs / OpenAlex connectivity.`);
-    } finally {
       setIsSyncing(false);
+      setToast(`${title} could not start (a sync may already be running).`);
     }
   };
 
@@ -131,6 +176,10 @@ const AdminPipelinesPage = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <AdminBadge status={event.status} />
+                  {(event.status === 'RUNNING' || event.status === 'PENDING') && (
+                    <button onClick={openLive} className="rounded border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700 hover:bg-sky-100">● Live</button>
+                  )}
+                  {event.id != null && event.status !== 'RUNNING' && <button onClick={() => openDetail(event)} className="rounded border border-slate-300 px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50">Detail</button>}
                   {event.status === 'FAILED' && <button onClick={() => retryFailed(event.title)} className="rounded border border-blue-200 px-3 py-1 text-xs font-bold text-blue-700">Retry</button>}
                 </div>
               </div>
@@ -161,6 +210,86 @@ const AdminPipelinesPage = () => {
         }
       >
         <p className="text-sm text-slate-600">The exported file contains engine name, timestamp and current sync status from the api_sync_logs table.</p>
+      </AdminModal>
+
+      <AdminModal
+        open={detailOpen}
+        title={`Bài báo đã sync — ${detailTitle}`}
+        subtitle="Các bài được thêm trong khung thời gian của lần sync này (đối chiếu theo thời điểm tạo)."
+        onClose={() => setDetailOpen(false)}
+        footer={<button onClick={() => setDetailOpen(false)} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Close</button>}
+      >
+        {detailLoading ? (
+          <p className="text-sm text-slate-500">Đang tải…</p>
+        ) : detailPapers.length === 0 ? (
+          <p className="text-sm text-slate-500">Không có bài nào được thêm trong lần sync này.</p>
+        ) : (
+          <div className="max-h-[60vh] overflow-auto">
+            <p className="mb-2 text-xs font-semibold text-slate-500">{detailPapers.length} bài</p>
+            <ul className="space-y-2">
+              {detailPapers.map((p) => (
+                <li key={p.paperId} className="rounded border border-slate-100 p-2">
+                  <p className="text-sm font-medium text-slate-800">{p.title}</p>
+                  <p className="text-xs text-slate-500">
+                    {p.publicationYear ?? '—'} · {p.openAlexId ?? p.paperId}
+                    {p.sourceUrl && (
+                      <> · <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="text-[#0b6fb8] underline">OpenAlex</a></>
+                    )}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </AdminModal>
+
+      <AdminModal
+        open={liveOpen}
+        title="Live Sync Monitor"
+        subtitle="Realtime — only NEWLY synced papers (matches Detail): time · paper · status."
+        onClose={closeLive}
+        footer={<button onClick={closeLive} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Close</button>}
+      >
+        {!live ? (
+          <p className="text-sm text-slate-500">Connecting…</p>
+        ) : (
+          <div>
+            <div className="mb-3 flex flex-wrap items-center gap-4 text-xs font-semibold">
+              <span className={live.isRunning ? 'text-sky-700' : 'text-emerald-700'}>
+                {live.isRunning ? '● RUNNING' : '✓ FINISHED'}
+              </span>
+              <span className="text-slate-600">Total: {live.total}</span>
+              <span className="text-emerald-700">Added: {live.added}</span>
+              <span className="text-slate-500">Exists: {live.exists}</span>
+              <span className="text-red-600">Errors: {live.errors}</span>
+            </div>
+            <div className="max-h-[55vh] overflow-auto rounded border border-slate-100">
+              <table className="w-full text-left text-xs">
+                <thead className="sticky top-0 bg-slate-50 text-slate-500">
+                  <tr>
+                    <th className="px-2 py-1">Time</th>
+                    <th className="px-2 py-1">Paper</th>
+                    <th className="px-2 py-1">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...live.entries].reverse().map((e, i) => (
+                    <tr key={i} className="border-t border-slate-100">
+                      <td className="whitespace-nowrap px-2 py-1 text-slate-500">{new Date(e.time).toLocaleTimeString()}</td>
+                      <td className="px-2 py-1 text-slate-800">{e.title}</td>
+                      <td className="px-2 py-1"><span className={statusColor(e.status)}>{e.status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {live.entries.length === 0 && (
+                <p className="p-2 text-sm text-slate-500">
+                  {live.isRunning ? 'Waiting for the first newly synced paper…' : 'No new papers were added in this run.'}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </AdminModal>
     </div>
   );

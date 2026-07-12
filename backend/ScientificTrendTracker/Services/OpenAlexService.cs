@@ -248,6 +248,93 @@ namespace ScientificTrendTracker.Services
         }
 
         /// <summary>
+        /// Lấy toàn bộ metadata 1 bài từ OpenAlex cho luồng Admin thêm thủ công bằng link/DOI/ID.
+        /// </summary>
+        public async Task<OpenAlexPaper> FetchSingleWorkAsync(string idOrDoiOrUrl)
+        {
+            if (string.IsNullOrWhiteSpace(idOrDoiOrUrl)) return null;
+
+            var identifier = NormalizeWorkIdentifier(idOrDoiOrUrl.Trim());
+            if (identifier == null)
+            {
+                _logger.LogWarning("Không nhận dạng được định danh OpenAlex/DOI từ '{Input}'", idOrDoiOrUrl);
+                return null;
+            }
+
+            var email = _configuration["OpenAlex:Email"];
+            var baseUrl = _configuration["OpenAlex:BaseUrl"];
+            var url = $"{baseUrl}/works/{identifier}" +
+                      "?select=id,doi,title,publication_year,publication_date,cited_by_count," +
+                      "abstract_inverted_index,primary_location,authorships,primary_topic,keywords" +
+                      $"&mailto={email}";
+
+            try
+            {
+                var response = await _httpClient.GetAsync(url);
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("OpenAlex trả về {StatusCode} khi fetch work '{Id}'", response.StatusCode, identifier);
+                    return null;
+                }
+
+                var json = await response.Content.ReadAsStringAsync();
+                var raw = JsonSerializer.Deserialize<OpenAlexRawWork>(json, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+                if (raw == null || string.IsNullOrWhiteSpace(raw.Title)) return null;
+
+                return new OpenAlexPaper
+                {
+                    Id = raw.Id,
+                    Doi = raw.Doi,
+                    Title = raw.Title,
+                    PublicationYear = raw.PublicationYear,
+                    PublicationDate = raw.PublicationDate,
+                    CitedByCount = raw.CitedByCount,
+                    AbstractReconstructed = raw.AbstractInvertedIndex != null ? ReconstructAbstract(raw.AbstractInvertedIndex) : null,
+                    PrimaryLocation = MapLocation(raw.PrimaryLocation),
+                    Authorships = MapAuthorships(raw.Authorships),
+                    Topic = raw.PrimaryTopic?.DisplayName,
+                    Keywords = MapKeywords(raw.Keywords)
+                };
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Không fetch được work OpenAlex từ '{Input}'", idOrDoiOrUrl);
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Chuẩn hoá đầu vào của Admin (link OpenAlex / link DOI / ID / DOI trần) về path-segment mà
+        /// endpoint /works chấp nhận. Trả null nếu không nhận dạng được.
+        /// </summary>
+        private static string NormalizeWorkIdentifier(string input)
+        {
+            // 1) URL OpenAlex: https://openalex.org/W123 → W123
+            var oaIdx = input.IndexOf("openalex.org/", StringComparison.OrdinalIgnoreCase);
+            if (oaIdx >= 0)
+            {
+                var id = input[(oaIdx + "openalex.org/".Length)..].Trim().Trim('/');
+                return string.IsNullOrWhiteSpace(id) ? null : id;
+            }
+
+            // 2) ID trần dạng "W" + chữ số
+            if (input.Length > 1
+                && (input[0] == 'W' || input[0] == 'w')
+                && input.Skip(1).All(char.IsDigit))
+                return "W" + input[1..];
+
+            // 3) DOI: chấp nhận cả URL doi.org lẫn DOI trần "10.xxxx/..."
+            var doiIdx = input.IndexOf("doi.org/", StringComparison.OrdinalIgnoreCase);
+            var doi = doiIdx >= 0 ? input[(doiIdx + "doi.org/".Length)..].Trim() : input;
+            if (doi.StartsWith("10.")) return "doi:" + doi;
+
+            return null;
+        }
+
+        /// <summary>
         /// Reconstruct full text abstract từ abstract_inverted_index của OpenAlex.
         /// OpenAlex lưu dạng inverted index (thay full text) để tránh vấn đề bản quyền.
         /// </summary>

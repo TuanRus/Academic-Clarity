@@ -13,25 +13,26 @@ namespace ScientificTrendTracker.Services
     public class IdeaOverlapService : IIdeaOverlapService
     {
         private readonly AppDbContext _dbContext;
-        private readonly IKeywordExtractionService _keywordService;
+        private readonly IIdeaKeywordExtractor _keywordExtractor;
 
         // Ngưỡng mức cảnh báo sớm (định vị: sàng lọc sơ bộ, KHÔNG phải phát hiện đạo văn).
         private const double HighTier = 0.30;
         private const double MediumTier = 0.15;
 
-        public IdeaOverlapService(AppDbContext dbContext, IKeywordExtractionService keywordService)
+        public IdeaOverlapService(AppDbContext dbContext, IIdeaKeywordExtractor keywordExtractor)
         {
             _dbContext = dbContext;
-            _keywordService = keywordService;
+            _keywordExtractor = keywordExtractor;
         }
 
-        public async Task<OverlapResultDto> CheckOverlapAsync(string abstractText, int topN = 10)
+        public async Task<OverlapResultDto> CheckOverlapAsync(string abstractText, int topN = 10, CancellationToken ct = default)
         {
             var result = new OverlapResultDto();
             if (string.IsNullOrWhiteSpace(abstractText)) return result;
 
-            // 1. Trích keyword bằng AI local (abstract chỉ tồn tại trong memory — KHÔNG lưu DB).
-            var keywords = await _keywordService.ExtractKeywordsAsync(abstractText, "(pasted abstract)");
+            // 1. Trích keyword: ưu tiên Gemini (2 key luân phiên + failover), fallback Ollama.
+            //    Abstract chỉ tồn tại trong memory — KHÔNG lưu DB.
+            var keywords = await _keywordExtractor.ExtractKeywordsAsync(abstractText, ct);
             result.ExtractedKeywords = keywords;
             if (keywords.Count == 0) return result;
 

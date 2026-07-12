@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using ScientificTrendTracker.Data;
+using ScientificTrendTracker.Services;
 using ScientificTrendTracker.Models.Common;
 using ScientificTrendTracker.Models.Entities;
 using ScientificTrendTracker.Models.DTOs.Subscription;
@@ -27,6 +29,8 @@ namespace ScientificTrendTracker.Controllers
         private readonly IKeywordService _keywordService;
         private readonly AppDbContext _dbContext;
         private readonly ILogger<AdminController> _logger;
+        private readonly IServiceScopeFactory _scopeFactory;
+        private readonly ISyncProgressTracker _syncProgress;
 
         public AdminController(
             IScimagoImportService scimagoImportService,
@@ -39,7 +43,9 @@ namespace ScientificTrendTracker.Controllers
             IPaperService paperService,
             IKeywordService keywordService,
             AppDbContext dbContext,
-            ILogger<AdminController> logger)
+            ILogger<AdminController> logger,
+            IServiceScopeFactory scopeFactory,
+            ISyncProgressTracker syncProgress)
         {
             _scimagoImportService = scimagoImportService;
             _syncOrchestrator = syncOrchestrator;
@@ -52,6 +58,8 @@ namespace ScientificTrendTracker.Controllers
             _keywordService = keywordService;
             _dbContext = dbContext;
             _logger = logger;
+            _scopeFactory = scopeFactory;
+            _syncProgress = syncProgress;
         }
 
         /// <summary>
@@ -714,6 +722,95 @@ namespace ScientificTrendTracker.Controllers
         }
 
         /// <summary>
+        /// Chi tiết 1 lần sync: liệt kê các bài báo được THÊM trong khung thời gian của lần sync đó
+        /// (đối chiếu theo ResearchPaper.CreatedAt nằm giữa SyncStartedAt và SyncFinishedAt).
+        /// </summary>
+        /// <param name="id">int - Route param - SyncLogId cần xem chi tiết.</param>
+        /// <param name="ct">CancellationToken - ASP.NET Core runtime.</param>
+        /// <returns>ApiResponse chứa danh sách SyncedPaperDto; 404 nếu không tìm thấy nhật ký.</returns>
+        [HttpGet("sync-logs/{id:int}/papers")]
+        public async Task<IActionResult> GetSyncedPapersAsync(int id, CancellationToken ct)
+        {
+            var log = await _dbContext.ApiSyncLogs.FirstOrDefaultAsync(l => l.SyncLogId == id, ct);
+            if (log == null)
+                return NotFound(ApiResponse<object>.Fail(404, $"Không tìm thấy nhật ký sync #{id}."));
+
+            // Lần sync không thêm bài nào (thất bại/mồ côi/không có bài mới) → không có gì để liệt kê.
+            if (log.RecordsImported <= 0)
+            {
+                return Ok(ApiResponse<object>.Ok(
+                    new { log.SyncLogId, log.Status, log.RecordsImported, count = 0, papers = new List<SyncedPaperDto>() },
+                    $"Lần sync #{id} không thêm bài nào (RecordsImported = 0)."));
+            }
+
+            // Đối chiếu theo khung thời gian: bài tạo trong [SyncStartedAt, SyncFinishedAt],
+            // giới hạn số dòng theo RecordsImported để bám sát số bài lần sync này thực thêm.
+            var start = log.SyncStartedAt;
+            var end = log.SyncFinishedAt ?? DateTime.UtcNow;
+
+            var papers = await _dbContext.ResearchPapers
+                .Where(p => p.CreatedAt >= start && p.CreatedAt <= end)
+                .OrderByDescending(p => p.CreatedAt)
+                .Take(Math.Min(log.RecordsImported, 1000))
+                .Select(p => new SyncedPaperDto
+                {
+                    PaperId = p.PaperId,
+                    Title = p.Title,
+                    PublicationYear = p.PublicationYear,
+                    OpenAlexId = p.OpenAlexId,
+                    SourceUrl = p.SourceUrl,
+                    CreatedAt = p.CreatedAt
+                })
+                .ToListAsync(ct);
+
+            return Ok(ApiResponse<object>.Ok(
+                new { log.SyncLogId, log.Status, log.RecordsImported, count = papers.Count, papers },
+                $"Lần sync #{id}: {papers.Count} bài (≈ theo khung thời gian, RecordsImported = {log.RecordsImported})."));
+        }
+
+        /// <summary>
+        /// Bắt đầu 1 lần sync CHẠY NỀN (trả về ngay) để theo dõi realtime qua /sync/progress.
+        /// Guard: từ chối nếu đang có sync chạy.
+        /// </summary>
+        /// <param name="maxPages">int - Query - Số trang OpenAlex tối đa (1..50, mặc định 2 cho nhanh).</param>
+        [HttpPost("sync/start")]
+        public IActionResult StartLiveSync([FromQuery] int maxPages = 2, [FromQuery] int? fromYear = null)
+        {
+            if (_syncProgress.IsRunning)
+                return Conflict(ApiResponse<object>.Fail(409, "Đang có một tiến trình sync chạy. Vui lòng đợi."));
+
+            if (maxPages < 1) maxPages = 1;
+            if (maxPages > 50) maxPages = 50;
+            var effFromYear = fromYear ?? (DateTime.UtcNow.Year - 1);
+
+            // Chạy nền: scope của request kết thúc ngay sau response nên phải tạo scope riêng.
+            _ = Task.Run(async () =>
+            {
+                using var scope = _scopeFactory.CreateScope();
+                var orch = scope.ServiceProvider.GetRequiredService<ISyncOrchestratorService>();
+                try
+                {
+                    await orch.RunSyncAsync(maxPages, skipKeywords: true, fromYear: effFromYear,
+                        minCitedExclusive: -1, recentFirst: true);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Lỗi sync nền.");
+                }
+            });
+
+            return Ok(ApiResponse<object>.Ok(new { started = true, maxPages },
+                "Đã bắt đầu sync. Theo dõi realtime qua /sync/progress."));
+        }
+
+        /// <summary>Tiến độ sync realtime (time - paper - status) để FE poll hiển thị.</summary>
+        [HttpGet("sync/progress")]
+        public IActionResult GetSyncProgress()
+        {
+            return Ok(ApiResponse<object>.Ok(_syncProgress.Snapshot(), "Tiến độ sync hiện tại."));
+        }
+
+        /// <summary>
         /// Lấy danh sách nhật ký ghi nhận các hành động thay đổi dữ liệu của Admin (có phân trang).
         /// </summary>
         /// <param name="page">Số nguyên Int - NGUỒN: FE truyền lên qua Query String. Số trang hiện tại (mặc định = 1).</param>
@@ -791,6 +888,33 @@ namespace ScientificTrendTracker.Controllers
                 $"Đăng tải bài báo thủ công: '{dto.Title}'. Tạp chí: '{dto.JournalName}'.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "Thêm mới bài báo thành công!"));
+        }
+
+        /// <summary>
+        /// Admin dán link (OpenAlex / DOI) để hệ thống TỰ ĐỘNG fetch metadata và thêm bài báo vào kho sưu tầm.
+        /// </summary>
+        /// <param name="dto">CreatePaperFromLinkDto - NGUỒN: FE truyền lên qua Body (JSON) - Chứa link bài báo.</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime.</param>
+        /// <returns>ApiResponse: 200 nếu thêm thành công; 400 nếu link sai/không lấy được dữ liệu/trùng bài.</returns>
+        [HttpPost("papers/from-link")]
+        public async Task<IActionResult> CreatePaperFromLinkAsync([FromBody] CreatePaperFromLinkDto dto, CancellationToken ct)
+        {
+            if (dto == null || string.IsNullOrWhiteSpace(dto.Link))
+            {
+                return BadRequest(ApiResponse<object>.Fail(400, "Vui lòng nhập link bài báo (OpenAlex hoặc DOI)."));
+            }
+
+            var (success, message) = await _paperService.CreatePaperFromLinkAsync(dto.Link, ct);
+            if (!success)
+            {
+                return BadRequest(ApiResponse<object>.Fail(400, message));
+            }
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "CREATE_PAPER_FROM_LINK",
+                $"Thêm bài báo tự động từ link: '{dto.Link}'.", ip);
+
+            return Ok(ApiResponse<object>.Ok(null, message));
         }
 
         /// <summary>

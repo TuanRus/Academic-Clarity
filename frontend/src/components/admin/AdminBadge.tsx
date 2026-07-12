@@ -15,6 +15,8 @@ const toneMap: Record<AdminStatus, string> = {
   EXPIRED: 'bg-gray-100 text-gray-600',
   DISMISSED: 'bg-slate-100 text-slate-600',
   REVIEWING: 'bg-purple-100 text-purple-700',
+  RUNNING: 'bg-sky-100 text-sky-700',
+  CANCELLED: 'bg-gray-100 text-gray-600',
 };
 
 interface AdminBadgeProps {

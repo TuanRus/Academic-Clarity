@@ -64,7 +64,13 @@ namespace ScientificTrendTracker
             builder.Services.AddScoped<ITrendService, TrendService>();
             builder.Services.AddScoped<ISyncOrchestratorService, SyncOrchestratorService>();
             builder.Services.AddScoped<IIdeaOverlapService, IdeaOverlapService>();
+            // Idea Check dùng Gemini (2 API key luân phiên + failover), fallback Ollama — có HttpClient riêng.
+            builder.Services.AddHttpClient<IIdeaKeywordExtractor, GeminiIdeaKeywordExtractor>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(60); // trần cứng; timeout mỗi key cấu hình qua Gemini:TimeoutSeconds
+            });
             builder.Services.AddSingleton<IKeywordReprocessService, KeywordReprocessService>();
+            builder.Services.AddSingleton<ISyncProgressTracker, SyncProgressTracker>();
             builder.Services.AddSingleton<ITopicBackfillService, TopicBackfillService>();
             builder.Services.AddScoped<IBookmarkService, BookmarkService>();
             builder.Services.AddScoped<ISearchHistoryService, SearchHistoryService>();
@@ -164,6 +170,25 @@ namespace ScientificTrendTracker
             builder.Services.AddHostedService<WeeklySyncService>();
 
             var app = builder.Build();
+
+            // Dọn nhật ký sync "mồ côi": khi backend KHỞI ĐỘNG, mọi log còn "running" chắc chắn đã chết
+            // (tiến trình sync không thể sống sót qua lần restart) → đánh dấu "failed" để không kẹt GENERATING.
+            using (var startupScope = app.Services.CreateScope())
+            {
+                try
+                {
+                    var db = startupScope.ServiceProvider.GetRequiredService<ScientificTrendTracker.Data.AppDbContext>();
+                    var stale = db.ApiSyncLogs.Where(l => l.Status == "running").ToList();
+                    foreach (var l in stale)
+                    {
+                        l.Status = "failed";
+                        l.SyncFinishedAt = DateTime.UtcNow;
+                        l.ErrorMessage = "Tiến trình sync bị gián đoạn (backend khởi động lại giữa chừng).";
+                    }
+                    if (stale.Count > 0) db.SaveChanges();
+                }
+                catch { /* không chặn khởi động nếu DB tạm lỗi */ }
+            }
 
             // ====================================================================
             // PIPELINE MIDDLEWARE & ROUTING CONFIGURATION

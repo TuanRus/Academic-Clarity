@@ -38,3 +38,38 @@ Thumbs.db
 # ===== Markdown docs (khong push) =====
 *.md
 **/*.md
+
+# ===== Docs folder (khong push) =====
+docs/
+**/docs/
+
+# ===== Test result (khong push) =====
+test_result/
+**/test_result/
+
+# ===== Backend (.NET) — gop tu backend/.gitignore =====
+# Config bi mat (mo rong) + launch profile (chua IP/port noi bo)
+**/appsettings.*.json
+!**/appsettings.example.json
+**/launchSettings.json
+secrets.json
+*secrets*.json
+*.pfx
+*.publishsettings
+
+# Logs
+*.log
+**/logs/
+
+# Data files (SCImago CSV... import thu cong, file lon)
+*.csv
+
+# Env (cac bien the)
+**/.env.*
+!**/.env.example
+
+# JetBrains
+*.iml
+
+# Script noi bo
+describe-project.ps1

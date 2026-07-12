@@ -4,10 +4,11 @@ import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from '../http';
 
 export type AdminStatus =
   | 'ACTIVE' | 'REQUESTED' | 'GENERATING' | 'READY' | 'FAILED' | 'SUCCESS' | 'PENDING'
-  | 'SUSPENDED' | 'DRAFT' | 'VERIFIED' | 'REGISTERED' | 'EXPIRED' | 'DISMISSED' | 'REVIEWING';
+  | 'SUSPENDED' | 'DRAFT' | 'VERIFIED' | 'REGISTERED' | 'EXPIRED' | 'DISMISSED' | 'REVIEWING'
+  | 'RUNNING' | 'CANCELLED';
 
 export interface ExportRequest { id: string; user: string; type: 'CSV' | 'PDF' | 'XLSX'; timestamp: string; status: AdminStatus; }
-export interface PipelineEvent { title: string; time: string; status: AdminStatus; }
+export interface PipelineEvent { id?: number; title: string; time: string; status: AdminStatus; recordsImported?: number; }
 export interface RepositoryCategory { id: string; name: string; description: string; fields: number; status: AdminStatus; }
 export interface RepositoryPaper { id: string; title: string; doi: string; journal: string; year: number; citations: number; status: AdminStatus; }
 export interface RepositoryAnomaly { id: string; label: string; title: string; tone: 'orange' | 'red'; action: 'Auto-Fill' | 'Review'; status: AdminStatus; }
@@ -86,14 +87,46 @@ export async function getActivityLogs(): Promise<ActivityLog[]> {
 }
 
 // ---- Sync pipeline logs (GET /admin/sync-logs) ----
-interface BeSyncLog { syncStartedAt: string; status: string; recordsImported: number; errorMessage?: string; }
+interface BeSyncLog { syncLogId: number; syncStartedAt: string; syncFinishedAt?: string; status: string; recordsImported: number; errorMessage?: string; }
+function mapSyncStatus(s: string): AdminStatus {
+  switch (s) {
+    case 'success': return 'SUCCESS';
+    case 'failed': return 'FAILED';
+    case 'cancelled': return 'CANCELLED';
+    case 'running': return 'RUNNING';
+    default: return 'GENERATING';
+  }
+}
 export async function getSyncLogs(): Promise<PipelineEvent[]> {
   const res = await apiGet<Paged<BeSyncLog>>('/admin/sync-logs', { page: 1, pageSize: 50 });
   return res.items.map((s) => ({
+    id: s.syncLogId,
     title: `Sync OpenAlex — ${s.recordsImported} bài`,
     time: s.syncStartedAt,
-    status: s.status === 'success' ? 'SUCCESS' : s.status === 'failed' ? 'FAILED' : 'GENERATING',
+    status: mapSyncStatus(s.status),
+    recordsImported: s.recordsImported,
   }));
+}
+
+// ---- Sync realtime (chạy nền + poll tiến độ) ----
+export interface SyncProgressEntry { time: string; title: string; status: string; }
+export interface SyncProgress {
+  isRunning: boolean; syncLogId: number | null;
+  added: number; exists: number; errors: number; total: number;
+  entries: SyncProgressEntry[];
+}
+export async function startLiveSync(maxPages = 2): Promise<{ started: boolean; maxPages: number }> {
+  return apiPost(`/admin/sync/start?maxPages=${maxPages}`) as Promise<{ started: boolean; maxPages: number }>;
+}
+export async function getSyncProgress(): Promise<SyncProgress> {
+  return apiGet<SyncProgress>('/admin/sync/progress');
+}
+
+// ---- Chi tiết bài đã sync (GET /admin/sync-logs/{id}/papers) ----
+export interface SyncedPaper { paperId: string; title: string; publicationYear: number | null; openAlexId?: string; sourceUrl?: string; createdAt: string; }
+export async function getSyncedPapers(syncLogId: number): Promise<SyncedPaper[]> {
+  const res = await apiGet<{ papers: SyncedPaper[] }>(`/admin/sync-logs/${syncLogId}/papers`);
+  return res.papers ?? [];
 }
 
 // ---- Run weekly sync (POST /admin/run-weekly-now) ----

@@ -10,6 +10,7 @@ namespace ScientificTrendTracker.Services.Interfaces
     {
         /// <param name="abstractText">Đoạn abstract người dùng dán (in-memory).</param>
         /// <param name="topN">Số bài trùng tối đa trả về.</param>
-        Task<OverlapResultDto> CheckOverlapAsync(string abstractText, int topN = 10);
+        /// <param name="ct">CancellationToken để áp timeout cho lời gọi AI (Gemini).</param>
+        Task<OverlapResultDto> CheckOverlapAsync(string abstractText, int topN = 10, CancellationToken ct = default);
     }
 }

@@ -39,6 +39,14 @@ namespace ScientificTrendTracker.Services.Interfaces
         Task<bool> CreatePaperAsync(CreatePaperDto dto, CancellationToken ct);
 
         /// <summary>
+        /// Admin dán link (OpenAlex / DOI) → hệ thống tự fetch metadata từ OpenAlex và thêm bài báo.
+        /// </summary>
+        /// <param name="link">Chuỗi String - NGUỒN: FE truyền lên - Link OpenAlex, link DOI, ID work hoặc DOI trần.</param>
+        /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime cung cấp.</param>
+        /// <returns>Tuple (Success, Message): Success=true nếu thêm thành công; Message mô tả kết quả để hiển thị.</returns>
+        Task<(bool Success, string Message)> CreatePaperFromLinkAsync(string link, CancellationToken ct);
+
+        /// <summary>
         /// Admin cập nhật thông tin chi tiết và danh sách liên kết tác giả/từ khóa của một bài báo.
         /// </summary>
         /// <param name="paperId">Chuỗi String - NGUỒN: FE truyền qua URL - ID bài báo cần cập nhật.</param>

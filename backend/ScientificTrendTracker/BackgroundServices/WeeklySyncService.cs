@@ -42,21 +42,17 @@ namespace ScientificTrendTracker.BackgroundServices
 
                 using var scope = _scopeFactory.CreateScope();
                 var orchestrator = scope.ServiceProvider.GetRequiredService<ISyncOrchestratorService>();
-                var reprocess = scope.ServiceProvider.GetRequiredService<IKeywordReprocessService>();
 
                 // Weekly sync TỰ ĐỘNG: vét bài MỚI (sort theo ngày, bỏ lọc citation vì bài mới chưa kịp được trích dẫn),
-                // chỉ năm gần đây (year-1 → nay) để bắt xu hướng mới nổi. Fetch-only ở bước này.
+                // chỉ năm gần đây (year-1 → nay) để bắt xu hướng mới nổi.
+                // KEYWORD: CHỈ lấy keyword sẵn có từ OpenAlex (controlled vocabulary), KHÔNG dùng AI để tách keyword.
                 var recentFromYear = DateTime.UtcNow.Year - 1;
                 await orchestrator.RunSyncAsync(
                     MaxPagesPerSync, skipKeywords: true,
                     fromYear: recentFromYear, minCitedExclusive: -1, recentFirst: true,
                     cancellationToken: stoppingToken);
 
-                // Sau khi fetch xong → tự đào keyword cho bài mới (AI local).
-                // BỀN với AI tắt: nếu Ollama off, job reprocess dừng êm (không crash), bài giữ IsAiProcessed=false
-                // và sẽ được đào ở lần sync sau hoặc khi chạy reprocess-all thủ công.
-                reprocess.StartBackground();
-                _logger.LogInformation("Weekly sync xong fetch, đã kích hoạt đào keyword nền cho bài mới.");
+                _logger.LogInformation("Weekly sync hoàn tất fetch — keyword lấy trực tiếp từ OpenAlex, không chạy AI.");
             }
         }
 

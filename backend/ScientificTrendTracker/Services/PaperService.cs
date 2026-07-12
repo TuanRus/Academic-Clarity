@@ -20,11 +20,13 @@ namespace ScientificTrendTracker.Services
     {
         private readonly AppDbContext _dbContext;
         private readonly ILogger<PaperService> _logger;
+        private readonly IOpenAlexService _openAlexService;
 
-        public PaperService(AppDbContext dbContext, ILogger<PaperService> logger)
+        public PaperService(AppDbContext dbContext, ILogger<PaperService> logger, IOpenAlexService openAlexService)
         {
             _dbContext = dbContext;
             _logger = logger;
+            _openAlexService = openAlexService;
         }
 
         public async Task<PagedResult<PaperAdminDto>> GetPapersForAdminAsync(string search, int? year, string journalId, int page, int pageSize, CancellationToken ct)
@@ -232,6 +234,39 @@ namespace ScientificTrendTracker.Services
             await _dbContext.SaveChangesAsync(ct);
             _logger.LogInformation("Admin tạo bài báo mới thành công: '{Title}' (ID: {PaperId})", paper.Title, paperId);
             return true;
+        }
+
+        public async Task<(bool Success, string Message)> CreatePaperFromLinkAsync(string link, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(link))
+                return (false, "Link không được để trống.");
+
+            // Tự động lấy metadata bài báo từ OpenAlex (title/doi/năm/tạp chí/tác giả/keyword).
+            var work = await _openAlexService.FetchSingleWorkAsync(link.Trim());
+            if (work == null || string.IsNullOrWhiteSpace(work.Title))
+                return (false, "Không lấy được dữ liệu bài báo từ link. Kiểm tra lại link OpenAlex hoặc DOI.");
+
+            DateTime? pubDate = DateTime.TryParse(work.PublicationDate, out var parsed) ? parsed : (DateTime?)null;
+
+            var dto = new CreatePaperDto
+            {
+                Title = work.Title,
+                Doi = string.IsNullOrWhiteSpace(work.Doi) ? null : work.Doi,
+                PublicationYear = work.PublicationYear,
+                PublicationDate = pubDate,
+                SourceUrl = work.Id, // URL OpenAlex của bài báo
+                JournalName = work.PrimaryLocation?.Source?.DisplayName,
+                Authors = (work.Authorships ?? new List<OpenAlexAuthorship>())
+                    .Where(a => a.Author != null && !string.IsNullOrWhiteSpace(a.Author.DisplayName))
+                    .Select(a => a.Author.DisplayName)
+                    .ToList(),
+                Keywords = work.Keywords ?? new List<string>()
+            };
+
+            var ok = await CreatePaperAsync(dto, ct);
+            return ok
+                ? (true, $"Đã thêm bài báo: '{work.Title}'.")
+                : (false, "Thêm thất bại — bài báo có thể đã tồn tại (trùng tiêu đề).");
         }
 
         public async Task<bool> UpdatePaperAsync(string paperId, UpdatePaperDto dto, CancellationToken ct)

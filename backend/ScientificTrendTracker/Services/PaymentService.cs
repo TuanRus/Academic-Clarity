@@ -241,14 +241,22 @@ namespace ScientificTrendTracker.Services
                 .FirstOrDefaultAsync(p => p.PriceAmount == amountPaid || p.PriceAmount * 0.5m == amountPaid);
             if (matchedPlan == null) return false;
 
+            // Cộng dồn: nếu user còn gói ACTIVE chưa hết hạn, thời hạn mới nối tiếp vào ngày hết hạn
+            // xa nhất hiện có; ngược lại tính từ thời điểm hiện tại.
+            var now = DateTime.UtcNow;
+            var currentEndsAt = await _context.UserSubscriptions
+                .Where(s => s.UserId == userId && s.Status == "ACTIVE" && s.EndsAt > now)
+                .MaxAsync(s => (DateTime?)s.EndsAt);
+            var baseDate = currentEndsAt.HasValue && currentEndsAt.Value > now ? currentEndsAt.Value : now;
+
             var newSubscription = new UserSubscription
             {
                 UserId = userId,
                 PlanId = matchedPlan.PlanId,
                 Status = "ACTIVE",
-                StartedAt = DateTime.UtcNow,
-                EndsAt = DateTime.UtcNow.AddDays(matchedPlan.DurationDays),
-                CreatedAt = DateTime.UtcNow
+                StartedAt = now,
+                EndsAt = baseDate.AddDays(matchedPlan.DurationDays),
+                CreatedAt = now
             };
 
             user.RoleId = 2;

@@ -179,6 +179,20 @@ namespace ScientificTrendTracker.Models.DTOs.Paper
     }
 
     /// <summary>
+    /// DTO cho luồng Admin thêm bài báo tự động bằng cách dán link (OpenAlex / DOI).
+    /// </summary>
+    public class CreatePaperFromLinkDto
+    {
+        /// <summary>
+        /// Link bài báo: URL OpenAlex ("https://openalex.org/W..."), URL DOI ("https://doi.org/10..."),
+        /// ID work ("W...") hoặc DOI trần ("10.xxxx/...").
+        /// </summary>
+        [Required(ErrorMessage = "Link bài báo không được để trống.")]
+        [MaxLength(500, ErrorMessage = "Link không được vượt quá 500 ký tự.")]
+        public string Link { get; set; }
+    }
+
+    /// <summary>
     /// DTO nhận thông tin khi cập nhật một bài báo.
     /// </summary>
     public class UpdatePaperDto
