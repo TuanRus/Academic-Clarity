@@ -1,0 +1,121 @@
+using System;
+using System.Security.Claims;
+using System.Threading.Tasks;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using ScientificTrendTracker.Models.Common;
+using ScientificTrendTracker.Models.DTOs;
+using ScientificTrendTracker.Services.Interfaces;
+
+namespace ScientificTrendTracker.Controllers
+{
+    /// <summary>
+    /// Điều hướng và xử lý các yêu cầu HTTP liên quan đến luồng nạp tiền,
+    /// sinh mã VietQR qua cổng PayOS và tiếp nhận Webhook kích hoạt gói dịch vụ.
+    /// </summary>
+    [ApiController]
+    [Route("api/payments")]
+    public class PaymentController : ControllerBase
+    {
+        private readonly IPaymentService _paymentService;
+
+        /// <summary>
+        /// Khởi tạo bộ điều hướng tác vụ thanh toán và tiêm dịch vụ nghiệp vụ liên quan.
+        /// </summary>
+        /// <param name="paymentService">IPaymentService - DI từ hệ thống - Dịch vụ xử lý logic tài chính và hóa đơn.</param>
+        public PaymentController(IPaymentService paymentService)
+        {
+            _paymentService = paymentService;
+        }
+
+        /// <summary>
+        /// Tiếp nhận yêu cầu mua gói, áp chính sách ưu đãi và khởi tạo liên kết VietQR động từ PayOS.
+        /// </summary>
+        /// <param name="request">CreatePaymentLinkRequestDto - NGUỒN: FE truyền lên qua Request Body - Chứa mã gói dịch vụ muốn đăng ký.</param>
+        /// <returns>
+        /// Trả về một hộp ApiResponse&lt;PaymentLinkResponseDto&gt; chứa dữ liệu cấu trúc:
+        /// - "paymentUrl" (String): Đường dẫn hóa đơn thanh toán của PayOS.
+        /// - "qrCode" (String): Chuỗi mã hóa mã VietQR động có hiệu lực 15 phút.
+        /// - "finalAmount" (Decimal): Số tiền thực tế sau khi kiểm tra nhãn đối tượng học thuật.
+        /// 
+        /// Các nhánh trạng thái HTTP trả về:
+        /// - HTTP 200: Khởi tạo hóa đơn và sinh mã QR chuyển khoản thành công.
+        /// - HTTP 400: Dữ liệu đầu vào sai (PlanId không hợp lệ hoặc gói dịch vụ đã bị khóa).
+        /// - HTTP 401: Danh tính người dùng không hợp lệ hoặc token hết hạn.
+        /// </returns>
+        [HttpPost("create-link")]
+        [Authorize]
+        public async Task<IActionResult> CreatePaymentLinkAsync(
+            [FromBody] CreatePaymentLinkRequestDto request)
+        {
+            // Xác thực dữ liệu đầu vào fail-fast tại biên nhằm tránh tiêu tốn tài nguyên xử lý phía sau.
+            if (request.PlanId <= 0)
+            {
+                return BadRequest(
+                    ApiResponse<PaymentLinkResponseDto>.Fail(
+                        400, 
+                        "Mã gói dịch vụ đăng ký không hợp lệ."));
+            }
+
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null)
+            {
+                return Unauthorized(
+                    ApiResponse<PaymentLinkResponseDto>.Fail(
+                        401, 
+                        "Danh tính người dùng không hợp lệ."));
+            }
+
+            int userId = int.Parse(userIdClaim.Value);
+
+            // Gọi dịch vụ xử lý thô nghiệp vụ tính toán hóa đơn.
+            var result = await _paymentService.CreatePaymentLinkAsync(userId, request);
+
+            if (result == null)
+            {
+                return BadRequest(
+                    ApiResponse<PaymentLinkResponseDto>.Fail(
+                        400, 
+                        "Gói dịch vụ không tồn tại hoặc đã bị khóa trên hệ thống."));
+            }
+
+            return Ok(
+                ApiResponse<PaymentLinkResponseDto>.Ok(
+                    result, 
+                    "Khởi tạo liên kết thanh toán VietQR động thành công."));
+        }
+
+        /// <summary>
+        /// Tiếp nhận gói tin dữ liệu Webhook phản hồi trạng thái giao dịch từ hệ thống PayOS.
+        /// </summary>
+        /// <param name="webhookData">PayOSWebhookDto - NGUỒN: Cổng đối tác PayOS bắn sang qua Request Body - Dữ liệu trần của giao dịch.</param>
+        /// <returns>
+        /// Trả về một hộp ApiResponse&lt;object&gt; đóng vai trò làm tín hiệu phản hồi cho đối tác:
+        /// - HTTP 200: Xử lý kích hoạt gói, thăng cấp tài khoản thành công (hoặc đơn hàng đã xử lý xong trước đó).
+        /// - HTTP 400: Giao dịch thất bại, nội dung sai định dạng hoặc không tìm thấy thông tin gói/người dùng tương ứng.
+        /// </returns>
+        [HttpPost("webhook")]
+        [AllowAnonymous]
+        public async Task<IActionResult> ReceiveWebhookAsync(
+            [FromBody] PayOSWebhookDto webhookData)
+        {
+            // Gọi tầng nghiệp vụ xử lý thô dữ liệu, kiểm tra chống lặp và thăng cấp tài khoản.
+            bool isSuccess = await _paymentService.ProcessWebhookAsync(webhookData);
+
+            if (!isSuccess)
+            {
+                // Báo lỗi 400 để phía đối tác ghi nhận giao dịch không hợp lệ và thực hiện retry nếu cần.
+                return BadRequest(
+                    ApiResponse<object>.Fail(
+                        400, 
+                        "Xử lý dữ liệu Webhook thất bại hoặc giao dịch không hợp lệ."));
+            }
+
+            // Phản hồi 200 cho đối tác để xác nhận tiếp nhận thông tin thành công, dừng gửi lại webhook.
+            return Ok(
+                ApiResponse<object>.Ok(
+                    null, 
+                    "Xử lý kích hoạt gói và thăng cấp tài khoản học giả hoàn tất."));
+        }
+    }
+}

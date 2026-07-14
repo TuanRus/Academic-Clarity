@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using ScientificTrendTracker.Data;
 
@@ -11,9 +12,11 @@ using ScientificTrendTracker.Data;
 namespace ScientificTrendTracker.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260624123722_AddLogsPageTables")]
+    partial class AddLogsPageTables
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -199,54 +202,6 @@ namespace ScientificTrendTracker.Migrations
                     b.ToTable("Bookmarks", (string)null);
                 });
 
-            modelBuilder.Entity("ScientificTrendTracker.Models.Entities.FollowedItem", b =>
-                {
-                    b.Property<int>("FollowId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("follow_id");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("FollowId"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("JournalId")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("journal_id");
-
-                    b.Property<string>("TargetType")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("target_type");
-
-                    b.Property<string>("TopicId")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("topic_id");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("FollowId");
-
-                    b.HasIndex("JournalId");
-
-                    b.HasIndex("TopicId");
-
-                    b.HasIndex("UserId");
-
-                    b.HasIndex("TargetType", "JournalId");
-
-                    b.HasIndex("TargetType", "TopicId");
-
-                    b.ToTable("FollowedItems");
-                });
-
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.Journal", b =>
                 {
                     b.Property<string>("JournalId")
@@ -320,57 +275,6 @@ namespace ScientificTrendTracker.Migrations
                     b.HasKey("KeywordId");
 
                     b.ToTable("Keywords");
-                });
-
-            modelBuilder.Entity("ScientificTrendTracker.Models.Entities.Notification", b =>
-                {
-                    b.Property<int>("NotificationId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("notification_id");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("NotificationId"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
-
-                    b.Property<int?>("FollowedItemId")
-                        .HasColumnType("int")
-                        .HasColumnName("followed_item_id");
-
-                    b.Property<bool>("IsRead")
-                        .HasColumnType("tinyint(1)")
-                        .HasColumnName("is_read");
-
-                    b.Property<string>("Message")
-                        .IsRequired()
-                        .HasMaxLength(1000)
-                        .HasColumnType("varchar(1000)")
-                        .HasColumnName("message");
-
-                    b.Property<DateTime?>("ReadAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("read_at");
-
-                    b.Property<string>("RelatedPaperId")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("related_paper_id");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)")
-                        .HasColumnName("title");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("NotificationId");
-
-                    b.ToTable("Notifications");
                 });
 
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.PaperAuthor", b =>
@@ -478,58 +382,6 @@ namespace ScientificTrendTracker.Migrations
                     b.ToTable("ResearchPapers");
                 });
 
-            modelBuilder.Entity("ScientificTrendTracker.Models.Entities.ResearchTopic", b =>
-                {
-                    b.Property<string>("TopicId")
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("TopicId");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("CreatedAt");
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(1000)
-                        .HasColumnType("varchar(1000)")
-                        .HasColumnName("Description");
-
-                    b.Property<string>("TopicName")
-                        .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("varchar(200)")
-                        .HasColumnName("TopicName");
-
-                    b.HasKey("TopicId");
-
-                    b.ToTable("ResearchTopics");
-                });
-
-            modelBuilder.Entity("ScientificTrendTracker.Models.Entities.Role", b =>
-                {
-                    b.Property<int>("RoleId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("role_id");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("RoleId"));
-
-                    b.Property<string>("Description")
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)")
-                        .HasColumnName("description");
-
-                    b.Property<string>("RoleName")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("role_name");
-
-                    b.HasKey("RoleId");
-
-                    b.ToTable("Roles");
-                });
-
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.SearchHistory", b =>
                 {
                     b.Property<int>("SearchHistoryId")
@@ -592,194 +444,6 @@ namespace ScientificTrendTracker.Migrations
                     b.ToTable("SubscriptionPlans", (string)null);
                 });
 
-            modelBuilder.Entity("ScientificTrendTracker.Models.Entities.Transaction", b =>
-                {
-                    b.Property<int>("TransactionId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("transaction_id");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("TransactionId"));
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
-
-                    b.Property<decimal>("DiscountAmount")
-                        .HasColumnType("decimal(18,2)")
-                        .HasColumnName("discount_amount");
-
-                    b.Property<decimal>("FinalAmount")
-                        .HasColumnType("decimal(18,2)")
-                        .HasColumnName("final_amount");
-
-                    b.Property<string>("GatewayOrderId")
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)")
-                        .HasColumnName("gateway_order_id");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(500)
-                        .HasColumnType("varchar(500)")
-                        .HasColumnName("notes");
-
-                    b.Property<long>("OrderCode")
-                        .HasColumnType("bigint")
-                        .HasColumnName("order_code");
-
-                    b.Property<decimal>("OriginalAmount")
-                        .HasColumnType("decimal(18,2)")
-                        .HasColumnName("original_amount");
-
-                    b.Property<DateTime?>("PaidAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("paid_at");
-
-                    b.Property<string>("PaymentMethod")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("varchar(50)")
-                        .HasColumnName("payment_method");
-
-                    b.Property<int>("PlanId")
-                        .HasColumnType("int")
-                        .HasColumnName("plan_id");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("varchar(20)")
-                        .HasColumnName("status");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("TransactionId");
-
-                    b.HasIndex("OrderCode")
-                        .IsUnique();
-
-                    b.HasIndex("PlanId");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("Transactions", (string)null);
-                });
-
-            modelBuilder.Entity("ScientificTrendTracker.Models.Entities.User", b =>
-                {
-                    b.Property<int>("UserId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("user_id");
-
-                    MySqlPropertyBuilderExtensions.UseMySqlIdentityColumn(b.Property<int>("UserId"));
-
-                    b.Property<bool>("AccountTag")
-                        .HasColumnType("tinyint(1)")
-                        .HasColumnName("account_tag");
-
-                    b.Property<DateTime>("CreateAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Email")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)")
-                        .HasColumnName("email");
-
-                    b.Property<string>("Fullname")
-                        .IsRequired()
-                        .HasMaxLength(150)
-                        .HasColumnType("varchar(150)")
-                        .HasColumnName("full_name");
-
-                    b.Property<string>("Institution")
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)")
-                        .HasColumnName("institution");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("tinyint(1)")
-                        .HasColumnName("is_active");
-
-                    b.Property<DateTime?>("LastLoginAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("last_login_at");
-
-                    b.Property<string>("PasswordHash")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)")
-                        .HasColumnName("password_hash");
-
-                    b.Property<int>("RoleId")
-                        .HasColumnType("int")
-                        .HasColumnName("role_id");
-
-                    b.Property<DateTime?>("UpdatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("UserId");
-
-                    b.HasIndex("Email")
-                        .IsUnique();
-
-                    b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("ScientificTrendTracker.Models.Entities.UserRefreshToken", b =>
-                {
-                    b.Property<Guid>("TokenId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("char(36)")
-                        .HasColumnName("token_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
-
-                    b.Property<DateTime>("ExpiresAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("expires_at");
-
-                    b.Property<bool>("IsRevoked")
-                        .HasColumnType("tinyint(1)")
-                        .HasColumnName("is_revoked");
-
-                    b.Property<string>("JwtId")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)")
-                        .HasColumnName("jwt_id");
-
-                    b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("revoked_at");
-
-                    b.Property<string>("TokenHash")
-                        .IsRequired()
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)")
-                        .HasColumnName("token_hash");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("int")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("TokenId");
-
-                    b.HasIndex("JwtId")
-                        .IsUnique();
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("UserRefreshTokens");
-                });
-
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.UserSubscription", b =>
                 {
                     b.Property<int>("SubscriptionId")
@@ -815,8 +479,6 @@ namespace ScientificTrendTracker.Migrations
 
                     b.HasIndex("PlanId");
 
-                    b.HasIndex("UserId");
-
                     b.ToTable("UserSubscriptions", (string)null);
                 });
 
@@ -844,31 +506,6 @@ namespace ScientificTrendTracker.Migrations
                     b.Navigation("Keyword");
 
                     b.Navigation("Paper");
-                });
-
-            modelBuilder.Entity("ScientificTrendTracker.Models.Entities.FollowedItem", b =>
-                {
-                    b.HasOne("ScientificTrendTracker.Models.Entities.Journal", "Journal")
-                        .WithMany()
-                        .HasForeignKey("JournalId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("ScientificTrendTracker.Models.Entities.ResearchTopic", "ResearchTopic")
-                        .WithMany()
-                        .HasForeignKey("TopicId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("ScientificTrendTracker.Models.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Journal");
-
-                    b.Navigation("ResearchTopic");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.PaperAuthor", b =>
@@ -937,48 +574,12 @@ namespace ScientificTrendTracker.Migrations
                     b.Navigation("Journal");
                 });
 
-            modelBuilder.Entity("ScientificTrendTracker.Models.Entities.Transaction", b =>
-                {
-                    b.HasOne("ScientificTrendTracker.Models.Entities.SubscriptionPlan", "Plan")
-                        .WithMany()
-                        .HasForeignKey("PlanId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("ScientificTrendTracker.Models.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Plan");
-
-                    b.Navigation("User");
-                });
-
-            modelBuilder.Entity("ScientificTrendTracker.Models.Entities.UserRefreshToken", b =>
-                {
-                    b.HasOne("ScientificTrendTracker.Models.Entities.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("User");
-                });
-
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.UserSubscription", b =>
                 {
                     b.HasOne("ScientificTrendTracker.Models.Entities.SubscriptionPlan", "Plan")
                         .WithMany()
                         .HasForeignKey("PlanId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("ScientificTrendTracker.Models.Entities.User", null)
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Plan");
