@@ -200,6 +200,18 @@ namespace ScientificTrendTracker
                         db.Database.ExecuteSqlRaw("ALTER TABLE FollowedItems ADD COLUMN author_id INT NULL");
                 }
                 catch { /* không chặn khởi động */ }
+
+                // Bảo đảm cột PaidAmount (số tiền thực trả sau ưu đãi edu) tồn tại. Idempotent.
+                try
+                {
+                    var db = startupScope.ServiceProvider.GetRequiredService<ScientificTrendTracker.Data.AppDbContext>();
+                    var exists = db.Database
+                        .SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'UserSubscriptions' AND COLUMN_NAME = 'PaidAmount'")
+                        .AsEnumerable().FirstOrDefault();
+                    if (exists == 0)
+                        db.Database.ExecuteSqlRaw("ALTER TABLE UserSubscriptions ADD COLUMN PaidAmount DECIMAL(18,2) NULL");
+                }
+                catch { /* không chặn khởi động */ }
             }
 
             // ====================================================================

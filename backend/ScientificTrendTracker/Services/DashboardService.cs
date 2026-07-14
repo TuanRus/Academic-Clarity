@@ -37,12 +37,19 @@ namespace ScientificTrendTracker.Services
             {
                 totalRevenue = await _dbContext.UserSubscriptions
                     .Include(us => us.Plan)
-                    .SumAsync(us => us.Plan != null ? us.Plan.PriceAmount : 0, ct);
+                    .SumAsync(us => us.PaidAmount ?? (us.Plan != null ? us.Plan.PriceAmount : 0), ct);
             }
 
             // Đếm số gói cước đang kích hoạt của người dùng
             var activeSubscriptions = await _dbContext.UserSubscriptions
                 .CountAsync(us => us.Status == "ACTIVE" && (us.EndsAt == null || us.EndsAt > DateTime.UtcNow), ct);
+
+            // Đếm số NGƯỜI DÙNG distinct đang có Premium còn hiệu lực (không đếm trùng do gia hạn/cộng dồn).
+            var premiumUsers = await _dbContext.UserSubscriptions
+                .Where(us => us.Status == "ACTIVE" && (us.EndsAt == null || us.EndsAt > DateTime.UtcNow))
+                .Select(us => us.UserId)
+                .Distinct()
+                .CountAsync(ct);
 
             // Đếm số bài viết được cập nhật mới trong 7 ngày qua
             var sevenDaysAgo = DateTime.UtcNow.AddDays(-7);
@@ -55,7 +62,8 @@ namespace ScientificTrendTracker.Services
                 TotalAuthors = totalAuthors,
                 TotalRevenue = totalRevenue,
                 ActiveSubscriptions = activeSubscriptions,
-                NewPapersThisWeek = newPapersThisWeek
+                NewPapersThisWeek = newPapersThisWeek,
+                PremiumUsers = premiumUsers
             };
         }
 
@@ -71,7 +79,7 @@ namespace ScientificTrendTracker.Services
             var rawRevenues = await _dbContext.UserSubscriptions
                 .Include(us => us.Plan)
                 .Where(us => us.CreatedAt >= twelveMonthsAgo)
-                .Select(us => new { us.CreatedAt, Price = us.Plan != null ? us.Plan.PriceAmount : 0 })
+                .Select(us => new { us.CreatedAt, Price = us.PaidAmount ?? (us.Plan != null ? us.Plan.PriceAmount : 0) })
                 .ToListAsync(ct);
 
             result.MonthlyRevenues = rawRevenues

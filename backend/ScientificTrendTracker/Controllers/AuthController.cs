@@ -127,7 +127,7 @@ namespace ScientificTrendTracker.Controllers
         {
             var result = await _authService.LoginAsync(request);
             if (result == null)
-                return BadRequest(ApiResponse<AuthResponseDto>.Fail(400, "Tài khoản hoặc mật khẩu không chính xác."));
+                return BadRequest(ApiResponse<AuthResponseDto>.Fail(400, "Incorrect account or password."));
 
             return Ok(ApiResponse<AuthResponseDto>.Ok(result, "Đăng nhập ứng dụng thành công!"));
         }

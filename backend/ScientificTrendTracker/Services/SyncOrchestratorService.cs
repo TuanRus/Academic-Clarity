@@ -63,6 +63,7 @@ namespace ScientificTrendTracker.Services
             try
             {
                 _progress.Begin(syncLog.SyncLogId);
+                var fetchFailed = false; // fetch OpenAlex lỗi (vd 429 hết budget) → đánh dấu sync FAILED, không phải "success".
                 for (int page = 1; page <= maxPages; page++)
                 {
                     if (cancellationToken.IsCancellationRequested) break;
@@ -77,6 +78,7 @@ namespace ScientificTrendTracker.Services
                     {
                         _logger.LogError(ex, "Lỗi fetch OpenAlex page {Page}, dừng sync.", page);
                         syncLog.ErrorMessage = $"Lỗi fetch page {page}: {ex.Message}";
+                        fetchFailed = true;
                         break;
                     }
 
@@ -142,6 +144,13 @@ namespace ScientificTrendTracker.Services
                     result.Added, result.AlreadyExists, result.NoTitle, result.Errors);
 
                 syncLog.Status = "success";
+                if (fetchFailed)
+                {
+                    // Fetch OpenAlex lỗi (thường là 429 hết budget/rate limit) → sync THẤT BẠI, không báo success.
+                    syncLog.Status = "failed";
+                    if (string.IsNullOrWhiteSpace(syncLog.ErrorMessage))
+                        syncLog.ErrorMessage = "Fetch OpenAlex thất bại (có thể do rate limit / hết budget).";
+                }
                 if (cancellationToken.IsCancellationRequested)
                 {
                     syncLog.Status = "failed";

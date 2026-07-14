@@ -5,7 +5,7 @@ import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
 import AdminToast from '../../components/admin/AdminToast';
 import {
-  getSyncLogs, startLiveSync, getSyncProgress, getSyncedPapers,
+  getSyncLogs, startLiveSync, getSyncProgress, getSyncedPapers, deleteEmptySyncLogs,
   type PipelineEvent, type SyncedPaper, type SyncProgress,
 } from '../../lib/api/admin';
 
@@ -79,7 +79,22 @@ const AdminPipelinesPage = () => {
       try {
         const p = await getSyncProgress();
         setLive(p);
-        if (!p.isRunning) { stopPolling(); setIsSyncing(false); getSyncLogs().then(setHistory).catch(() => {}); }
+        if (!p.isRunning) {
+          stopPolling();
+          setIsSyncing(false);
+          // Lấy lịch sử để biết lần sync vừa rồi thành công hay FAILED (vd 429 rate limit / hết budget).
+          getSyncLogs().then((logs) => {
+            setHistory(logs);
+            const latest = logs.find((l) => l.id === p.syncLogId) ?? logs[0];
+            if (latest?.status === 'FAILED') {
+              setToast('Sync failed — OpenAlex API rate limited / out of budget. Try again after the daily reset.');
+            } else if (p.added > 0) {
+              setToast(`Sync finished — ${p.added} new paper(s) imported.`);
+            } else {
+              setToast('Sync finished — no new papers.');
+            }
+          }).catch(() => {});
+        }
       } catch { /* bỏ qua 1 nhịp lỗi */ }
     };
     tick();
@@ -103,6 +118,17 @@ const AdminPipelinesPage = () => {
     } catch {
       setIsSyncing(false);
       setToast(`${title} could not start (a sync may already be running).`);
+    }
+  };
+
+  const clearEmptyLogs = async () => {
+    try {
+      const { deleted } = await deleteEmptySyncLogs();
+      const logs = await getSyncLogs();
+      setHistory(logs);
+      setToast(deleted > 0 ? `Removed ${deleted} sync log(s) with 0 papers.` : 'No empty sync logs to remove.');
+    } catch {
+      setToast('Failed to clear empty sync logs.');
     }
   };
 
@@ -319,7 +345,17 @@ const AdminPipelinesPage = () => {
       </AdminSectionCard>
 
       <div className="grid gap-5 lg:grid-cols-[1.25fr_0.85fr]">
-        <AdminSectionCard title="Ingestion History">
+        <AdminSectionCard
+          title="Ingestion History"
+          action={
+            <button
+              onClick={clearEmptyLogs}
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+            >
+              Clear 0-paper logs
+            </button>
+          }
+        >
           <div className="divide-y divide-slate-100 px-5">
             {history.map((event, index) => (
               <div

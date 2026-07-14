@@ -156,6 +156,13 @@ namespace ScientificTrendTracker.Models.DTOs.Paper
         public string SourceUrl { get; set; }
 
         /// <summary>
+        /// Mã OpenAlex (dạng "W..."). Cần thiết để màn Paper Detail enrich abstract/topic/institutions/open-access
+        /// on-demand giống bài sync. Thiếu field này thì bài thêm-từ-link sẽ hiện "Missing data".
+        /// </summary>
+        [MaxLength(50)]
+        public string OpenAlexId { get; set; }
+
+        /// <summary>
         /// Chủ đề chính của bài báo (ResearchTopic). Dùng để thông báo cho follower đang theo dõi topic.
         /// </summary>
         [MaxLength(255)]

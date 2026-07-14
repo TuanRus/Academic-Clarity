@@ -83,7 +83,15 @@ namespace ScientificTrendTracker.Services
             if (!response.IsSuccessStatusCode)
             {
                 _logger.LogWarning("OpenAlex trả về {StatusCode} tại page {Page}", response.StatusCode, page);
-                return new List<OpenAlexPaper>();
+
+                // 429 = hết budget/rate-limit: KHÔNG nuốt im lặng (trước đây trả list rỗng khiến sync báo
+                // "hết data" total=0). Throw để orchestrator ghi ErrorMessage và đánh dấu sync FAILED rõ ràng.
+                if ((int)response.StatusCode == 429)
+                    throw new HttpRequestException(
+                        "OpenAlex rate limit / hết budget ngày (HTTP 429). Đặt OpenAlex:Email hợp lệ để vào polite pool, " +
+                        "đợi budget reset lúc nửa đêm UTC, hoặc nạp credit tại openalex.org/pricing.");
+
+                throw new HttpRequestException($"OpenAlex trả về HTTP {(int)response.StatusCode} tại page {page}.");
             }
 
             var json = await response.Content.ReadAsStringAsync();

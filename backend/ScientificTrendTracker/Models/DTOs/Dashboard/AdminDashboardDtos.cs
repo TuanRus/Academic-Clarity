@@ -31,6 +31,12 @@ namespace ScientificTrendTracker.Models.DTOs.Dashboard
         /// Số lượng bài báo mới được hệ thống nạp vào trong 7 ngày qua.
         /// </summary>
         public int NewPapersThisWeek { get; set; }
+
+        /// <summary>
+        /// Số NGƯỜI DÙNG (distinct) đang có ít nhất một gói Premium còn hiệu lực.
+        /// Khác với ActiveSubscriptions (đếm theo dòng đăng ký, có thể trùng user do gia hạn/cộng dồn).
+        /// </summary>
+        public int PremiumUsers { get; set; }
     }
 
     /// <summary>

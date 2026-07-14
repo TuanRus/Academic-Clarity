@@ -261,7 +261,7 @@ const AdminRevenuePage = () => {
             ))}
 
             <div className="rounded-md bg-emerald-50 p-4 text-sm text-emerald-800">
-              Edu accounts are receiving a configured 20% discount for premium checkout.
+              Edu accounts are receiving a configured 50% discount for premium checkout.
             </div>
           </div>
         </AdminSectionCard>

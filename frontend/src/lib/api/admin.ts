@@ -19,7 +19,7 @@ export interface SubscriptionPlan { id: string; name: string; price: string; dur
 
 export interface DashboardStats {
   totalPapers: number; totalAuthors: number; totalRevenue: number;
-  activeSubscriptions: number; newPapersThisWeek: number;
+  activeSubscriptions: number; newPapersThisWeek: number; premiumUsers: number;
 }
 
 interface Paged<T> { items: T[]; totalCount: number; page: number; pageSize: number; totalPages: number; }
@@ -34,6 +34,19 @@ const toVnTime = (utc: string): string => {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return utc;
   return d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
+};
+
+// Chuẩn hóa tên gói cước từ DB (tiếng Việt) sang nhãn tiếng Anh để hiển thị.
+export const planDisplayName = (name: string): string => {
+  if (!name) return name;
+  let s = name;
+  s = s.replace(/\bg[oó]i\b/gi, '').trim();          // bỏ tiền tố "Gói"
+  s = s.replace(/premium\s*th[aá]ng/gi, 'Premium Monthly');
+  s = s.replace(/premium\s*n[aă]m/gi, 'Premium Yearly');
+  s = s.replace(/\bth[aá]ng\b/gi, 'Monthly');
+  s = s.replace(/\bn[aă]m\b/gi, 'Yearly');
+  s = s.replace(/\bmi[eễ]n ph[ií]\b/gi, 'Free');
+  return s.replace(/\s+/g, ' ').trim();
 };
 
 const roleName = (roleId: number) =>
@@ -101,11 +114,16 @@ export async function getSyncLogs(): Promise<PipelineEvent[]> {
   const res = await apiGet<Paged<BeSyncLog>>('/admin/sync-logs', { page: 1, pageSize: 50 });
   return res.items.map((s) => ({
     id: s.syncLogId,
-    title: `Sync OpenAlex — ${s.recordsImported} bài`,
+    title: `Sync OpenAlex — ${s.recordsImported} papers`,
     time: toVnTime(s.syncStartedAt), // đổi UTC → giờ VN (trước đây hiện chuỗi UTC thô)
     status: mapSyncStatus(s.status),
     recordsImported: s.recordsImported,
   }));
+}
+
+/** DELETE /admin/sync-logs/empty — xoá các nhật ký sync 0 bài (bỏ qua lần đang chạy). */
+export async function deleteEmptySyncLogs(): Promise<{ deleted: number }> {
+  return apiDelete('/admin/sync-logs/empty') as Promise<{ deleted: number }>;
 }
 
 // ---- Chi tiết bài đã sync (GET /admin/sync-logs/{id}/papers) ----
@@ -151,9 +169,9 @@ export async function getPlans(): Promise<SubscriptionPlan[]> {
   const res = await apiGet<BePlan[]>('/admin/subscriptions/plans');
   return res.map((p) => ({
     id: String(p.planId),
-    name: p.planName,
+    name: planDisplayName(p.planName),
     price: `${p.priceAmount.toLocaleString('vi-VN')}đ`,
-    duration: `${p.durationDays} ngày`,
+    duration: `${p.durationDays} days`,
     status: p.isActive ? 'ACTIVE' : 'EXPIRED',
     priceAmount: p.priceAmount,
     durationDays: p.durationDays,
@@ -191,7 +209,7 @@ export async function getTransactions(): Promise<RevenueRow[]> {
     transactionId: String(t.subscriptionId),
     invoiceId: `#SUB-${t.subscriptionId}`,
     customer: t.customerName || t.customerEmail,
-    plan: t.planName,
+    plan: planDisplayName(t.planName),
     amount: `${t.amount.toLocaleString('vi-VN')}đ`,
     method: 'PayOS / VietQR',
     paidAt: toVnTime(t.createdAt),
@@ -220,7 +238,7 @@ export async function getDashboardCharts(): Promise<DashboardCharts> {
   return {
     revenue: (res.monthlyRevenues ?? []).map((m) => ({ month: m.month, value: m.revenue })),
     papers: (res.paperGrowths ?? []).map((p) => ({ month: p.month, value: p.newPapersCount })),
-    plans: (res.planDistributions ?? []).map((p) => ({ name: p.planName, count: p.count })),
+    plans: (res.planDistributions ?? []).map((p) => ({ name: planDisplayName(p.planName), count: p.count })),
   };
 }
 

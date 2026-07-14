@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPaymentLink, getPublicPlans, type PublicPlan } from '../../lib/api/payment';
+import { planDisplayName } from '../../lib/api/admin';
 import { ApiError } from '../../lib/http';
 import { useAuth } from '../../hooks/useAuth';
 import { Role, AccessTier } from '../../types/auth';
@@ -93,7 +94,7 @@ const CheckoutPage = () => {
               </span>
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-gray-900">{p.planName}</p>
+                  <p className="text-sm font-medium text-gray-900">{planDisplayName(p.planName)}</p>
                   {savingsPct(p) > 0 && (
                     <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-bold uppercase text-green-700">
                       Save {savingsPct(p)}%
@@ -112,7 +113,7 @@ const CheckoutPage = () => {
       {selectedPlan && (
         <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
           <div className="flex justify-between text-sm text-gray-700">
-            <span>{selectedPlan.planName}</span>
+            <span>{planDisplayName(selectedPlan.planName)}</span>
             <span className="font-semibold">{formatVnd(selectedPlan.priceAmount)}</span>
           </div>
           {isAcademic && (

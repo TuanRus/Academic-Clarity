@@ -7,6 +7,7 @@ import {
   type NotificationItem,
 } from '../../lib/api/notification';
 import { getMyFollows, toggleFollow, type FollowedItem } from '../../lib/api/follow';
+import { formatVnTime } from '../../lib/datetime';
 
 // LS-06/R-06 · Notification Center — ĐÃ NỐI BE: thông báo thật (Notifications) + danh sách Following.
 const NotificationCenterPage = () => {
@@ -79,7 +80,7 @@ const NotificationCenterPage = () => {
                 </div>
                 <p className="mt-1 text-sm text-gray-700">{n.message}</p>
                 <div className="mt-1 flex items-center gap-3 text-xs text-gray-400">
-                  <span>{new Date(n.createdAt).toLocaleString()}</span>
+                  <span>{formatVnTime(n.createdAt)}</span>
                   {n.relatedPaperId && (
                     <Link to={`/papers/${encodeURIComponent(n.relatedPaperId)}`} className="text-indigo-600 hover:underline">
                       View paper

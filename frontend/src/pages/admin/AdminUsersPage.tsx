@@ -5,9 +5,11 @@ import AdminModal from '../../components/admin/AdminModal';
 import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
 import AdminToast from '../../components/admin/AdminToast';
-import { getUsers, updateUserStatus, type UserDirectoryRow } from '../../lib/api/admin';
+import { getUsers, updateUserStatus, updateUserRole, roleIdFromName, type UserDirectoryRow } from '../../lib/api/admin';
 
-const roleOptions = ['Admin Overseer', 'Researcher (Nhà nghiên cứu)', 'Lecturer (Giảng viên)', 'Student (Sinh viên)', 'Regular User'];
+// Phải khớp CHÍNH XÁC với nhãn role do roleName() trả về (admin.ts), nếu không <select>
+// không tìm được option khớp → mọi dòng đều rơi về option đầu tiên.
+const roleOptions = ['ADMIN', 'RESEARCHER', 'STUDENT', 'Member'];
 
 const AdminUsersPage = () => {
   const [users, setUsers] = useState<UserDirectoryRow[]>([]);
@@ -31,8 +33,13 @@ const AdminUsersPage = () => {
 
 
   const changeRole = (userId: string, role: string) => {
-    setUsers((current) => current.map((user) => (user.id === userId ? { ...user, role } : user)));
-    setToast(`${userId} role updated.`);
+    // Lưu DB thật rồi cập nhật UI (rollback bằng reload nếu lỗi).
+    updateUserRole(userId, roleIdFromName(role))
+      .then(() => {
+        setUsers((current) => current.map((user) => (user.id === userId ? { ...user, role } : user)));
+        setToast(`${userId} role updated.`);
+      })
+      .catch(() => setToast('Update role failed.'));
   };
 
   const toggleUserStatus = (user: UserDirectoryRow) => {
@@ -47,7 +54,7 @@ const AdminUsersPage = () => {
   };
 
   const approveResearcher = (user: UserDirectoryRow) => {
-    setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, role: 'Researcher (Nhà nghiên cứu)', status: 'ACTIVE' } : item)));
+    setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, role: 'RESEARCHER', status: 'ACTIVE' } : item)));
     setToast(`${user.name} approved as Researcher.`);
   };
 
