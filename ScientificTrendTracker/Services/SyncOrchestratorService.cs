@@ -41,50 +41,30 @@ namespace ScientificTrendTracker.Services
         {
             _logger.LogInformation("=== Bắt đầu Sync lúc {Time}, maxPages={MaxPages}, skipKeywords={Skip}, fromYear={FromYear}, recentFirst={Recent} ===",
                 DateTime.UtcNow, maxPages, skipKeywords, fromYear, recentFirst);
-            var result = new SyncResult();
 
-            for (int page = 1; page <= maxPages; page++)
+            var dataSourceId = await GetOrCreateOpenAlexDataSourceIdAsync();
+            var syncLog = new ApiSyncLog
             {
-                if (cancellationToken.IsCancellationRequested) break;
+                DataSourceId = dataSourceId,
+                SyncStartedAt = DateTime.UtcNow,
+                Status = "running",
+                RecordsImported = 0
+            };
+            _dbContext.ApiSyncLogs.Add(syncLog);
+            await _dbContext.SaveChangesAsync();
 
-                List<OpenAlexPaper> papers;
-                try
-                {
-                    papers = await _openAlexService.FetchPapersAsync(
-                        page, fromYear: fromYear, minCitedExclusive: minCitedExclusive, recentFirst: recentFirst);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Lỗi fetch OpenAlex page {Page}, dừng sync.", page);
-                    break;
-                }
-
-                if (papers.Count == 0)
-                {
-                    _logger.LogInformation("OpenAlex hết data tại page {Page}, kết thúc sync.", page);
-                    break;
-                }
-
-                var pausedByQuota = false;
-
-                foreach (var paper in papers)
+            var result = new SyncResult();
+            try
+            {
+                for (int page = 1; page <= maxPages; page++)
                 {
                     if (cancellationToken.IsCancellationRequested) break;
 
-                    var throttle = false; // delay khi vừa gọi AI HOẶC vừa lỗi (để không spin)
+                    List<OpenAlexPaper> papers;
                     try
                     {
-                        var outcome = await ProcessPaperAsync(paper, skipKeywords);
-                        switch (outcome)
-                        {
-                            case ProcessOutcome.Added:         result.Added++;         break;
-                            case ProcessOutcome.AlreadyExists: result.AlreadyExists++; break;
-                            case ProcessOutcome.NoTitle:       result.NoTitle++;       break;
-                        }
-
-                        // Chỉ throttle khi vừa gọi AI (Added + không skip). Fetch-only thì không delay → nạp nhanh.
-                        if (outcome == ProcessOutcome.Added && !skipKeywords)
-                            throttle = true;
+                        papers = await _openAlexService.FetchPapersAsync(
+                            page, fromYear: fromYear, minCitedExclusive: minCitedExclusive, recentFirst: recentFirst);
                     }
                     catch (AllProvidersExhaustedException)
                     {
@@ -96,33 +76,101 @@ namespace ScientificTrendTracker.Services
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogError(ex, "Lỗi xử lý paper '{Title}': {Message}", paper.Title, ex.Message);
-                        result.Errors++;
-                        // Reset EF change tracker để paper tiếp theo không bị ảnh hưởng bởi state lỗi
-                        _dbContext.ChangeTracker.Clear();
-                        throttle = true; // lỗi (có thể do AI/mạng) → vẫn back off, tránh spin bắn liên tục
+                        _logger.LogError(ex, "Lỗi fetch OpenAlex page {Page}, dừng sync.", page);
+                        syncLog.ErrorMessage = $"Lỗi fetch page {page}: {ex.Message}";
+                        break;
                     }
-                    finally
+
+                    if (papers.Count == 0)
                     {
-                        // ĐẶT Ở FINALLY: delay luôn chạy dù try ném exception → không bao giờ spin
-                        if (throttle)
-                            await Task.Delay(DelayBetweenPapersMs, cancellationToken);
+                        _logger.LogInformation("OpenAlex hết data tại page {Page}, kết thúc sync.", page);
+                        break;
                     }
+
+                    var pausedByQuota = false;
+
+                    foreach (var paper in papers)
+                    {
+                        if (cancellationToken.IsCancellationRequested) break;
+
+                        var throttle = false; // delay khi vừa gọi AI HOẶC vừa lỗi (để không spin)
+                        try
+                        {
+                            var outcome = await ProcessPaperAsync(paper, skipKeywords);
+                            switch (outcome)
+                            {
+                                case ProcessOutcome.Added:         result.Added++;         break;
+                                case ProcessOutcome.AlreadyExists: result.AlreadyExists++; break;
+                                case ProcessOutcome.NoTitle:       result.NoTitle++;       break;
+                            }
+
+                            // Chỉ throttle khi vừa gọi AI (Added + không skip). Fetch-only thì không delay → nạp nhanh.
+                            if (outcome == ProcessOutcome.Added && !skipKeywords)
+                                throttle = true;
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogError(ex, "Lỗi xử lý paper '{Title}': {Message}", paper.Title, ex.Message);
+                            result.Errors++;
+                            // Reset EF change tracker để paper tiếp theo không bị ảnh hưởng bởi state lỗi
+                            _dbContext.ChangeTracker.Clear();
+                            throttle = true; // lỗi (có thể do AI/mạng) → vẫn back off, tránh spin bắn liên tục
+                        }
+                        finally
+                        {
+                            // ĐẶT Ở FINALLY: delay luôn chạy dù try ném exception → không bao giờ spin
+                            if (throttle)
+                                await Task.Delay(DelayBetweenPapersMs, cancellationToken);
+                        }
+                    }
+
+                    _logger.LogInformation(
+                        "Page {Page}: added={Added} exists={Exists} noTitle={NoTitle} errors={Errors}",
+                        page, result.Added, result.AlreadyExists, result.NoTitle, result.Errors);
+
+                    if (pausedByQuota) break;
+
+                    if (page < maxPages)
+                        await Task.Delay(DelayBetweenPagesMs, cancellationToken);
                 }
 
                 _logger.LogInformation(
-                    "Page {Page}: added={Added} exists={Exists} noTitle={NoTitle} errors={Errors}",
-                    page, result.Added, result.AlreadyExists, result.NoTitle, result.Errors);
+                    "=== Sync hoàn thành: added={Added}, exists={Exists}, noTitle={NoTitle}, errors={Errors} ===",
+                    result.Added, result.AlreadyExists, result.NoTitle, result.Errors);
 
-                if (pausedByQuota) break;
-
-                if (page < maxPages)
-                    await Task.Delay(DelayBetweenPagesMs, cancellationToken);
+                syncLog.Status = "success";
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    syncLog.Status = "failed";
+                    syncLog.ErrorMessage = "Tác vụ bị hủy bởi người dùng.";
+                }
             }
+            catch (Exception ex)
+            {
+                syncLog.Status = "failed";
+                syncLog.ErrorMessage = ex.Message.Length > 1000 ? ex.Message[..1000] : ex.Message;
+                throw;
+            }
+            finally
+            {
+                syncLog.SyncFinishedAt = DateTime.UtcNow;
+                syncLog.RecordsImported = result.Added;
 
-            _logger.LogInformation(
-                "=== Sync hoàn thành: added={Added}, exists={Exists}, noTitle={NoTitle}, errors={Errors} ===",
-                result.Added, result.AlreadyExists, result.NoTitle, result.Errors);
+                if (_dbContext.Entry(syncLog).State == EntityState.Detached)
+                {
+                    _dbContext.ApiSyncLogs.Attach(syncLog);
+                    _dbContext.Entry(syncLog).State = EntityState.Modified;
+                }
+
+                var dataSource = await _dbContext.ApiDataSources.FindAsync(dataSourceId);
+                if (dataSource != null)
+                {
+                    dataSource.LastSyncAt = syncLog.SyncFinishedAt;
+                    _dbContext.Entry(dataSource).State = EntityState.Modified;
+                }
+
+                await _dbContext.SaveChangesAsync();
+            }
 
             return result;
         }
@@ -138,55 +186,44 @@ namespace ScientificTrendTracker.Services
         {
             _logger.LogInformation("=== Backfill cân bằng: {From}-{To}, {Cap} bài/năm, skipKeywords={Skip} ===",
                 fromYear, toYear, perYearCap, skipKeywords);
-            var result = new SyncResult();
 
-            const int pageSize = 200;
-            // Trần paging OpenAlex: page*per-page ≤ 10,000 → tối đa 50 trang/năm.
-            var maxPagesPerYear = Math.Min((int)Math.Ceiling(perYearCap / (double)pageSize), 50);
-
-            for (int year = fromYear; year <= toYear; year++)
+            var dataSourceId = await GetOrCreateOpenAlexDataSourceIdAsync();
+            var syncLog = new ApiSyncLog
             {
-                if (cancellationToken.IsCancellationRequested) break;
+                DataSourceId = dataSourceId,
+                SyncStartedAt = DateTime.UtcNow,
+                Status = "running",
+                RecordsImported = 0
+            };
+            _dbContext.ApiSyncLogs.Add(syncLog);
+            await _dbContext.SaveChangesAsync();
 
-                // Năm gần (≥2025): sort theo ngày + bỏ lọc citation (bài mới chưa kịp được trích dẫn).
-                var recentFirst = year >= 2025;
-                var minCited = recentFirst ? -1 : 2;
-                var fetchedThisYear = 0;
+            var result = new SyncResult();
+            try
+            {
+                const int pageSize = 200;
+                // Trần paging OpenAlex: page*per-page ≤ 10,000 → tối đa 50 trang/năm.
+                var maxPagesPerYear = Math.Min((int)Math.Ceiling(perYearCap / (double)pageSize), 50);
 
-                for (int page = 1; page <= maxPagesPerYear && fetchedThisYear < perYearCap; page++)
+                for (int year = fromYear; year <= toYear; year++)
                 {
                     if (cancellationToken.IsCancellationRequested) break;
 
-                    List<OpenAlexPaper> papers;
-                    try
-                    {
-                        papers = await _openAlexService.FetchPapersAsync(
-                            page, pageSize, fromYear: year, minCitedExclusive: minCited,
-                            recentFirst: recentFirst, toYear: year);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogError(ex, "Backfill lỗi fetch năm {Year} page {Page}, sang năm khác.", year, page);
-                        break;
-                    }
+                    // Năm gần (≥2025): sort theo ngày + bỏ lọc citation (bài mới chưa kịp được trích dẫn).
+                    var recentFirst = year >= 2025;
+                    var minCited = recentFirst ? -1 : 2;
+                    var fetchedThisYear = 0;
 
-                    if (papers.Count == 0) break; // hết bài của năm này
-
-                    foreach (var paper in papers)
+                    for (int page = 1; page <= maxPagesPerYear && fetchedThisYear < perYearCap; page++)
                     {
                         if (cancellationToken.IsCancellationRequested) break;
-                        if (fetchedThisYear >= perYearCap) break;
-                        fetchedThisYear++;
 
+                        List<OpenAlexPaper> papers;
                         try
                         {
-                            var outcome = await ProcessPaperAsync(paper, skipKeywords);
-                            switch (outcome)
-                            {
-                                case ProcessOutcome.Added:         result.Added++;         break;
-                                case ProcessOutcome.AlreadyExists: result.AlreadyExists++; break;
-                                case ProcessOutcome.NoTitle:       result.NoTitle++;       break;
-                            }
+                            papers = await _openAlexService.FetchPapersAsync(
+                                page, pageSize, fromYear: year, minCitedExclusive: minCited,
+                                recentFirst: recentFirst, toYear: year);
                         }
                         catch (AllProvidersExhaustedException)
                         {
@@ -197,21 +234,81 @@ namespace ScientificTrendTracker.Services
                         }
                         catch (Exception ex)
                         {
-                            _logger.LogError(ex, "Backfill lỗi paper '{Title}': {Message}", paper.Title, ex.Message);
-                            result.Errors++;
-                            _dbContext.ChangeTracker.Clear();
+                            _logger.LogError(ex, "Backfill lỗi fetch năm {Year} page {Page}, sang năm khác.", year, page);
+                            syncLog.ErrorMessage = $"Lỗi fetch năm {year} page {page}: {ex.Message}";
+                            break;
                         }
+
+                        if (papers.Count == 0) break; // hết bài của năm này
+
+                        foreach (var paper in papers)
+                        {
+                            if (cancellationToken.IsCancellationRequested) break;
+                            if (fetchedThisYear >= perYearCap) break;
+                            fetchedThisYear++;
+
+                            try
+                            {
+                                var outcome = await ProcessPaperAsync(paper, skipKeywords);
+                                switch (outcome)
+                                {
+                                    case ProcessOutcome.Added:         result.Added++;         break;
+                                    case ProcessOutcome.AlreadyExists: result.AlreadyExists++; break;
+                                    case ProcessOutcome.NoTitle:       result.NoTitle++;       break;
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                _logger.LogError(ex, "Backfill lỗi paper '{Title}': {Message}", paper.Title, ex.Message);
+                                result.Errors++;
+                                _dbContext.ChangeTracker.Clear();
+                            }
+                        }
+
+                        await Task.Delay(DelayBetweenPagesMs, cancellationToken);
                     }
 
-                    await Task.Delay(DelayBetweenPagesMs, cancellationToken);
+                    _logger.LogInformation("Backfill năm {Year}: fetched={Fetched} (added tổng={Added}, exists={Exists})",
+                        year, fetchedThisYear, result.Added, result.AlreadyExists);
                 }
 
-                _logger.LogInformation("Backfill năm {Year}: fetched={Fetched} (added tổng={Added}, exists={Exists})",
-                    year, fetchedThisYear, result.Added, result.AlreadyExists);
+                _logger.LogInformation("=== Backfill xong: added={Added}, exists={Exists}, noTitle={NoTitle}, errors={Errors} ===",
+                    result.Added, result.AlreadyExists, result.NoTitle, result.Errors);
+
+                syncLog.Status = "success";
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    syncLog.Status = "failed";
+                    syncLog.ErrorMessage = "Tác vụ bị hủy bởi người dùng.";
+                }
+            }
+            catch (Exception ex)
+            {
+                syncLog.Status = "failed";
+                syncLog.ErrorMessage = ex.Message.Length > 1000 ? ex.Message[..1000] : ex.Message;
+                throw;
+            }
+            finally
+            {
+                syncLog.SyncFinishedAt = DateTime.UtcNow;
+                syncLog.RecordsImported = result.Added;
+
+                if (_dbContext.Entry(syncLog).State == EntityState.Detached)
+                {
+                    _dbContext.ApiSyncLogs.Attach(syncLog);
+                    _dbContext.Entry(syncLog).State = EntityState.Modified;
+                }
+
+                var dataSource = await _dbContext.ApiDataSources.FindAsync(dataSourceId);
+                if (dataSource != null)
+                {
+                    dataSource.LastSyncAt = syncLog.SyncFinishedAt;
+                    _dbContext.Entry(dataSource).State = EntityState.Modified;
+                }
+
+                await _dbContext.SaveChangesAsync();
             }
 
-            _logger.LogInformation("=== Backfill xong: added={Added}, exists={Exists}, noTitle={NoTitle}, errors={Errors} ===",
-                result.Added, result.AlreadyExists, result.NoTitle, result.Errors);
             return result;
         }
 
@@ -264,10 +361,12 @@ namespace ScientificTrendTracker.Services
                 journalId = journal.JournalId;
             }
 
-            // Fetch-only: bỏ qua AI, lưu paper với IsAiProcessed=false để reprocess-all xử lý keyword sau
-            var keywords = new List<string>();
+            var keywords = new List<string>(paper.Keywords ?? new List<string>());
             if (!skipKeywords && !string.IsNullOrWhiteSpace(paper.AbstractReconstructed))
-                keywords = await _keywordService.ExtractKeywordsAsync(paper.AbstractReconstructed, paper.Title);
+            {
+                var aiKeywords = await _keywordService.ExtractKeywordsAsync(paper.AbstractReconstructed, paper.Title, keywords);
+                keywords = keywords.Concat(aiKeywords).Distinct().ToList();
+            }
 
             var newPaper = new ResearchPaper
             {
@@ -280,7 +379,8 @@ namespace ScientificTrendTracker.Services
                 CitationCount = paper.CitedByCount,
                 JournalId = journalId,
                 SourceUrl = paper.Id,
-                IsAiProcessed = keywords.Count > 0,
+                Topic = paper.Topic?[..Math.Min(255, paper.Topic.Length)],
+                IsAiProcessed = !skipKeywords && keywords.Count > 0,
                 CreatedAt = DateTime.UtcNow
             };
 
@@ -374,6 +474,30 @@ namespace ScientificTrendTracker.Services
             }
 
             await _dbContext.SaveChangesAsync();
+        }
+
+        /// <summary>
+        /// Lấy hoặc tự động tạo cấu hình nguồn dữ liệu OpenAlex trong database.
+        /// </summary>
+        private async Task<int> GetOrCreateOpenAlexDataSourceIdAsync()
+        {
+            var source = await _dbContext.ApiDataSources
+                .FirstOrDefaultAsync(s => s.SourceName == "OpenAlex");
+
+            if (source == null)
+            {
+                source = new ApiDataSource
+                {
+                    SourceName = "OpenAlex",
+                    BaseUrl = "https://openalex.org",
+                    IsActive = true,
+                    SyncFrequency = "weekly",
+                    CreatedAt = DateTime.UtcNow
+                };
+                _dbContext.ApiDataSources.Add(source);
+                await _dbContext.SaveChangesAsync();
+            }
+            return source.DataSourceId;
         }
     }
 }
