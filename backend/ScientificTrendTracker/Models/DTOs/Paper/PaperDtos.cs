@@ -156,6 +156,12 @@ namespace ScientificTrendTracker.Models.DTOs.Paper
         public string SourceUrl { get; set; }
 
         /// <summary>
+        /// Chủ đề chính của bài báo (ResearchTopic). Dùng để thông báo cho follower đang theo dõi topic.
+        /// </summary>
+        [MaxLength(255)]
+        public string Topic { get; set; }
+
+        /// <summary>
         /// Mã định danh tạp chí (nếu chọn tạp chí sẵn).
         /// </summary>
         [MaxLength(50)]

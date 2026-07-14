@@ -46,34 +46,54 @@ namespace ScientificTrendTracker.Services
             // Tránh lỗi tìm kiếm và so khớp do dữ liệu từ Client có thể chứa khoảng trắng hoặc chữ hoa/thường không chuẩn
             string typeClean = request.TargetType.Trim().ToLower();
             string idClean = request.TargetId.Trim();
+            int? authorId = null;
 
             // Fail-fast: kiểm tra sự tồn tại của đối tượng trước khi thực hiện toggle để tránh tạo mối quan hệ rác
             if (typeClean == "topic")
             {
-                var topicExists = await _context.ResearchTopics
-                    .AnyAsync(t => t.TopicId == idClean);
-                if (!topicExists) return null;
+                // idClean có thể là TopicId sẵn có HOẶC TopicName (FE gửi từ trang Paper Detail, nơi
+                // bài báo chỉ phơi ra tên topic). Resolve theo Id trước, rồi theo Tên; nếu chưa có thì
+                // tự tạo ResearchTopic mới (giống cách journal/keyword được auto-create khi thêm bài).
+                var topic = await _context.ResearchTopics
+                    .FirstOrDefaultAsync(t => t.TopicId == idClean || t.TopicName == idClean);
+                if (topic == null)
+                {
+                    topic = new ResearchTopic
+                    {
+                        TopicId = Guid.NewGuid().ToString("N")[..20],
+                        TopicName = idClean,
+                        CreatedAt = DateTime.UtcNow
+                    };
+                    _context.ResearchTopics.Add(topic);
+                    await _context.SaveChangesAsync();
+                }
+                idClean = topic.TopicId; // chuẩn hoá về TopicId để toggle/dedup nhất quán theo khoá chính
             }
             else if (typeClean == "journal")
             {
-                var journalExists = await _context.Journals
-                    .AnyAsync(j => j.JournalId == idClean);
-                if (!journalExists) return null;
+                if (!await _context.Journals.AnyAsync(j => j.JournalId == idClean)) return null;
+            }
+            else if (typeClean == "author")
+            {
+                if (!int.TryParse(idClean, out var aid)) return null;
+                if (!await _context.Authors.AnyAsync(a => a.AuthorId == aid)) return null;
+                authorId = aid;
             }
             else
             {
                 return null;
             }
 
-            bool isTopic = typeClean == "topic";
-
-            // Tách rõ 2 nhánh thay vì dùng ternary trong biểu thức LINQ: EF Core dịch conditional
-            // so sánh 2 cột khác nhau (TopicId/JournalId) sang SQL không ổn định, dễ trả sai bản ghi.
-            var existingFollow = isTopic
-                ? await _context.FollowedItems.FirstOrDefaultAsync(f =>
-                    f.UserId == userId && f.TargetType == typeClean && f.TopicId == idClean)
-                : await _context.FollowedItems.FirstOrDefaultAsync(f =>
-                    f.UserId == userId && f.TargetType == typeClean && f.JournalId == idClean);
+            // Tách rõ từng nhánh (không ternary trong LINQ để EF dịch SQL ổn định).
+            FollowedItem? existingFollow = typeClean switch
+            {
+                "topic" => await _context.FollowedItems.FirstOrDefaultAsync(f =>
+                    f.UserId == userId && f.TargetType == typeClean && f.TopicId == idClean),
+                "journal" => await _context.FollowedItems.FirstOrDefaultAsync(f =>
+                    f.UserId == userId && f.TargetType == typeClean && f.JournalId == idClean),
+                _ => await _context.FollowedItems.FirstOrDefaultAsync(f =>
+                    f.UserId == userId && f.TargetType == typeClean && f.AuthorId == authorId),
+            };
 
             bool isFollowingResult;
 
@@ -81,38 +101,31 @@ namespace ScientificTrendTracker.Services
             {
                 _context.FollowedItems.Remove(existingFollow);
                 isFollowingResult = false;
-
-                _logger.LogInformation(
-                    "User {Uid} hủy theo dõi {Type} {Id}",
-                    userId, typeClean, idClean);
+                _logger.LogInformation("User {Uid} hủy theo dõi {Type} {Id}", userId, typeClean, idClean);
             }
             else
             {
-                var newFollow = new FollowedItem
+                _context.FollowedItems.Add(new FollowedItem
                 {
                     UserId = userId,
                     TargetType = typeClean,
                     TopicId = typeClean == "topic" ? idClean : null,
                     JournalId = typeClean == "journal" ? idClean : null,
-                    CreatedAt = DateTime.UtcNow // UTC tránh lệch múi giờ giữa máy chủ và client
-                };
-
-                _context.FollowedItems.Add(newFollow);
+                    AuthorId = authorId,
+                    CreatedAt = DateTime.UtcNow
+                });
                 isFollowingResult = true;
-
-                _logger.LogInformation(
-                    "User {Uid} theo dõi mới {Type} {Id}",
-                    userId, typeClean, idClean);
+                _logger.LogInformation("User {Uid} theo dõi mới {Type} {Id}", userId, typeClean, idClean);
             }
 
             await _context.SaveChangesAsync();
 
-            // Thực hiện hoàn toàn dưới Database để giảm băng thông truyền dữ liệu và tối ưu RAM máy chủ
-            int totalFollowers = isTopic
-                ? await _context.FollowedItems.CountAsync(f =>
-                    f.TargetType == typeClean && f.TopicId == idClean)
-                : await _context.FollowedItems.CountAsync(f =>
-                    f.TargetType == typeClean && f.JournalId == idClean);
+            int totalFollowers = typeClean switch
+            {
+                "topic" => await _context.FollowedItems.CountAsync(f => f.TargetType == typeClean && f.TopicId == idClean),
+                "journal" => await _context.FollowedItems.CountAsync(f => f.TargetType == typeClean && f.JournalId == idClean),
+                _ => await _context.FollowedItems.CountAsync(f => f.TargetType == typeClean && f.AuthorId == authorId),
+            };
 
             return new FollowResultDto
             {
@@ -131,10 +144,14 @@ namespace ScientificTrendTracker.Services
                 {
                     FollowId = f.FollowId,
                     TargetType = f.TargetType,
-                    TargetId = f.TargetType == "topic" ? f.TopicId! : f.JournalId!,
+                    TargetId = f.TargetType == "topic" ? f.TopicId!
+                        : f.TargetType == "journal" ? f.JournalId!
+                        : (f.AuthorId != null ? f.AuthorId.ToString()! : ""),
                     Name = f.TargetType == "topic"
                         ? (f.ResearchTopic != null ? f.ResearchTopic.TopicName : f.TopicId!)
-                        : (f.Journal != null ? f.Journal.JournalName : f.JournalId!)
+                        : f.TargetType == "journal"
+                            ? (f.Journal != null ? f.Journal.JournalName : f.JournalId!)
+                            : (f.Author != null ? f.Author.FullName : (f.AuthorId != null ? f.AuthorId.ToString()! : "")),
                 })
                 .ToListAsync();
         }

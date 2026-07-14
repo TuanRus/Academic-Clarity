@@ -79,6 +79,75 @@ namespace ScientificTrendTracker.Services
             return await _ollamaFallback.ExtractKeywordsAsync(abstractText, "(pasted abstract)");
         }
 
+        /// <summary>
+        /// Sinh văn bản tự do bằng Gemini (2 key luân phiên) cho phân tích trùng ý tưởng.
+        /// Trả text thô; null nếu không có key hoặc mọi key thất bại (KHÔNG fallback Ollama cho phần narrative).
+        /// </summary>
+        public async Task<string> AnalyzeAsync(string prompt, CancellationToken ct)
+        {
+            if (string.IsNullOrWhiteSpace(prompt)) return null;
+
+            var keys = (_config.GetSection("Gemini:ApiKeys").Get<string[]>() ?? Array.Empty<string>())
+                .Where(k => !string.IsNullOrWhiteSpace(k))
+                .ToArray();
+            if (keys.Length == 0)
+            {
+                _logger.LogInformation("Không cấu hình Gemini:ApiKeys → phân tích trùng ý tưởng bằng Ollama.");
+                return await _ollamaFallback.CompleteAsync(prompt, ct);
+            }
+
+            var model = _config["Gemini:Model"] ?? "gemini-2.0-flash";
+            var baseUrl = (_config["Gemini:BaseUrl"] ?? "https://generativelanguage.googleapis.com").TrimEnd('/');
+            var timeoutSec = _config.GetValue("Gemini:TimeoutSeconds", 30);
+
+            int start = (int)((uint)System.Threading.Interlocked.Increment(ref _rotation) % (uint)keys.Length);
+            for (int i = 0; i < keys.Length; i++)
+            {
+                var key = keys[(start + i) % keys.Length];
+                var (ok, text) = await CallGeminiRawAsync(baseUrl, model, key, prompt, 600, timeoutSec, ct);
+                if (ok) return text;
+            }
+
+            _logger.LogWarning("Cả {N} Gemini key đều thất bại → fallback Ollama cho phân tích trùng ý tưởng.", keys.Length);
+            return await _ollamaFallback.CompleteAsync(prompt, ct);
+        }
+
+        /// <summary>Gọi Gemini 1 key với prompt bất kỳ, trả (ok, rawText). ok=false khi 429/lỗi/timeout.</summary>
+        private async Task<(bool ok, string text)> CallGeminiRawAsync(
+            string baseUrl, string model, string apiKey, string prompt, int maxTokens, int timeoutSec, CancellationToken ct)
+        {
+            var url = $"{baseUrl}/v1beta/models/{model}:generateContent?key={apiKey}";
+            var payload = new
+            {
+                contents = new[] { new { parts = new[] { new { text = prompt } } } },
+                generationConfig = new { temperature = 0.2, maxOutputTokens = maxTokens }
+            };
+
+            using var reqCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            reqCts.CancelAfter(TimeSpan.FromSeconds(timeoutSec));
+            try
+            {
+                using var content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+                using var resp = await _http.PostAsync(url, content, reqCts.Token);
+                if (resp.StatusCode == HttpStatusCode.TooManyRequests) return (false, null);
+                if (!resp.IsSuccessStatusCode) return (false, null);
+
+                var json = await resp.Content.ReadAsStringAsync(reqCts.Token);
+                var text = ExtractText(json);
+                return string.IsNullOrWhiteSpace(text) ? (false, null) : (true, text);
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogWarning("Gemini key ...{Tail} timeout (analyze) sau {Sec}s.", Tail(apiKey), timeoutSec);
+                return (false, null);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Gemini key ...{Tail} lỗi khi gọi API (analyze).", Tail(apiKey));
+                return (false, null);
+            }
+        }
+
         /// <summary>Gọi Gemini với 1 key. Trả (ok, keywords). ok=false khi 429/lỗi/timeout để caller thử key khác.</summary>
         private async Task<(bool ok, List<string> keywords)> TryGeminiAsync(
             string baseUrl, string model, string apiKey, string abstractText, int timeoutSec, CancellationToken ct)

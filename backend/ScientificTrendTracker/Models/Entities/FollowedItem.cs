@@ -45,6 +45,10 @@ namespace ScientificTrendTracker.Models.Entities
         [MaxLength(50)]
         public string? JournalId { get; set; }
 
+        /// <summary>Mã tác giả được theo dõi (Nếu target_type = 'author'). Khóa ngoại trỏ đến bảng Authors.</summary>
+        [Column("author_id")]
+        public int? AuthorId { get; set; }
+
         /// <summary>
         /// Thời điểm người dùng nhấn theo dõi (Tính theo giờ UTC)[cite: 151].
                     /// </summary>
@@ -72,5 +76,9 @@ namespace ScientificTrendTracker.Models.Entities
         /// </summary>
         [ForeignKey("JournalId")]
         public virtual Journal? Journal { get; set; }
+
+        /// <summary>Thông tin tác giả được liên kết (Nếu có).</summary>
+        [ForeignKey("AuthorId")]
+        public virtual Author? Author { get; set; }
     }
 }

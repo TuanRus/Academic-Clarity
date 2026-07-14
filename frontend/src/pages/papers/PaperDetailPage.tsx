@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useBookmark } from '../../hooks/useBookmark';
 import { getPaperDetail } from '../../lib/api/mindmap';
+import { getMyFollows, toggleFollow } from '../../lib/api/follow';
 import { ApiError } from '../../lib/http';
 import type { BookmarkedPaper } from '../../context/BookmarkContext';
 import type { PaperDetail } from '../../types/api';
@@ -17,6 +18,10 @@ const PaperDetailPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Trạng thái follow chủ đề (topic) của bài — cho nút Follow ở phần Classification.
+  const [followingTopic, setFollowingTopic] = useState(false);
+  const [topicBusy, setTopicBusy] = useState(false);
+
   useEffect(() => {
     if (!paperId) return;
     setLoading(true);
@@ -29,6 +34,24 @@ const PaperDetailPage = () => {
       })
       .finally(() => setLoading(false));
   }, [paperId]);
+
+  // Sau khi có paper, kiểm tra user đã theo dõi topic của bài này chưa (so khớp theo tên topic).
+  useEffect(() => {
+    if (!paper?.topic) { setFollowingTopic(false); return; }
+    getMyFollows()
+      .then((fs) => setFollowingTopic(fs.some((f) => f.targetType === 'topic' && f.name === paper.topic)))
+      .catch(() => {});
+  }, [paper?.topic]);
+
+  const onToggleTopicFollow = async () => {
+    if (!paper?.topic || topicBusy) return;
+    setTopicBusy(true);
+    try {
+      const res = await toggleFollow('topic', paper.topic);
+      setFollowingTopic(res.isFollowing);
+    } catch { /* nuốt lỗi, giữ trạng thái cũ */ }
+    finally { setTopicBusy(false); }
+  };
 
   if (loading) {
     return <div className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-400 shadow-sm">Loading…</div>;
@@ -144,9 +167,22 @@ const PaperDetailPage = () => {
           <h2 className="text-lg font-semibold text-gray-800">Classification & Source</h2>
           <dl className="mt-2 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
             {classification.map((r) => (
-              <div key={r.label} className="flex gap-2">
+              <div key={r.label} className="flex items-center gap-2">
                 <dt className="w-24 shrink-0 text-gray-500">{r.label}:</dt>
                 <dd className="text-gray-800">{r.value}</dd>
+                {r.label === 'Topic' && paper.topic && (
+                  <button
+                    onClick={onToggleTopicFollow}
+                    disabled={topicBusy}
+                    className={`shrink-0 rounded-md border px-2 py-0.5 text-xs font-medium disabled:opacity-50 ${
+                      followingTopic
+                        ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
+                        : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                    }`}
+                  >
+                    {followingTopic ? 'Following' : 'Follow topic'}
+                  </button>
+                )}
               </div>
             ))}
             {paper.openAccessStatus && (

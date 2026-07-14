@@ -312,15 +312,25 @@ namespace ScientificTrendTracker.Services
         /// </summary>
         private static string NormalizeWorkIdentifier(string input)
         {
-            // 1) URL OpenAlex: https://openalex.org/W123 → W123
+            // 1) URL OpenAlex: chấp nhận cả https://openalex.org/W123 lẫn .../works/W123
             var oaIdx = input.IndexOf("openalex.org/", StringComparison.OrdinalIgnoreCase);
             if (oaIdx >= 0)
             {
                 var id = input[(oaIdx + "openalex.org/".Length)..].Trim().Trim('/');
-                return string.IsNullOrWhiteSpace(id) ? null : id;
+                // Bỏ tiền tố "works/" nếu có (link dạng openalex.org/works/W123).
+                if (id.StartsWith("works/", StringComparison.OrdinalIgnoreCase))
+                    id = id["works/".Length..].Trim('/');
+                // Bỏ query string nếu có.
+                var q = id.IndexOf('?');
+                if (q >= 0) id = id[..q];
+                if (string.IsNullOrWhiteSpace(id)) return null;
+                // Chuẩn hoá "w123" → "W123" (OpenAlex yêu cầu W hoa).
+                if ((id[0] == 'w' || id[0] == 'W') && id.Length > 1 && id[1..].All(char.IsDigit))
+                    return "W" + id[1..];
+                return id;
             }
 
-            // 2) ID trần dạng "W" + chữ số
+            // 2) ID trần dạng "W" + chữ số (không phân biệt hoa/thường)
             if (input.Length > 1
                 && (input[0] == 'W' || input[0] == 'w')
                 && input.Skip(1).All(char.IsDigit))

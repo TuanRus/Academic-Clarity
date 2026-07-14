@@ -1,35 +1,24 @@
-import { useMemo, useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AdminBadge from '../../components/admin/AdminBadge';
 import AdminMetricCard from '../../components/admin/AdminMetricCard';
 import AdminModal from '../../components/admin/AdminModal';
 import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
 import AdminToast from '../../components/admin/AdminToast';
-import { getUsers, updateUserRole, updateUserStatus, roleIdFromName, type UserDirectoryRow } from '../../lib/api/admin';
+import { getUsers, updateUserStatus, type UserDirectoryRow } from '../../lib/api/admin';
 
-// value khớp với chuỗi role do BE trả qua roleName() (ADMIN/RESEARCHER/STUDENT/Member),
-// label là nhãn hiển thị tiếng Việt cho admin.
-const roleOptions = [
-  { value: 'ADMIN', label: 'Admin Overseer' },
-  { value: 'RESEARCHER', label: 'Researcher (Nhà nghiên cứu)' },
-  { value: 'STUDENT', label: 'Student (Sinh viên)' },
-  { value: 'Member', label: 'Regular User' },
-];
-const DEFAULT_ROLE = 'STUDENT';
+const roleOptions = ['Admin Overseer', 'Researcher (Nhà nghiên cứu)', 'Lecturer (Giảng viên)', 'Student (Sinh viên)', 'Regular User'];
 
 const AdminUsersPage = () => {
   const [users, setUsers] = useState<UserDirectoryRow[]>([]);
-
-  useEffect(() => {
-    getUsers().then(setUsers).catch(() => setUsers([]));
-  }, []);
+  useEffect(() => { getUsers().then(setUsers).catch(() => setUsers([])); }, []);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [selectedUser, setSelectedUser] = useState<UserDirectoryRow | null>(null);
   const [showProvisionModal, setShowProvisionModal] = useState(false);
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
-  const [newUserRole, setNewUserRole] = useState(DEFAULT_ROLE);
+  const [newUserRole, setNewUserRole] = useState(roleOptions[3]);
   const [toast, setToast] = useState<string | null>(null);
 
   const filteredUsers = useMemo(() => users.filter((user) => `${user.id} ${user.name} ${user.email} ${user.role}`.toLowerCase().includes(query.toLowerCase())), [query, users]);
@@ -38,34 +27,27 @@ const AdminUsersPage = () => {
   const visibleUsers = filteredUsers.slice((page - 1) * pageSize, page * pageSize);
   const activeUsers = users.filter((user) => user.status === 'ACTIVE').length;
   const pendingUsers = users.filter((user) => user.status === 'REGISTERED').length;
+  const totalUsers = users.length;
 
-  const changeRole = async (userId: string, role: string) => {
-    const prev = users;
+
+  const changeRole = (userId: string, role: string) => {
     setUsers((current) => current.map((user) => (user.id === userId ? { ...user, role } : user)));
-    try {
-      await updateUserRole(userId, roleIdFromName(role));
-      setToast(`${userId} role updated.`);
-    } catch {
-      setUsers(prev); // rollback nếu lưu thất bại
-      setToast('Đổi vai trò thất bại.');
-    }
+    setToast(`${userId} role updated.`);
   };
 
-  const toggleUserStatus = async (user: UserDirectoryRow) => {
+  const toggleUserStatus = (user: UserDirectoryRow) => {
     const nextStatus = user.status === 'SUSPENDED' ? 'ACTIVE' : 'SUSPENDED';
-    const prev = users;
-    setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, status: nextStatus } : item)));
-    try {
-      await updateUserStatus(user.id, nextStatus === 'ACTIVE');
-      setToast(`${user.name} is now ${nextStatus}.`);
-    } catch {
-      setUsers(prev);
-      setToast('Đổi trạng thái thất bại.');
-    }
+    // Lưu DB thật rồi cập nhật UI (rollback bằng reload nếu lỗi).
+    updateUserStatus(user.id, nextStatus === 'ACTIVE')
+      .then(() => {
+        setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, status: nextStatus } : item)));
+        setToast(`${user.name} is now ${nextStatus}.`);
+      })
+      .catch(() => setToast('Update status failed.'));
   };
 
   const approveResearcher = (user: UserDirectoryRow) => {
-    setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, role: 'RESEARCHER', status: 'ACTIVE' } : item)));
+    setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, role: 'Researcher (Nhà nghiên cứu)', status: 'ACTIVE' } : item)));
     setToast(`${user.name} approved as Researcher.`);
   };
 
@@ -100,7 +82,7 @@ const AdminUsersPage = () => {
     setUsers((current) => [nextUser, ...current]);
     setNewUserName('');
     setNewUserEmail('');
-    setNewUserRole(DEFAULT_ROLE);
+    setNewUserRole(roleOptions[3]);
     setShowProvisionModal(false);
     setToast(`${nextUser.name} has been provisioned.`);
   };
@@ -126,19 +108,40 @@ const AdminUsersPage = () => {
         <p className="mt-1 text-xs text-slate-500">Manage institution access, audit role transitions, and oversee global RBAC alignment across academic departments.</p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-2">
-        <AdminMetricCard label="Total Active Users" value={String(activeUsers)} helper="Active accounts" icon="♙" accent="blue" />
-        <AdminMetricCard label="Role Requests Pending" value={String(pendingUsers)} helper="Registered users awaiting review" icon="▣" accent="orange" />
+      <div className="grid gap-5 lg:grid-cols-3">
+        <AdminMetricCard
+          label="Total Users"
+          value={String(totalUsers)}
+          helper="All registered user accounts"
+          icon="👥"
+          accent="blue"
+        />
+
+        <AdminMetricCard
+          label="Active Users"
+          value={String(activeUsers)}
+          helper="Accounts currently active"
+          icon="✓"
+          accent="green"
+        />
+
+        <AdminMetricCard
+          label="Pending Role Requests"
+          value={String(pendingUsers)}
+          helper="Registered users awaiting review"
+          icon="▣"
+          accent="orange"
+        />
       </div>
 
-      <div className="grid gap-5">
+      <div className="space-y-5">
         <div className="space-y-5">
           <AdminSectionCard
             title="Access Control List"
             action={
               <div className="flex items-center gap-3">
                 <input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Search user..." className="rounded-md border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#0b6fb8]" />
-                <button onClick={() => setShowProvisionModal(true)} className="rounded-md bg-[#0b6fb8] px-4 py-2 text-xs font-bold text-white">+ Provision User</button>
+                <button onClick={() => setShowProvisionModal(true)} className="rounded-md bg-[#4338ca] hover:bg-[#3730a3] px-4 py-2 text-xs font-bold text-white">+ Provision User</button>
               </div>
             }
           >
@@ -155,10 +158,7 @@ const AdminUsersPage = () => {
                   <td className="px-5 py-4 text-slate-500">{directoryUser.email}</td>
                   <td className="px-5 py-4">
                     <select value={directoryUser.role} onChange={(event) => changeRole(directoryUser.id, event.target.value)} className="rounded border border-slate-200 bg-white px-2 py-1 text-xs">
-                      {roleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
-                      {!roleOptions.some((r) => r.value === directoryUser.role) && (
-                        <option value={directoryUser.role}>{directoryUser.role}</option>
-                      )}
+                      {roleOptions.map((role) => <option key={role}>{role}</option>)}
                     </select>
                   </td>
                   <td className="px-5 py-4"><AdminBadge status={directoryUser.status} /></td>
@@ -199,7 +199,7 @@ const AdminUsersPage = () => {
         footer={
           <>
             <button onClick={() => setShowProvisionModal(false)} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Cancel</button>
-            <button onClick={provisionUser} className="rounded-md bg-[#062b4f] px-4 py-2 text-xs font-bold text-white">Create User</button>
+            <button onClick={provisionUser} className="rounded-md bg-[#4338ca]b hover:bg-[#3730a3] px-4 py-2 text-xs font-bold text-white">Create User</button>
           </>
         }
       >
@@ -207,7 +207,7 @@ const AdminUsersPage = () => {
           <input value={newUserName} onChange={(event) => setNewUserName(event.target.value)} placeholder="Full name" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]" />
           <input value={newUserEmail} onChange={(event) => setNewUserEmail(event.target.value)} placeholder="Email" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]" />
           <select value={newUserRole} onChange={(event) => setNewUserRole(event.target.value)} className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]">
-            {roleOptions.map((role) => <option key={role.value} value={role.value}>{role.label}</option>)}
+            {roleOptions.map((role) => <option key={role}>{role}</option>)}
           </select>
         </div>
       </AdminModal>

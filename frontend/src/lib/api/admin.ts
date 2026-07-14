@@ -10,11 +10,11 @@ export type AdminStatus =
 export interface ExportRequest { id: string; user: string; type: 'CSV' | 'PDF' | 'XLSX'; timestamp: string; status: AdminStatus; }
 export interface PipelineEvent { id?: number; title: string; time: string; status: AdminStatus; recordsImported?: number; }
 export interface RepositoryCategory { id: string; name: string; description: string; fields: number; status: AdminStatus; }
-export interface RepositoryPaper { id: string; title: string; doi: string; journal: string; year: number; citations: number; status: AdminStatus; }
+export interface RepositoryPaper { id: string; title: string; doi: string; journal: string; year: number; citations: number; status: AdminStatus; authors: string; }
 export interface RepositoryAnomaly { id: string; label: string; title: string; tone: 'orange' | 'red'; action: 'Auto-Fill' | 'Review'; status: AdminStatus; }
 export interface UserDirectoryRow { id: string; initials: string; name: string; email: string; role: string; status: AdminStatus; }
 export interface ActivityLog { type: 'ELEVATION' | 'LEDGER' | 'AUTH_FAIL' | 'UPDATE'; time: string; title: string; ref: string; }
-export interface RevenueRow { invoiceId: string; customer: string; plan: string; amount: string; method: string; paidAt: string; status: AdminStatus; }
+export interface RevenueRow { transactionId: string; invoiceId: string; customer: string; plan: string; amount: string; method: string; paidAt: string; status: AdminStatus; }
 export interface SubscriptionPlan { id: string; name: string; price: string; duration: string; status: AdminStatus; priceAmount: number; durationDays: number; }
 
 export interface DashboardStats {
@@ -102,10 +102,17 @@ export async function getSyncLogs(): Promise<PipelineEvent[]> {
   return res.items.map((s) => ({
     id: s.syncLogId,
     title: `Sync OpenAlex — ${s.recordsImported} bài`,
-    time: s.syncStartedAt,
+    time: toVnTime(s.syncStartedAt), // đổi UTC → giờ VN (trước đây hiện chuỗi UTC thô)
     status: mapSyncStatus(s.status),
     recordsImported: s.recordsImported,
   }));
+}
+
+// ---- Chi tiết bài đã sync (GET /admin/sync-logs/{id}/papers) ----
+export interface SyncedPaper { paperId: string; title: string; publicationYear: number | null; openAlexId?: string; sourceUrl?: string; createdAt: string; }
+export async function getSyncedPapers(syncLogId: number): Promise<SyncedPaper[]> {
+  const res = await apiGet<{ papers: SyncedPaper[] }>(`/admin/sync-logs/${syncLogId}/papers`);
+  return res.papers ?? [];
 }
 
 // ---- Sync realtime (chạy nền + poll tiến độ) ----
@@ -122,25 +129,6 @@ export async function getSyncProgress(): Promise<SyncProgress> {
   return apiGet<SyncProgress>('/admin/sync/progress');
 }
 
-// ---- Chi tiết bài đã sync (GET /admin/sync-logs/{id}/papers) ----
-export interface SyncedPaper { paperId: string; title: string; publicationYear: number | null; openAlexId?: string; sourceUrl?: string; createdAt: string; }
-export async function getSyncedPapers(syncLogId: number): Promise<SyncedPaper[]> {
-  const res = await apiGet<{ papers: SyncedPaper[] }>(`/admin/sync-logs/${syncLogId}/papers`);
-  return res.papers ?? [];
-}
-
-// ---- Run weekly sync (POST /admin/run-weekly-now) ----
-export interface RunSyncResult {
-  added: number;
-  alreadyExists: number;
-  errors: number;
-  reprocessStarted: boolean;
-}
-/** POST /admin/run-weekly-now — chạy NGAY sync OpenAlex thật (fetch bài mới + đào keyword nền). */
-export async function runWeeklySync(): Promise<RunSyncResult> {
-  return apiPost<RunSyncResult>('/admin/run-weekly-now');
-}
-
 // ---- Papers (GET /admin/papers) ----
 interface BePaper { paperId: string; title: string; publicationYear: number; citationCount: number; journalName: string; }
 export async function getPapers(): Promise<RepositoryPaper[]> {
@@ -153,6 +141,7 @@ export async function getPapers(): Promise<RepositoryPaper[]> {
     year: p.publicationYear,
     citations: p.citationCount,
     status: 'ACTIVE',
+    authors: '', // BE /admin/papers chưa trả tác giả (leftover) → để trống
   }));
 }
 
@@ -199,6 +188,7 @@ interface BeTransaction { subscriptionId: number; customerName: string; customer
 export async function getTransactions(): Promise<RevenueRow[]> {
   const res = await apiGet<BeTransaction[]>('/admin/transactions');
   return res.map((t) => ({
+    transactionId: String(t.subscriptionId),
     invoiceId: `#SUB-${t.subscriptionId}`,
     customer: t.customerName || t.customerEmail,
     plan: t.planName,
@@ -209,9 +199,65 @@ export async function getTransactions(): Promise<RevenueRow[]> {
   }));
 }
 
-// ---- Revenue chart bars (GET /admin/dashboard/charts) ----
-interface BeCharts { monthlyRevenues: { month: string; revenue: number }[]; }
+// ---- Dashboard charts (GET /admin/dashboard/charts) — DỮ LIỆU THẬT ----
+interface BeCharts {
+  monthlyRevenues: { month: string; revenue: number }[];
+  paperGrowths?: { month: string; newPapersCount: number }[];
+  planDistributions?: { planName: string; count: number }[];
+}
 export async function getRevenueBars(): Promise<{ month: string; amount: number }[]> {
   const res = await apiGet<BeCharts>('/admin/dashboard/charts');
   return (res.monthlyRevenues ?? []).map((m) => ({ month: m.month, amount: m.revenue }));
+}
+
+export interface DashboardCharts {
+  revenue: { month: string; value: number }[];
+  papers: { month: string; value: number }[];
+  plans: { name: string; count: number }[];
+}
+export async function getDashboardCharts(): Promise<DashboardCharts> {
+  const res = await apiGet<BeCharts>('/admin/dashboard/charts');
+  return {
+    revenue: (res.monthlyRevenues ?? []).map((m) => ({ month: m.month, value: m.revenue })),
+    papers: (res.paperGrowths ?? []).map((p) => ({ month: p.month, value: p.newPapersCount })),
+    plans: (res.planDistributions ?? []).map((p) => ({ name: p.planName, count: p.count })),
+  };
+}
+
+// ---- Admin broadcast toàn hệ thống (POST /notifications/broadcast) ----
+export function sendBroadcast(title: string, message: string): Promise<unknown> {
+  return apiPost('/notifications/broadcast', { title, message });
+}
+
+// ---- Keywords (GET /admin/keywords) — cho tab Ontology của Article Repository ----
+interface BeKeyword { keywordId: string; keywordName: string; associatedPapersCount: number; createdAt: string; }
+export async function getKeywords(): Promise<RepositoryCategory[]> {
+  const res = await apiGet<Paged<BeKeyword>>('/admin/keywords', { page: 1, pageSize: 100 });
+  return res.items.map((k) => ({
+    id: k.keywordId,
+    name: k.keywordName,
+    description: `Used in ${k.associatedPapersCount} paper(s)`,
+    fields: k.associatedPapersCount,
+    status: 'ACTIVE' as AdminStatus,
+  }));
+}
+
+// ---- Thêm bài báo thủ công ----
+/** POST /admin/papers/from-link — dán link OpenAlex/DOI → BE tự fetch metadata & thêm bài. */
+export function createPaperFromLink(link: string): Promise<unknown> {
+  return apiPost('/admin/papers/from-link', { link });
+}
+export interface CreatePaperInput {
+  title: string; doi?: string; publicationYear?: number;
+  journalName?: string; authors?: string[]; keywords?: string[]; topic?: string;
+}
+/** POST /admin/papers — thêm bài báo tự nhập tay (title bắt buộc). */
+export function createPaper(input: CreatePaperInput): Promise<unknown> {
+  return apiPost('/admin/papers', input);
+}
+
+// ---- Chạy sync OpenAlex thủ công (POST /admin/run-weekly-now) ----
+export interface RunSyncResult { added: number; alreadyExists: number; errors: number; }
+export async function runWeeklySync(): Promise<RunSyncResult> {
+  return apiPost<RunSyncResult>('/admin/run-weekly-now', {});
 }

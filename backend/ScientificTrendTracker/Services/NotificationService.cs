@@ -40,71 +40,87 @@ namespace ScientificTrendTracker.Services
         public async Task<List<int>> CheckAndPushAsync(
             NotificationTriggerDto trigger)
         {
-            // Ép lowercase + trim vì dữ liệu từ hệ thống thu thập tự động 
-            // và form admin không đồng nhất về định dạng khoảng trắng.
-            string? journalIdClean = trigger.JournalId?.Trim().ToLower();
+            // Giữ nguyên hoa/thường: FollowService lưu Topic/JournalId đúng như FE gửi (không lowercase).
+            string? journalIdClean = trigger.JournalId?.Trim();
             string paperIdClean = trigger.PaperId?.Trim() ?? string.Empty;
             bool hasJournal = !string.IsNullOrEmpty(journalIdClean);
 
             List<string> topicIdsClean = trigger.TopicIds?
-                .Select(id => id.Trim().ToLower())
+                .Select(id => id.Trim())
                 .Where(id => !string.IsNullOrEmpty(id))
                 .ToList() ?? new List<string>();
 
-            // Chỉ kích hoạt điều kiện lọc khi thực sự tồn tại JournalId hoặc TopicId 
-            // nhằm triệt tiêu rủi ro quét nhầm dữ liệu trống rỗng dưới DB.
+            List<int> authorIds = trigger.AuthorIds ?? new List<int>();
+
+            // Quét follower của TÁC GIẢ / TẠP CHÍ / CHỦ ĐỀ khớp với bài báo mới.
             var followedItems = await _context.FollowedItems
                 .AsNoTracking()
                 .Where(f =>
-                    (hasJournal && f.TargetType == "journal"
-                        && f.JournalId == journalIdClean) ||
-                    (topicIdsClean.Any() && f.TargetType == "topic"
-                        && topicIdsClean.Contains(f.TopicId ?? string.Empty)))
-                .Select(f => new { f.UserId, f.FollowId })
+                    (hasJournal && f.TargetType == "journal" && f.JournalId == journalIdClean) ||
+                    (topicIdsClean.Any() && f.TargetType == "topic" && topicIdsClean.Contains(f.TopicId ?? string.Empty)) ||
+                    (authorIds.Any() && f.TargetType == "author" && f.AuthorId != null && authorIds.Contains(f.AuthorId.Value)))
+                .Select(f => new { f.UserId, f.FollowId, f.TargetType })
                 .ToListAsync();
 
             if (followedItems.Count == 0)
             {
-                _logger.LogInformation(
-                    "Không có học giả nào đăng ký nhận tin cho bài báo này.");
-                return new List<int>(); // [Mục 5] Trả về mảng rỗng thô thay vì ném ngoại lệ
+                _logger.LogInformation("Không có học giả nào đăng ký nhận tin cho bài báo này.");
+                return new List<int>();
             }
 
-            var notificationsToCreate = new List<Notification>();
-            string titleMsg = "Bài báo nghiên cứu mới phát hành";
-            string contentMsg = $"Bài báo '{trigger.PaperTitle}' vừa được xuất bản.";
+            // 1 thông báo / user (dedup) — chọn loại đối tượng đầu tiên khớp để soạn message tiếng Anh.
+            var perUser = followedItems.GroupBy(x => x.UserId).Select(g => g.First()).ToList();
 
-            foreach (var item in followedItems)
+            static string MessageFor(string targetType, string paperTitle) => targetType switch
             {
-                notificationsToCreate.Add(new Notification
-                {
-                    UserId = item.UserId,
-                    FollowedItemId = item.FollowId,
-                    Title = titleMsg,
-                    Message = contentMsg,
-                    RelatedPaperId = paperIdClean,
-                    IsRead = false,
-                    CreatedAt = DateTime.UtcNow // [Mục 7] Đồng bộ giờ UTC tránh lệch múi giờ
-                });
-            }
+                "author" => $"New paper from an author you follow: \"{paperTitle}\".",
+                "journal" => $"New paper in a journal you follow: \"{paperTitle}\".",
+                _ => $"New paper on a topic you follow: \"{paperTitle}\".",
+            };
 
-            // Dùng AddRange để EF Core gom cụm lệnh insert vào 1 transaction duy nhất,
-            // triệt tiêu chi phí round-trip đường truyền mạng ảo qua Tailscale.
+            var notificationsToCreate = perUser.Select(item => new Notification
+            {
+                UserId = item.UserId,
+                FollowedItemId = item.FollowId,
+                Title = "New research update",
+                Message = MessageFor(item.TargetType, trigger.PaperTitle),
+                RelatedPaperId = paperIdClean, // link tới bài báo
+                IsRead = false,
+                CreatedAt = DateTime.UtcNow
+            }).ToList();
+
             await _context.Notifications.AddRangeAsync(notificationsToCreate);
             await _context.SaveChangesAsync();
 
-            _logger.LogInformation(
-                "Đã bulk insert thành công {Count} thông báo vào hệ thống.",
-                notificationsToCreate.Count);
+            _logger.LogInformation("Đã tạo {Count} thông báo bài báo mới cho follower.", notificationsToCreate.Count);
+            return perUser.Select(item => item.UserId).Distinct().ToList();
+        }
 
-            // Gom cụm Distinct ở RAM sau khi insert xong để bảo đảm trích xuất 
-            // danh sách UserId duy nhất đẩy lên Hub kích nổ real-time.
-            var uniqueUserIds = followedItems
-                .Select(item => item.UserId)
-                .Distinct()
-                .ToList();
+        /// <summary>Gửi 1 thông báo giống nhau tới MỌI user đang hoạt động (system broadcast của Admin).</summary>
+        public async Task<List<int>> BroadcastAsync(string title, string message)
+        {
+            var userIds = await _context.Users
+                .Where(u => u.IsActive)
+                .Select(u => u.UserId)
+                .ToListAsync();
 
-            return uniqueUserIds; // [Mục 1] Trả về raw type đúng phân tách trách nhiệm
+            if (userIds.Count == 0) return new List<int>();
+
+            var now = DateTime.UtcNow;
+            var notifs = userIds.Select(uid => new Notification
+            {
+                UserId = uid,
+                Title = title,
+                Message = message,
+                IsRead = false,
+                CreatedAt = now
+            }).ToList();
+
+            await _context.Notifications.AddRangeAsync(notifs);
+            await _context.SaveChangesAsync();
+
+            _logger.LogInformation("Admin broadcast: đã gửi tới {Count} user.", userIds.Count);
+            return userIds;
         }
 
         public async Task<List<NotificationItemDto>> GetMyNotificationsAsync(int userId, int limit = 30)

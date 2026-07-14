@@ -901,7 +901,7 @@ namespace ScientificTrendTracker.Controllers
         {
             if (dto == null || string.IsNullOrWhiteSpace(dto.Link))
             {
-                return BadRequest(ApiResponse<object>.Fail(400, "Vui lòng nhập link bài báo (OpenAlex hoặc DOI)."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Please enter a paper link (OpenAlex or DOI)."));
             }
 
             var (success, message) = await _paperService.CreatePaperFromLinkAsync(dto.Link, ct);

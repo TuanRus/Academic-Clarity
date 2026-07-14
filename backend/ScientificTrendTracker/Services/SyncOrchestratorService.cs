@@ -15,19 +15,22 @@ namespace ScientificTrendTracker.Services
         private readonly AppDbContext _dbContext;
         private readonly ILogger<SyncOrchestratorService> _logger;
         private readonly ISyncProgressTracker _progress;
+        private readonly INotificationService _notificationService;
 
         public SyncOrchestratorService(
             IOpenAlexService openAlexService,
             IKeywordExtractionService keywordService,
             AppDbContext dbContext,
             ILogger<SyncOrchestratorService> logger,
-            ISyncProgressTracker progress)
+            ISyncProgressTracker progress,
+            INotificationService notificationService)
         {
             _openAlexService = openAlexService;
             _keywordService = keywordService;
             _dbContext = dbContext;
             _logger = logger;
             _progress = progress;
+            _notificationService = notificationService;
         }
 
         /// <summary>
@@ -387,6 +390,38 @@ namespace ScientificTrendTracker.Services
 
             await SaveAuthorsAsync(paper, newPaper.PaperId);
             await SaveKeywordsAsync(keywords, newPaper.PaperId);
+
+            // Thông báo cho follower của TÁC GIẢ / TẠP CHÍ / CHỦ ĐỀ khi có bài mới (không chặn sync nếu lỗi).
+            try
+            {
+                var authorIds = await _dbContext.PaperAuthors
+                    .Where(pa => pa.PaperId == newPaper.PaperId)
+                    .Select(pa => pa.AuthorId)
+                    .ToListAsync();
+
+                var topicIds = new List<string>();
+                if (!string.IsNullOrWhiteSpace(newPaper.Topic))
+                {
+                    var tid = await _dbContext.ResearchTopics
+                        .Where(t => t.TopicName == newPaper.Topic)
+                        .Select(t => t.TopicId)
+                        .FirstOrDefaultAsync();
+                    if (!string.IsNullOrEmpty(tid)) topicIds.Add(tid);
+                }
+
+                await _notificationService.CheckAndPushAsync(new Models.DTOs.NotificationTriggerDto
+                {
+                    PaperId = newPaper.PaperId,
+                    PaperTitle = newPaper.Title,
+                    JournalId = journalId,
+                    TopicIds = topicIds,
+                    AuthorIds = authorIds
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lỗi gửi thông báo follower cho paper {PaperId}.", newPaper.PaperId);
+            }
 
             return ProcessOutcome.Added;
         }

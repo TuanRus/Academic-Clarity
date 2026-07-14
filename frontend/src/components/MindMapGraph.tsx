@@ -43,7 +43,9 @@ const MindMapGraph = ({ graph, onNodeClick, height = '72vh' }: Props) => {
           label: n.label,
           level: n.level ?? 0,
           shape: 'dot',
-          size: isCentral ? 30 : 12 + Math.sqrt(n.paperCount || 1) * 3,
+          // Kẹp trần kích thước: node nhiều bài (vd "artificial intelligence" ~2000 bài) không phình quá lớn.
+          // Dùng log để giãn nhẹ theo số bài + Math.min chặn trần ~34 (node tâm = 30).
+          size: isCentral ? 30 : Math.min(34, 10 + Math.log2((n.paperCount || 1) + 1) * 3),
           color: isCentral
             ? { background: '#4338ca', border: '#312e81' }
             : { background: trendColor(n.trendScore), border: '#0d9488' },

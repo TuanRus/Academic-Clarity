@@ -188,6 +188,18 @@ namespace ScientificTrendTracker
                     if (stale.Count > 0) db.SaveChanges();
                 }
                 catch { /* không chặn khởi động nếu DB tạm lỗi */ }
+
+                // Bảo đảm cột author_id tồn tại (DB không auto-migrate). Idempotent: chỉ ALTER khi thiếu cột.
+                try
+                {
+                    var db = startupScope.ServiceProvider.GetRequiredService<ScientificTrendTracker.Data.AppDbContext>();
+                    var exists = db.Database
+                        .SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'FollowedItems' AND COLUMN_NAME = 'author_id'")
+                        .AsEnumerable().FirstOrDefault();
+                    if (exists == 0)
+                        db.Database.ExecuteSqlRaw("ALTER TABLE FollowedItems ADD COLUMN author_id INT NULL");
+                }
+                catch { /* không chặn khởi động */ }
             }
 
             // ====================================================================

@@ -16,6 +16,9 @@ namespace ScientificTrendTracker.Models.DTOs
 
         /// <summary>Danh sách các mã chủ đề chuyên mục nghiên cứu gắn liền với bài báo.</summary>
         public List<string> TopicIds { get; set; } = new List<string>();
+
+        /// <summary>Danh sách AuthorId (int) của bài báo — để thông báo cho người theo dõi tác giả.</summary>
+        public List<int> AuthorIds { get; set; } = new List<int>();
     }
 
     /// <summary>Một thông báo của người dùng (cho chuông + trung tâm thông báo).</summary>

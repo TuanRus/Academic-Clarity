@@ -57,12 +57,16 @@ const TrendDashboardPage = () => {
   const [topJournals, setTopJournals] = useState<TrendPremiumJournal[]>([]);
   const [coKeywords, setCoKeywords] = useState<CoOccurringKeyword[]>([]);
   const [drillLoading, setDrillLoading] = useState(false);
-  // Tập journalId đang follow (để nút Follow ở Top journals đổi trạng thái).
+  // Tập journalId / authorId đang follow (để nút Follow đổi trạng thái).
   const [followedJournals, setFollowedJournals] = useState<Set<string>>(new Set());
+  const [followedAuthors, setFollowedAuthors] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     getMyFollows()
-      .then((fs) => setFollowedJournals(new Set(fs.filter((f) => f.targetType === 'journal').map((f) => f.targetId))))
+      .then((fs) => {
+        setFollowedJournals(new Set(fs.filter((f) => f.targetType === 'journal').map((f) => f.targetId)));
+        setFollowedAuthors(new Set(fs.filter((f) => f.targetType === 'author').map((f) => f.targetId)));
+      })
       .catch(() => {});
   }, []);
 
@@ -73,6 +77,18 @@ const TrendDashboardPage = () => {
         const next = new Set(prev);
         if (res.isFollowing) next.add(journalId);
         else next.delete(journalId);
+        return next;
+      });
+    } catch { /* ignore */ }
+  };
+
+  const onToggleAuthorFollow = async (authorId: string) => {
+    try {
+      const res = await toggleFollow('author', authorId);
+      setFollowedAuthors((prev) => {
+        const next = new Set(prev);
+        if (res.isFollowing) next.add(authorId);
+        else next.delete(authorId);
         return next;
       });
     } catch { /* ignore */ }
@@ -345,8 +361,19 @@ const TrendDashboardPage = () => {
                           {topAuthors.map((a) => (
                             <li key={a.authorId} className="flex items-center justify-between gap-2 py-1.5 text-sm">
                               <span className="truncate text-gray-700">{a.fullName}</span>
-                              <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700">
-                                {a.paperCount}
+                              <span className="flex shrink-0 items-center gap-2">
+                                <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-[11px] text-indigo-700">{a.paperCount}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => onToggleAuthorFollow(String(a.authorId))}
+                                  className={`rounded-md border px-2 py-0.5 text-[11px] ${
+                                    followedAuthors.has(String(a.authorId))
+                                      ? 'border-indigo-600 bg-indigo-600 text-white'
+                                      : 'border-gray-300 text-gray-600 hover:bg-gray-50'
+                                  }`}
+                                >
+                                  {followedAuthors.has(String(a.authorId)) ? 'Following' : 'Follow'}
+                                </button>
                               </span>
                             </li>
                           ))}

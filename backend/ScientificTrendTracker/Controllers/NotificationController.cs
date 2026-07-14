@@ -17,7 +17,7 @@ namespace ScientificTrendTracker.Controllers
     /// thông báo và kích nổ chuông real-time cho học giả.
     /// </summary>
     [ApiController]
-    [Authorize(Roles = "admin,system")] // Chặn đứng rủi ro spam thông báo hàng loạt từ public client
+    [Authorize(Roles = "1")] // roleId 1 = Admin (role claim trong JWT là RoleId dạng chuỗi số)
     [Route("api/notifications")]
     public class NotificationController : ControllerBase
     {
@@ -86,5 +86,33 @@ namespace ScientificTrendTracker.Controllers
                     userIds,
                     $"Đã kích nổ thành công thông báo đến {userIds.Count} học giả."));
         }
+
+        /// <summary>Admin gửi thông báo TOÀN HỆ THỐNG (cảnh báo, bảo trì, thông báo chung...) tới mọi user.</summary>
+        /// <param name="dto">BroadcastNotificationDto - Body JSON: { title, message }.</param>
+        [HttpPost("broadcast")]
+        public async Task<IActionResult> BroadcastAsync([FromBody] BroadcastNotificationDto dto)
+        {
+            if (string.IsNullOrWhiteSpace(dto?.Title) || string.IsNullOrWhiteSpace(dto?.Message))
+                return BadRequest(ApiResponse<object>.Fail(400, "Title and message are required."));
+
+            var userIds = await _notificationService.BroadcastAsync(dto.Title.Trim(), dto.Message.Trim());
+
+            if (userIds.Any())
+            {
+                var pushTasks = userIds.Select(uid =>
+                    _hubContext.Clients.Group($"User_{uid}").SendAsync("ReceiveNotification", dto.Title));
+                await Task.WhenAll(pushTasks);
+            }
+
+            return Ok(ApiResponse<object>.Ok(new { sent = userIds.Count },
+                $"Broadcast sent to {userIds.Count} user(s)."));
+        }
+    }
+
+    /// <summary>DTO cho admin broadcast toàn hệ thống.</summary>
+    public class BroadcastNotificationDto
+    {
+        public string Title { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
     }
 }

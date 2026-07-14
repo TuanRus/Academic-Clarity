@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPaymentLink, getPublicPlans, type PublicPlan } from '../../lib/api/payment';
 import { ApiError } from '../../lib/http';
 import { useAuth } from '../../hooks/useAuth';
-import { Role } from '../../types/auth';
+import { Role, AccessTier } from '../../types/auth';
 
 const formatVnd = (amount: number) => `${amount.toLocaleString('vi-VN')}₫`;
 
@@ -12,6 +12,7 @@ const ACADEMIC_ROLES: Role[] = [Role.STUDENT, Role.LECTURER, Role.RESEARCHER];
 const CheckoutPage = () => {
   const { user } = useAuth();
   const isAcademic = !!user && ACADEMIC_ROLES.includes(user.role);
+  const isPremium = user?.accessTier === AccessTier.PREMIUM;
   const finalPrice = (base: number) => (isAcademic ? Math.round(base * 0.5) : base);
 
   const [plans, setPlans] = useState<PublicPlan[]>([]);
@@ -59,7 +60,12 @@ const CheckoutPage = () => {
     <div className="mx-auto max-w-md space-y-4">
       <div>
         <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Checkout Screen</p>
-        <h1 className="text-2xl font-bold text-gray-900">Upgrade to Premium</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{isPremium ? 'Extend your Premium plan' : 'Upgrade to Premium'}</h1>
+        {isPremium && (
+          <p className="mt-1 rounded-md bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+            You are already Premium — the new duration <strong>stacks on top</strong> of your current expiry date.
+          </p>
+        )}
       </div>
 
       {/* Plan selection */}

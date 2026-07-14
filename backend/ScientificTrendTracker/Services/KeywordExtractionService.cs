@@ -69,6 +69,36 @@ namespace ScientificTrendTracker.Services
             return new List<string>();
         }
 
+        /// <inheritdoc/>
+        public async Task<string> CompleteAsync(string prompt, CancellationToken ct = default)
+        {
+            if (string.IsNullOrWhiteSpace(prompt)) return null;
+
+            foreach (var p in LoadOpenAiProviders())
+            {
+                if (string.IsNullOrEmpty(p.BaseUrl) || string.IsNullOrEmpty(p.Model)) continue;
+                try
+                {
+                    var kernel = Kernel.CreateBuilder()
+                        .AddOpenAIChatCompletion(
+                            modelId: p.Model,
+                            apiKey: p.ApiKey,
+                            httpClient: new HttpClient { BaseAddress = new Uri(p.BaseUrl), Timeout = TimeSpan.FromSeconds(120) })
+                        .Build();
+
+                    var settings = new OpenAIPromptExecutionSettings { Temperature = 0.2, MaxTokens = 600 };
+                    var result = await kernel.InvokePromptAsync(prompt, new KernelArguments(settings), cancellationToken: ct);
+                    var text = result.ToString().Trim();
+                    if (!string.IsNullOrWhiteSpace(text)) return text;
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "CompleteAsync lỗi provider {Provider}: {Message}", p.Name, ex.Message);
+                }
+            }
+            return null;
+        }
+
         /// <summary>
         /// Dựng đoạn hướng dẫn "seed" từ keyword OpenAlex sẵn có để AI bám controlled vocabulary.
         /// Rỗng nếu không có seed → prompt hoạt động như cũ.

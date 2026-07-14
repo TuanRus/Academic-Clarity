@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
-import { AccessTier } from '../../types/auth';
+import { AccessTier, Role } from '../../types/auth';
 import * as authApi from '../../lib/api/auth';
 
 // S-04 · Profile & Settings (FR-05) + Subscription section (BR-26..29, mới)
@@ -193,39 +193,63 @@ const ProfilePage = () => {
           </div>
         </div>
 
-        {/* Subscription - phản ánh access_tier, độc lập với role (mục 1, hệ quả #2) */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="text-lg font-semibold text-gray-800">Subscription</h3>
-
-          <div className="mt-3 flex items-center justify-between">
-            <div>
+        {user.role === Role.ADMIN ? (
+          /* Admin: thay ô Subscription bằng Admin Console (chỉ admin thấy) */
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-800">Admin Console</h3>
+            <div className="mt-3 flex items-center justify-between gap-4">
               <p className="text-sm text-gray-700">
-                Current plan: <span className="font-semibold text-gray-900">{user.accessTier}</span>
+                Manage users, papers, pipelines, revenue and system logs.
               </p>
-              {user.accessTier === AccessTier.PREMIUM && user.subscriptionValidUntil && (
-                <p className="text-xs text-gray-500">Valid until {user.subscriptionValidUntil}</p>
-              )}
-              {user.accessTier === AccessTier.BASIC && (
-                <p className="text-xs text-gray-500">
-                  Your academic role ({user.role}) does not change when you upgrade or downgrade your plan.
+              <Link
+                to="/admin"
+                className="shrink-0 rounded-md bg-indigo-700 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-800"
+              >
+                Open Admin Console
+              </Link>
+            </div>
+          </div>
+        ) : (
+          /* Subscription - phản ánh access_tier, độc lập với role */
+          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+            <h3 className="text-lg font-semibold text-gray-800">Subscription</h3>
+
+            <div className="mt-3 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-700">
+                  Current plan: <span className="font-semibold text-gray-900">{user.accessTier}</span>
                 </p>
+                {user.accessTier === AccessTier.PREMIUM && user.subscriptionValidUntil && (
+                  <p className="text-xs text-gray-500">Valid until {user.subscriptionValidUntil}</p>
+                )}
+                {user.accessTier === AccessTier.BASIC && (
+                  <p className="text-xs text-gray-500">
+                    Your academic role ({user.role}) does not change when you upgrade or downgrade your plan.
+                  </p>
+                )}
+              </div>
+
+              {user.accessTier === AccessTier.BASIC ? (
+                <Link
+                  to="/pricing"
+                  className="rounded-md bg-indigo-700 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-800"
+                >
+                  Upgrade to Premium
+                </Link>
+              ) : (
+                <div className="text-right">
+                  <Link
+                    to="/checkout"
+                    className="inline-block rounded-md border border-indigo-700 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50"
+                  >
+                    Extend plan
+                  </Link>
+                  <p className="mt-1 text-xs text-gray-400">Buying more stacks days onto your current expiry.</p>
+                </div>
               )}
             </div>
-
-            {user.accessTier === AccessTier.BASIC ? (
-              <Link
-                to="/pricing"
-                className="rounded-md bg-indigo-700 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-800"
-              >
-                Upgrade to Premium
-              </Link>
-            ) : (
-              <span className="text-xs text-gray-500">
-                Your Premium plan will end automatically when it expires.
-              </span>
-            )}
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

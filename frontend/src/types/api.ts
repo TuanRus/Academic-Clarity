@@ -125,10 +125,14 @@ export interface OverlapMatch {
   sharedKeywords: string[];
   score: number; // 0..1
   tier: OverlapTier;
+  aiNote?: string | null; // nhận định AI: bài này trùng ý tưởng ở điểm nào
 }
 
 export interface OverlapResult {
   extractedKeywords: string[];
   matchedKeywordCount: number;
   matches: OverlapMatch[];
+  aiRisk?: OverlapTier | null;    // mức rủi ro trùng ý tưởng do AI đánh giá
+  aiAssessment?: string | null;   // nhận định tổng hợp của AI
+  finalVerdict?: OverlapTier | null; // kết luận cuối = max(keyword tier, aiRisk)
 }

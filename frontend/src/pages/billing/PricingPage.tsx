@@ -87,9 +87,19 @@ const PricingPage = () => {
           </ul>
 
           {user?.accessTier === AccessTier.PREMIUM ? (
-            <span className="mt-4 inline-block rounded-full bg-indigo-50 px-3 py-1 text-xs text-indigo-700">
-              Current plan
-            </span>
+            <div className="mt-4 space-y-2">
+              <span className="inline-block rounded-full bg-indigo-50 px-3 py-1 text-xs text-indigo-700">
+                Current plan
+              </span>
+              {/* Cho phép Premium mua thêm — thời hạn được CỘNG DỒN vào ngày hết hạn hiện tại. */}
+              <Link
+                to="/checkout"
+                className="block rounded-md border border-indigo-700 px-4 py-2 text-center text-sm font-medium text-indigo-700 hover:bg-indigo-50"
+              >
+                Extend / Buy more
+              </Link>
+              <p className="text-center text-xs text-gray-400">Days are added on top of your current expiry (stacks).</p>
+            </div>
           ) : (
             <Link
               to="/checkout"

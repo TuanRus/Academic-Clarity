@@ -21,12 +21,14 @@ namespace ScientificTrendTracker.Services
         private readonly AppDbContext _dbContext;
         private readonly ILogger<PaperService> _logger;
         private readonly IOpenAlexService _openAlexService;
+        private readonly INotificationService _notificationService;
 
-        public PaperService(AppDbContext dbContext, ILogger<PaperService> logger, IOpenAlexService openAlexService)
+        public PaperService(AppDbContext dbContext, ILogger<PaperService> logger, IOpenAlexService openAlexService, INotificationService notificationService)
         {
             _dbContext = dbContext;
             _logger = logger;
             _openAlexService = openAlexService;
+            _notificationService = notificationService;
         }
 
         public async Task<PagedResult<PaperAdminDto>> GetPapersForAdminAsync(string search, int? year, string journalId, int page, int pageSize, CancellationToken ct)
@@ -128,6 +130,7 @@ namespace ScientificTrendTracker.Services
                 PublicationYear = dto.PublicationYear,
                 PublicationDate = dto.PublicationDate,
                 SourceUrl = dto.SourceUrl?.Trim(),
+                Topic = string.IsNullOrWhiteSpace(dto.Topic) ? null : dto.Topic.Trim(),
                 IsAiProcessed = dto.Keywords.Any(), // Đánh dấu là đã xử lý nếu Admin tự truyền keyword vào
                 CreatedAt = now
             };
@@ -233,18 +236,63 @@ namespace ScientificTrendTracker.Services
 
             await _dbContext.SaveChangesAsync(ct);
             _logger.LogInformation("Admin tạo bài báo mới thành công: '{Title}' (ID: {PaperId})", paper.Title, paperId);
+
+            // Thông báo cho follower của TÁC GIẢ / TẠP CHÍ khi Admin thêm bài (không chặn nếu lỗi).
+            try
+            {
+                var authorIds = await _dbContext.PaperAuthors
+                    .Where(pa => pa.PaperId == paperId)
+                    .Select(pa => pa.AuthorId)
+                    .ToListAsync(ct);
+
+                // Resolve topic của bài -> TopicId để thông báo cho follower đang theo dõi chủ đề đó.
+                // Auto-create ResearchTopic theo tên nếu chưa có (giữ catalog topic nhất quán).
+                var topicIds = new List<string>();
+                if (!string.IsNullOrWhiteSpace(paper.Topic))
+                {
+                    var topicName = paper.Topic.Trim();
+                    var existingTopic = await _dbContext.ResearchTopics
+                        .FirstOrDefaultAsync(t => t.TopicName == topicName, ct);
+                    if (existingTopic == null)
+                    {
+                        existingTopic = new ResearchTopic
+                        {
+                            TopicId = Guid.NewGuid().ToString("N")[..20],
+                            TopicName = topicName,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _dbContext.ResearchTopics.Add(existingTopic);
+                        await _dbContext.SaveChangesAsync(ct);
+                    }
+                    topicIds.Add(existingTopic.TopicId);
+                }
+
+                await _notificationService.CheckAndPushAsync(new Models.DTOs.NotificationTriggerDto
+                {
+                    PaperId = paperId,
+                    PaperTitle = paper.Title,
+                    JournalId = paper.JournalId,
+                    TopicIds = topicIds,
+                    AuthorIds = authorIds
+                });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Lỗi gửi thông báo follower cho bài Admin thêm {PaperId}.", paperId);
+            }
+
             return true;
         }
 
         public async Task<(bool Success, string Message)> CreatePaperFromLinkAsync(string link, CancellationToken ct)
         {
             if (string.IsNullOrWhiteSpace(link))
-                return (false, "Link không được để trống.");
+                return (false, "Link cannot be empty.");
 
             // Tự động lấy metadata bài báo từ OpenAlex (title/doi/năm/tạp chí/tác giả/keyword).
             var work = await _openAlexService.FetchSingleWorkAsync(link.Trim());
             if (work == null || string.IsNullOrWhiteSpace(work.Title))
-                return (false, "Không lấy được dữ liệu bài báo từ link. Kiểm tra lại link OpenAlex hoặc DOI.");
+                return (false, "Could not fetch paper data from the link. Please check the OpenAlex link or DOI.");
 
             DateTime? pubDate = DateTime.TryParse(work.PublicationDate, out var parsed) ? parsed : (DateTime?)null;
 
@@ -265,8 +313,8 @@ namespace ScientificTrendTracker.Services
 
             var ok = await CreatePaperAsync(dto, ct);
             return ok
-                ? (true, $"Đã thêm bài báo: '{work.Title}'.")
-                : (false, "Thêm thất bại — bài báo có thể đã tồn tại (trùng tiêu đề).");
+                ? (true, $"Paper added: '{work.Title}'.")
+                : (false, "Failed to add — the paper may already exist (duplicate title).");
         }
 
         public async Task<bool> UpdatePaperAsync(string paperId, UpdatePaperDto dto, CancellationToken ct)

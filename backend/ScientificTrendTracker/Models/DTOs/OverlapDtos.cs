@@ -21,6 +21,8 @@ namespace ScientificTrendTracker.Models.DTOs
         public double Score { get; set; }
         /// <summary>Mức cảnh báo: "high" (≥0.30) / "medium" (0.15–0.30) / "low".</summary>
         public string Tier { get; set; }
+        /// <summary>Nhận định NGẮN của AI: bài này trùng Ý TƯỞNG với abstract ở điểm nào (null nếu AI không chạy).</summary>
+        public string AiNote { get; set; }
     }
 
     /// <summary>
@@ -34,5 +36,12 @@ namespace ScientificTrendTracker.Models.DTOs
         public int MatchedKeywordCount { get; set; }
         /// <summary>Danh sách bài trùng nhiều keyword nhất, xếp theo điểm giảm dần.</summary>
         public List<OverlapMatchDto> Matches { get; set; } = new();
+
+        /// <summary>Mức rủi ro trùng Ý TƯỞNG do AI đánh giá: "low" / "medium" / "high" (null nếu AI không chạy).</summary>
+        public string AiRisk { get; set; }
+        /// <summary>Nhận định tổng hợp của AI (2–4 câu) về mức độ trùng ý tưởng, kết hợp bằng chứng keyword.</summary>
+        public string AiAssessment { get; set; }
+        /// <summary>Kết luận cuối = mức cao hơn giữa (tier keyword của bài top) và (AiRisk).</summary>
+        public string FinalVerdict { get; set; }
     }
 }

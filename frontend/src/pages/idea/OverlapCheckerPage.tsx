@@ -129,6 +129,27 @@ const OverlapCheckerPage = () => {
 
               {!loading && !error && result && (
                 <div className="space-y-4">
+                  {/* AI idea-overlap verdict (kết hợp keyword + phân tích ngữ nghĩa) */}
+                  {(result.aiAssessment || result.finalVerdict || result.aiRisk) && (() => {
+                    const verdict = (result.finalVerdict ?? result.aiRisk ?? 'low') as OverlapTier;
+                    const vs = tierStyle[verdict];
+                    return (
+                      <div className={`rounded-lg p-3 ring-1 ${vs.badge}`}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold uppercase tracking-wide">AI idea-overlap verdict</span>
+                          <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ring-1 ${vs.badge}`}>
+                            {verdict.toUpperCase()}
+                          </span>
+                        </div>
+                        {result.aiAssessment ? (
+                          <p className="mt-1.5 text-sm">{result.aiAssessment}</p>
+                        ) : (
+                          <p className="mt-1.5 text-xs opacity-70">Combined from keyword evidence (AI narrative unavailable).</p>
+                        )}
+                      </div>
+                    );
+                  })()}
+
                   {/* Extracted keywords */}
                   <div>
                     <p className="mb-1.5 text-xs font-medium uppercase tracking-wide text-gray-400">
@@ -201,6 +222,12 @@ const OverlapCheckerPage = () => {
                                 </span>
                               ))}
                             </div>
+                            {/* Nhận định AI cho riêng bài này */}
+                            {m.aiNote && (
+                              <p className="mt-2 rounded bg-indigo-50 px-2 py-1 text-xs text-indigo-800">
+                                <span className="font-semibold">AI: </span>{m.aiNote}
+                              </p>
+                            )}
                           </li>
                         );
                       })}

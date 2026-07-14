@@ -57,7 +57,7 @@ namespace ScientificTrendTracker.Controllers
                 var remain = (int)Math.Ceiling((RateLimitWindow - (DateTime.UtcNow - lastCallAt)).TotalSeconds);
                 if (remain > 0)
                     return StatusCode(429, ApiResponse<object>.Fail(429,
-                        $"Bạn thao tác quá nhanh. Vui lòng đợi {remain}s rồi thử lại (giới hạn 1 lần/phút)."));
+                        $"You're going too fast. Please wait {remain}s and try again (limit: 1 request per minute)."));
             }
             // Đặt mốc thời gian gọi (tự hết hạn sau 60s) → chặn lần gọi kế trong cửa sổ.
             _cache.Set(cacheKey, DateTime.UtcNow, RateLimitWindow);

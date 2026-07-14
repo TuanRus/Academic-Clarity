@@ -1,9 +1,10 @@
 import { apiGet, apiPost } from '../http';
 
-// Tầng service cho Follow (topic/journal) — nối FollowController (BE).
+// Tầng service cho Follow (topic/journal/author) — nối FollowController (BE).
+export type FollowTargetType = 'topic' | 'journal' | 'author';
 export interface FollowedItem {
   followId: number;
-  targetType: string; // 'topic' | 'journal'
+  targetType: string; // 'topic' | 'journal' | 'author'
   targetId: string;
   name: string;
 }
@@ -12,8 +13,8 @@ export interface FollowResult {
   totalFollowers: number;
 }
 
-/** POST /api/follows/toggle — bật/tắt theo dõi topic hoặc journal. */
-export function toggleFollow(targetType: 'topic' | 'journal', targetId: string): Promise<FollowResult> {
+/** POST /api/follows/toggle — bật/tắt theo dõi topic / journal / author. */
+export function toggleFollow(targetType: FollowTargetType, targetId: string): Promise<FollowResult> {
   return apiPost<FollowResult>('/follows/toggle', { targetType, targetId });
 }
 

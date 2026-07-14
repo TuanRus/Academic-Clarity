@@ -22,5 +22,11 @@ namespace ScientificTrendTracker.Services.Interfaces
         /// List&lt;string&gt; - Keyword (lowercase + dấu cách, tối đa 8). List rỗng nếu abstract null hoặc AI lỗi.
         /// </returns>
         Task<List<string>> ExtractKeywordsAsync(string @abstract, string paperTitle, IReadOnlyList<string> seedKeywords = null);
+
+        /// <summary>
+        /// Sinh văn bản tự do từ 1 prompt bằng AI local (Ollama) — dùng làm FALLBACK cho phân tích trùng ý tưởng
+        /// khi Gemini không khả dụng. Trả text thô của model, hoặc null nếu không provider nào chạy được.
+        /// </summary>
+        Task<string> CompleteAsync(string prompt, CancellationToken ct = default);
     }
 }

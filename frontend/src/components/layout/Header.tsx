@@ -56,11 +56,7 @@ const Header = () => {
           <NavLink to="/library" className={navLinkClass}>
             Saved Library
           </NavLink>
-          {user.role === Role.ADMIN && (
-            <NavLink to="/admin" className={navLinkClass}>
-              Admin Console
-            </NavLink>
-          )}
+          {/* Admin Console đã chuyển vào trang Profile (chỉ admin) → bỏ khỏi header user. */}
         </nav>
 
         <div className="flex items-center gap-4">

@@ -224,12 +224,12 @@ namespace ScientificTrendTracker.Services
         /// </summary>
         private async Task<bool> UpgradeUserAsync(int userId, decimal amountPaid, long orderCode)
         {
-            // Chặn cộng dồn khi webhook + return cùng kích hoạt (cửa sổ 30').
-            bool isAlreadyProcessed = await _context.UserSubscriptions
-                .AnyAsync(s => s.UserId == userId && s.Status == "ACTIVE" && s.CreatedAt >= DateTime.UtcNow.AddMinutes(-30));
-            if (isAlreadyProcessed)
+            // Idempotent theo ĐÚNG orderCode: chặn webhook + return cùng xử lý 1 đơn (double),
+            // nhưng KHÔNG chặn các đơn KHÁC → mua thêm/gia hạn vẫn cộng dồn bình thường.
+            var dedupKey = $"upgraded-order:{orderCode}";
+            if (_cache.TryGetValue(dedupKey, out bool _))
             {
-                _logger.LogWarning("Đơn {OrderCode} của UserId {UserId} đã được thăng cấp trước đó.", orderCode, userId);
+                _logger.LogWarning("Đơn {OrderCode} của UserId {UserId} đã được thăng cấp trước đó (dedup theo orderCode).", orderCode, userId);
                 return true;
             }
 
@@ -264,6 +264,9 @@ namespace ScientificTrendTracker.Services
 
             await _context.UserSubscriptions.AddAsync(newSubscription);
             await _context.SaveChangesAsync();
+
+            // Đánh dấu đơn đã xử lý (idempotent) — chặn webhook + return xử lý lại CÙNG đơn.
+            _cache.Set(dedupKey, true, TimeSpan.FromHours(2));
 
             _logger.LogInformation("UserId {UserId} đã thăng cấp lên Researcher (đơn {OrderCode}).", userId, orderCode);
             return true;

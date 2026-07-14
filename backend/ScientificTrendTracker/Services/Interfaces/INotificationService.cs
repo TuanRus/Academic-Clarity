@@ -19,6 +19,9 @@ namespace ScientificTrendTracker.Services.Interfaces
         /// <returns>Danh sách thô chứa các mã UserId cần nhận thông báo real-time.</returns>
         Task<List<int>> CheckAndPushAsync(NotificationTriggerDto trigger);
 
+        /// <summary>Admin gửi thông báo toàn hệ thống tới MỌI user đang hoạt động. Trả danh sách UserId để đẩy real-time.</summary>
+        Task<List<int>> BroadcastAsync(string title, string message);
+
         /// <summary>Lấy thông báo của 1 user (mới nhất trước).</summary>
         Task<List<NotificationItemDto>> GetMyNotificationsAsync(int userId, int limit = 30);
 
