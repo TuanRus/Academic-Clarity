@@ -284,22 +284,11 @@ const AdminLayout = () => {
                       ].join(' ')
                     }
                   >
-                    {({ isActive }) => (
-                      <>
-                        <span
-                          className={[
-                            'flex h-7 w-7 items-center justify-center rounded-lg text-sm',
-                            isActive
-                              ? 'bg-white text-[#4338ca]'
-                              : 'bg-white text-[#4338ca] shadow-sm',
-                          ].join(' ')}
-                        >
-                          {item.icon}
-                        </span>
+                    <span className="flex h-7 w-7 items-center justify-center text-base">
+                      {item.icon}
+                    </span>
 
-                        <span>{item.label}</span>
-                      </>
-                    )}
+                    <span>{item.label}</span>
                   </NavLink>
                 ))}
               </div>
@@ -319,22 +308,11 @@ const AdminLayout = () => {
               ].join(' ')
             }
           >
-            {({ isActive }) => (
-              <>
-                <span
-                  className={[
-                    'flex h-7 w-7 items-center justify-center rounded-lg text-sm',
-                    isActive
-                      ? 'bg-white text-[#4338ca]'
-                      : 'bg-white text-[#4338ca] shadow-sm',
-                  ].join(' ')}
-                >
-                  ⚙
-                </span>
+            <span className="flex h-7 w-7 items-center justify-center text-base">
+              ⚙
+            </span>
 
-                <span>Settings</span>
-              </>
-            )}
+            <span>Settings</span>
           </NavLink>
         </div>
       </aside>
