@@ -244,10 +244,10 @@ const AdminPipelinesPage = () => {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">
-            OpenAlex Control Panel
+            OpenAlex Data Synchronization
           </h1>
           <p className="mt-1 text-xs text-slate-500">
-            Dedicated management of external data ingestion streams.
+            Configure OpenAlex sources and monitor synchronization jobs.
           </p>
         </div>
 
@@ -270,7 +270,7 @@ const AdminPipelinesPage = () => {
       </div>
 
       <AdminSectionCard
-        title="Ingestion Control"
+        title="Data Sources"
         action={
           <span
             className={`text-[11px] font-bold ${
@@ -287,9 +287,6 @@ const AdminPipelinesPage = () => {
           {sources.map((source) => (
             <tr key={source.id}>
               <td className="px-5 py-4 font-bold text-slate-800">
-                <span className="mr-2 rounded-md bg-blue-50 px-2 py-1 text-blue-700">
-                  ☁
-                </span>
                 {source.engine}
               </td>
 

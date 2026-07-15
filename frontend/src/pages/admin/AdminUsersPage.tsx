@@ -94,25 +94,13 @@ const AdminUsersPage = () => {
     setToast(`${nextUser.name} has been provisioned.`);
   };
 
-  const downloadComplianceReport = () => {
-    const content = `Total Users,Active Users,Pending Role Requests\n${users.length},${activeUsers},${pendingUsers}`;
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'compliance-report.csv';
-    anchor.click();
-    URL.revokeObjectURL(url);
-    setToast('Compliance report downloaded.');
-  };
-
   return (
     <div className="space-y-5">
       <AdminToast message={toast} onClose={() => setToast(null)} />
 
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">User Directory Governance</h1>
-        <p className="mt-1 text-xs text-slate-500">Manage institution access, audit role transitions, and oversee global RBAC alignment across academic departments.</p>
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">User Account Management</h1>
+        <p className="mt-1 text-xs text-slate-500">Manage user roles, account status, and system access.</p>
       </div>
 
       <div className="grid gap-5 lg:grid-cols-3">
@@ -186,13 +174,6 @@ const AdminUsersPage = () => {
                   <button key={pageNumber} onClick={() => setPage(pageNumber)} className={`h-7 w-7 rounded border text-xs font-bold ${pageNumber === page ? 'bg-[#062b4f] text-white' : 'border-slate-200 bg-white text-slate-600'}`}>{pageNumber}</button>
                 ))}
               </div>
-            </div>
-          </AdminSectionCard>
-
-          <AdminSectionCard title="Compliance Status">
-            <div className="p-5">
-              <p className="text-sm text-slate-600">The current RBAC configuration matches the institutional policy 2024-B. No unauthorized role elevations detected in the last 24 hours.</p>
-              <button onClick={downloadComplianceReport} className="mt-3 text-xs font-bold text-[#0b6fb8]">Download Compliance Report →</button>
             </div>
           </AdminSectionCard>
         </div>

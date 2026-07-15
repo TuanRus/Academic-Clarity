@@ -7,15 +7,42 @@ interface AdminMetricCardProps {
 }
 
 const accentMap = {
-  blue: 'bg-blue-100 text-blue-700',
-  green: 'bg-emerald-100 text-emerald-700',
-  orange: 'bg-orange-100 text-orange-700',
-  slate: 'bg-slate-100 text-slate-700',
-  red: 'bg-red-100 text-red-700',
-  yellow: 'bg-yellow-100 text-yellow-700',
-  purple: 'bg-purple-100 text-purple-700',
-  pink: 'bg-pink-100 text-pink-700',
-  cyan: 'bg-cyan-100 text-cyan-700',
+  blue: {
+    icon: 'bg-blue-50 text-blue-700',
+    border: 'border-blue-100',
+  },
+  green: {
+    icon: 'bg-emerald-50 text-emerald-700',
+    border: 'border-emerald-100',
+  },
+  orange: {
+    icon: 'bg-orange-50 text-orange-700',
+    border: 'border-orange-100',
+  },
+  slate: {
+    icon: 'bg-slate-100 text-slate-700',
+    border: 'border-slate-200',
+  },
+  red: {
+    icon: 'bg-red-50 text-red-700',
+    border: 'border-red-100',
+  },
+  yellow: {
+    icon: 'bg-yellow-50 text-yellow-700',
+    border: 'border-yellow-100',
+  },
+  purple: {
+    icon: 'bg-purple-50 text-purple-700',
+    border: 'border-purple-100',
+  },
+  pink: {
+    icon: 'bg-pink-50 text-pink-700',
+    border: 'border-pink-100',
+  },
+  cyan: {
+    icon: 'bg-cyan-50 text-cyan-700',
+    border: 'border-cyan-100',
+  },
 } as const;
 
 const AdminMetricCard = ({
@@ -25,27 +52,42 @@ const AdminMetricCard = ({
   icon,
   accent = 'blue',
 }: AdminMetricCardProps) => {
+  const styles = accentMap[accent];
+
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+    <div
+      className={[
+        'rounded-xl border bg-white p-5 shadow-sm transition',
+        'hover:-translate-y-0.5 hover:shadow-md',
+        styles.border,
+      ].join(' ')}
+    >
       <div className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="text-xs font-extrabold uppercase tracking-[0.06em] text-slate-500">
+            {label}
+          </p>
+
+          <p className="mt-3 text-2xl font-extrabold leading-none text-slate-950">
+            {value}
+          </p>
+
+          <p className="mt-3 text-sm leading-5 text-slate-500">
+            {helper}
+          </p>
+        </div>
+
         <div
-          className={`flex h-11 w-11 items-center justify-center rounded-lg text-lg ${accentMap[accent]}`}
+          className={[
+            'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
+            'text-base font-extrabold',
+            styles.icon,
+          ].join(' ')}
+          aria-hidden="true"
         >
           {icon}
         </div>
-
-        <span className="rounded-full bg-emerald-50 px-2 py-1 text-[10px] font-bold text-emerald-700">
-          ● LIVE
-        </span>
       </div>
-
-      <p className="mt-5 text-[11px] font-bold uppercase tracking-wide text-slate-500">
-        {label}
-      </p>
-      <p className="mt-1 text-2xl font-extrabold tracking-tight text-slate-950">
-        {value}
-      </p>
-      <p className="mt-1 text-xs text-slate-500">{helper}</p>
     </div>
   );
 };

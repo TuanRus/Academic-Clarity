@@ -23,6 +23,7 @@ const AdminRepositoryPage = () => {
     getKeywords().then(setKeywords).catch(() => setKeywords([]));
   }, []);
   const [query, setQuery] = useState('');
+  const [keywordQuery, setKeywordQuery] = useState('');
   const [showKeywordModal, setShowKeywordModal] = useState(false);
   const [keywordName, setKeywordName] = useState('');
   const [keywordDescription, setKeywordDescription] = useState('');
@@ -40,7 +41,7 @@ const AdminRepositoryPage = () => {
   const [mTopic, setMTopic] = useState('');
   const [adding, setAdding] = useState(false);
 
-  const reloadPapers = () => getPapers().then(setPapers).catch(() => {});
+  const reloadPapers = () => getPapers().then(setPapers).catch(() => { });
 
   const submitAdd = async () => {
     setAdding(true);
@@ -74,6 +75,12 @@ const AdminRepositoryPage = () => {
     `${paper.id} ${paper.title} ${paper.authors} ${paper.doi} ${paper.journal} ${paper.year} ${paper.citations}`
       .toLowerCase()
       .includes(query.toLowerCase()),
+  );
+
+  const filteredKeywords = keywords.filter((keyword) =>
+    `${keyword.id} ${keyword.name} ${keyword.description} ${keyword.fields} ${keyword.status}`
+      .toLowerCase()
+      .includes(keywordQuery.trim().toLowerCase()),
   );
 
   const exportRepository = () => {
@@ -245,16 +252,26 @@ const AdminRepositoryPage = () => {
           title="Keyword Registry"
           subtitle="Manage research keywords used for trend analysis and search suggestions."
           action={
-            <button
-              onClick={() => setShowKeywordModal(true)}
-              className="rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white"
-            >
-              + New Keyword
-            </button>
+            <div className="flex items-center gap-3">
+              <input
+                value={keywordQuery}
+                onChange={(event) => setKeywordQuery(event.target.value)}
+                placeholder="Filter by keyword name, ID, description or status..."
+                className="w-72 rounded-md border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#0b6fb8]"
+              />
+
+              <button
+                type="button"
+                onClick={() => setShowKeywordModal(true)}
+                className="whitespace-nowrap rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white hover:bg-[#3730a3]"
+              >
+                + New Keyword
+              </button>
+            </div>
           }
         >
           <AdminTable headers={['Keyword ID', 'Keyword Name', 'Description', 'Related Papers', 'Status', 'Actions']}>
-            {keywords.map((keyword) => (
+            {filteredKeywords.map((keyword) => (
               <tr key={keyword.id} className={`hover:bg-slate-50 ${keyword.status === 'DISMISSED' ? 'opacity-50' : ''}`} >
                 <td className="px-5 py-5 font-bold text-slate-500">{keyword.id}</td>
 
