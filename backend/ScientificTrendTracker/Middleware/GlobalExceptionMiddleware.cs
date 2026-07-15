@@ -39,7 +39,7 @@ namespace ScientificTrendTracker.Middleware
             }
             catch (BreachDetectedException ex)
             {
-                _logger.LogWarning(ex, "Phát hiện vi phạm bảo mật (Breach Detected) tại {Path}", context.Request.Path);
+                _logger.LogWarning(ex, "Security breach detected at {Path}", context.Request.Path);
                 context.Response.StatusCode = 401;
                 context.Response.ContentType = "application/json";
                 var response = ApiResponse<object>.Fail(401, ex.Message);
@@ -50,7 +50,7 @@ namespace ScientificTrendTracker.Middleware
                 _logger.LogError(ex, "Unhandled exception tại {Path}", context.Request.Path);
                 context.Response.StatusCode = 500;
                 context.Response.ContentType = "application/json";
-                var response = ApiResponse<object>.Fail(500, "Lỗi hệ thống. Vui lòng thử lại sau.");
+                var response = ApiResponse<object>.Fail(500, "Internal server error. Please try again later.");
                 await context.Response.WriteAsJsonAsync(response);
             }
         }

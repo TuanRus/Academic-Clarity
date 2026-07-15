@@ -61,20 +61,20 @@ namespace ScientificTrendTracker.Controllers
         {
             if (toYear <= 0) toYear = DateTime.UtcNow.Year; // mặc định = năm hiện tại (không hardcode)
             if (!IsValidDimension(dimension))
-                return BadRequest(ApiResponse<object>.Fail(400, "dimension phải là keyword / author / journal."));
+                return BadRequest(ApiResponse<object>.Fail(400, "dimension must be keyword / author / journal."));
             if (string.IsNullOrWhiteSpace(value))
-                return BadRequest(ApiResponse<object>.Fail(400, "value không được để trống."));
+                return BadRequest(ApiResponse<object>.Fail(400, "value cannot be empty."));
             if (fromYear > toYear)
-                return BadRequest(ApiResponse<object>.Fail(400, "fromYear không được lớn hơn toYear."));
+                return BadRequest(ApiResponse<object>.Fail(400, "fromYear cannot be greater than toYear."));
 
             var series = await _trendService.GetSeriesAsync(dimension.Trim(), value.Trim(), fromYear, toYear, groupBy);
 
             if (series == null)
                 return NotFound(ApiResponse<object>.Fail(404,
-                    $"Không tìm thấy {dimension} '{value}' trong hệ thống."));
+                    $"Could not find {dimension} '{value}' in the system."));
 
             return Ok(ApiResponse<TrendSeriesDto>.Ok(series,
-                $"Trend {dimension} '{series.Value}': {series.Direction}, {series.Series.Count} kỳ."));
+                $"Trend for {dimension} '{series.Value}': {series.Direction}, {series.Series.Count} period(s)."));
         }
 
         /// <summary>
@@ -113,16 +113,16 @@ namespace ScientificTrendTracker.Controllers
         {
             if (toYear <= 0) toYear = DateTime.UtcNow.Year; // mặc định = năm hiện tại (không hardcode)
             if (!IsValidDimension(dimension))
-                return BadRequest(ApiResponse<object>.Fail(400, "dimension phải là keyword / author / journal."));
+                return BadRequest(ApiResponse<object>.Fail(400, "dimension must be keyword / author / journal."));
             if (fromYear > toYear)
-                return BadRequest(ApiResponse<object>.Fail(400, "fromYear không được lớn hơn toYear."));
+                return BadRequest(ApiResponse<object>.Fail(400, "fromYear cannot be greater than toYear."));
             if (topN < 1 || topN > 100)
-                return BadRequest(ApiResponse<object>.Fail(400, "topN phải từ 1 đến 100."));
+                return BadRequest(ApiResponse<object>.Fail(400, "topN must be between 1 and 100."));
 
             var items = await _trendService.GetTopAsync(dimension.Trim(), fromYear, toYear, topN, minPapers, sortBy);
 
             return Ok(ApiResponse<List<TrendTopItemDto>>.Ok(items,
-                $"Top {items.Count} {dimension} từ {fromYear}–{toYear}."));
+                $"Top {items.Count} {dimension} from {fromYear} to {toYear}."));
         }
 
         /// <summary>
@@ -149,15 +149,15 @@ namespace ScientificTrendTracker.Controllers
             CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(keyword))
-                return BadRequest(ApiResponse<object>.Fail(400, "Từ khóa không được để trống."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Keyword cannot be empty."));
             if (toYear <= 0) toYear = DateTime.UtcNow.Year;
             if (fromYear > toYear)
-                return BadRequest(ApiResponse<object>.Fail(400, "fromYear không được lớn hơn toYear."));
+                return BadRequest(ApiResponse<object>.Fail(400, "fromYear cannot be greater than toYear."));
 
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
             {
-                return Unauthorized(ApiResponse<object>.Fail(401, "Danh tính không hợp lệ."));
+                return Unauthorized(ApiResponse<object>.Fail(401, "Invalid identity."));
             }
 
             var subStatus = await _subscriptionService.GetSubscriptionStatusAsync(userId, ct);
@@ -167,8 +167,8 @@ namespace ScientificTrendTracker.Controllers
             var papers = await _trendService.GetTopPapersForKeywordAsync(keyword.Trim(), fromYear, toYear, limit, ct);
 
             var message = isPremium 
-                ? $"Tài khoản Premium: Tìm thấy {papers.Count} bài báo tiêu biểu." 
-                : $"Tài khoản Free: Chỉ hiển thị 2 bài báo nổi bật nhất. Nâng cấp Premium để xem đầy đủ Top 20.";
+                ? $"Premium Account: Found {papers.Count} representative paper(s)." 
+                : $"Free Account: Showing only 2 most featured papers. Upgrade to Premium to see the full Top 20.";
 
             return Ok(ApiResponse<List<TrendPremiumPaperDto>>.Ok(papers, message));
         }
@@ -197,15 +197,15 @@ namespace ScientificTrendTracker.Controllers
             CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(keyword))
-                return BadRequest(ApiResponse<object>.Fail(400, "Từ khóa không được để trống."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Keyword cannot be empty."));
             if (toYear <= 0) toYear = DateTime.UtcNow.Year;
             if (fromYear > toYear)
-                return BadRequest(ApiResponse<object>.Fail(400, "fromYear không được lớn hơn toYear."));
+                return BadRequest(ApiResponse<object>.Fail(400, "fromYear cannot be greater than toYear."));
 
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
             {
-                return Unauthorized(ApiResponse<object>.Fail(401, "Danh tính không hợp lệ."));
+                return Unauthorized(ApiResponse<object>.Fail(401, "Invalid identity."));
             }
 
             var subStatus = await _subscriptionService.GetSubscriptionStatusAsync(userId, ct);
@@ -215,8 +215,8 @@ namespace ScientificTrendTracker.Controllers
             var authors = await _trendService.GetTopAuthorsForKeywordAsync(keyword.Trim(), fromYear, toYear, limit, ct);
 
             var message = isPremium 
-                ? $"Tài khoản Premium: Tìm thấy {authors.Count} tác giả hàng đầu." 
-                : $"Tài khoản Free: Chỉ hiển thị 2 tác giả nổi bật nhất. Nâng cấp Premium để xem đầy đủ Top 20.";
+                ? $"Premium Account: Found {authors.Count} top author(s)." 
+                : $"Free Account: Showing only 2 most featured authors. Upgrade to Premium to see the full Top 20.";
 
             return Ok(ApiResponse<List<TrendPremiumAuthorDto>>.Ok(authors, message));
         }
@@ -245,15 +245,15 @@ namespace ScientificTrendTracker.Controllers
             CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(keyword))
-                return BadRequest(ApiResponse<object>.Fail(400, "Từ khóa không được để trống."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Keyword cannot be empty."));
             if (toYear <= 0) toYear = DateTime.UtcNow.Year;
             if (fromYear > toYear)
-                return BadRequest(ApiResponse<object>.Fail(400, "fromYear không được lớn hơn toYear."));
+                return BadRequest(ApiResponse<object>.Fail(400, "fromYear cannot be greater than toYear."));
 
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
             {
-                return Unauthorized(ApiResponse<object>.Fail(401, "Danh tính không hợp lệ."));
+                return Unauthorized(ApiResponse<object>.Fail(401, "Invalid identity."));
             }
 
             var subStatus = await _subscriptionService.GetSubscriptionStatusAsync(userId, ct);
@@ -263,8 +263,8 @@ namespace ScientificTrendTracker.Controllers
             var journals = await _trendService.GetTopJournalsForKeywordAsync(keyword.Trim(), fromYear, toYear, limit, ct);
 
             var message = isPremium 
-                ? $"Tài khoản Premium: Tìm thấy {journals.Count} tạp chí hàng đầu." 
-                : $"Tài khoản Free: Chỉ hiển thị 2 tạp chí nổi bật nhất. Nâng cấp Premium để xem đầy đủ Top 20.";
+                ? $"Premium Account: Found {journals.Count} top journal(s)." 
+                : $"Free Account: Showing only 2 most featured journals. Upgrade to Premium to see the full Top 20.";
 
             return Ok(ApiResponse<List<TrendPremiumJournalDto>>.Ok(journals, message));
         }
@@ -293,15 +293,15 @@ namespace ScientificTrendTracker.Controllers
             CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(keyword))
-                return BadRequest(ApiResponse<object>.Fail(400, "Từ khóa không được để trống."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Keyword cannot be empty."));
             if (toYear <= 0) toYear = DateTime.UtcNow.Year;
             if (fromYear > toYear)
-                return BadRequest(ApiResponse<object>.Fail(400, "fromYear không được lớn hơn toYear."));
+                return BadRequest(ApiResponse<object>.Fail(400, "fromYear cannot be greater than toYear."));
 
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
             {
-                return Unauthorized(ApiResponse<object>.Fail(401, "Danh tính không hợp lệ."));
+                return Unauthorized(ApiResponse<object>.Fail(401, "Invalid identity."));
             }
 
             var subStatus = await _subscriptionService.GetSubscriptionStatusAsync(userId, ct);
@@ -311,8 +311,8 @@ namespace ScientificTrendTracker.Controllers
             var keywords = await _trendService.GetCoOccurringKeywordsAsync(keyword.Trim(), fromYear, toYear, limit, ct);
 
             var message = isPremium 
-                ? $"Tài khoản Premium: Tìm thấy {keywords.Count} từ khóa đồng xuất hiện." 
-                : $"Tài khoản Free: Chỉ hiển thị 2 từ khóa đồng xuất hiện phổ biến nhất. Nâng cấp Premium để xem đầy đủ Top 20.";
+                ? $"Premium Account: Found {keywords.Count} co-occurring keyword(s)." 
+                : $"Free Account: Showing only 2 most common co-occurring keywords. Upgrade to Premium to see the full Top 20.";
 
             return Ok(ApiResponse<List<CoOccurringKeywordDto>>.Ok(keywords, message));
         }
