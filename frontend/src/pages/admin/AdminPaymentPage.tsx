@@ -8,6 +8,7 @@ import AdminToast from '../../components/admin/AdminToast';
 import {
   getTransactions,
   getPlans,
+  getSystemConfig,
   type RevenueRow,
   type SubscriptionPlan,
 } from '../../lib/api/admin';
@@ -15,9 +16,14 @@ import {
 const AdminPaymentPage = () => {
   const [rows, setRows] = useState<RevenueRow[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [payosConfigured, setPayosConfigured] = useState<boolean | null>(null);
   useEffect(() => {
     getTransactions().then(setRows).catch(() => setRows([]));
     getPlans().then(setPlans).catch(() => setPlans([]));
+    // Trạng thái cấu hình cổng thanh toán PayOS (chuyển từ Settings sang đây).
+    getSystemConfig()
+      .then((c) => setPayosConfigured(c.integrations.find((i) => i.name === 'PayOS')?.configured ?? false))
+      .catch(() => setPayosConfigured(null));
   }, []);
   const [statusFilter, setStatusFilter] = useState<'ALL' | RevenueRow['status']>('ALL');
   const [selectedRow, setSelectedRow] = useState<RevenueRow | null>(null);
@@ -111,6 +117,15 @@ const AdminPaymentPage = () => {
           <p className="mt-1 text-xs text-slate-500">
             Monitor subscription revenue, payment transactions and premium plan performance.
           </p>
+          {payosConfigured !== null && (
+            <span
+              className={`mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                payosConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {payosConfigured ? '✓' : '✗'} PayOS gateway {payosConfigured ? 'configured' : 'not configured'}
+            </span>
+          )}
         </div>
 
         <div className="flex gap-3">

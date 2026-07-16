@@ -6,7 +6,8 @@ import AdminTable from '../../components/admin/AdminTable';
 import AdminToast from '../../components/admin/AdminToast';
 import {
   getSyncLogs, startLiveSync, getSyncProgress, getSyncedPapers, deleteEmptySyncLogs,
-  type PipelineEvent, type SyncedPaper, type SyncProgress,
+  getSystemConfig,
+  type PipelineEvent, type SyncedPaper, type SyncProgress, type IntegrationStatus,
 } from '../../lib/api/admin';
 
 // Màu chữ trạng thái realtime của Live Monitor.
@@ -37,6 +38,14 @@ const AdminPipelinesPage = () => {
 
   const [history, setHistory] = useState<PipelineEvent[]>([]);
   useEffect(() => { getSyncLogs().then(setHistory).catch(() => setHistory([])); }, []);
+
+  // Trạng thái tích hợp liên quan pipeline (OpenAlex nguồn dữ liệu + AI trích keyword).
+  const [pipelineIntegrations, setPipelineIntegrations] = useState<IntegrationStatus[]>([]);
+  useEffect(() => {
+    getSystemConfig()
+      .then((c) => setPipelineIntegrations(c.integrations.filter((i) => i.name === 'OpenAlex' || i.name === 'Gemini AI')))
+      .catch(() => setPipelineIntegrations([]));
+  }, []);
   const [apiKey, setApiKey] = useState('sk-openalex-demo-key');
   const [isSyncing, setIsSyncing] = useState(false);
   const [showAddSourceModal, setShowAddSourceModal] = useState(false);
@@ -249,6 +258,20 @@ const AdminPipelinesPage = () => {
           <p className="mt-1 text-xs text-slate-500">
             Configure OpenAlex sources and monitor synchronization jobs.
           </p>
+          {pipelineIntegrations.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {pipelineIntegrations.map((it) => (
+                <span
+                  key={it.name}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                    it.configured ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {it.configured ? '✓' : '✗'} {it.name}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex gap-3">

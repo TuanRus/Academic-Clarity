@@ -295,26 +295,6 @@ const AdminLayout = () => {
             </div>
           ))}
         </nav>
-
-        <div className="border-t border-slate-200 px-3 py-4">
-          <NavLink
-            to="/admin/settings"
-            className={({ isActive }) =>
-              [
-                'flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition',
-                isActive
-                  ? 'bg-[#4338ca] text-white shadow-md shadow-indigo-200'
-                  : 'text-slate-600 hover:bg-violet-50 hover:text-[#4338ca]',
-              ].join(' ')
-            }
-          >
-            <span className="flex h-7 w-7 items-center justify-center text-base">
-              ⚙
-            </span>
-
-            <span>Settings</span>
-          </NavLink>
-        </div>
       </aside>
 
       <div className="ml-[244px] min-h-screen">

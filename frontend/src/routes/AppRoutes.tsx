@@ -25,7 +25,6 @@ import AdminRepositoryPage from '../pages/admin/AdminRepositoryPage';
 import AdminUsersPage from '../pages/admin/AdminUsersPage';
 import AdminPaymentPage from '../pages/admin/AdminPaymentPage';
 import AdminActivityLogsPage from '../pages/admin/AdminActivityLogsPage';
-import AdminSettingsPage from '../pages/admin/AdminSettingsPage';
 
 const AppRoutes = () => {
   return (
@@ -68,7 +67,6 @@ const AppRoutes = () => {
           <Route path="users" element={<AdminUsersPage />} />
           <Route path="revenue" element={<AdminPaymentPage />} />
           <Route path="logs" element={<AdminActivityLogsPage />} />
-          <Route path="settings" element={<AdminSettingsPage />} />
         </Route>
       </Route>
 

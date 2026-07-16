@@ -5,7 +5,8 @@ import AdminModal from '../../components/admin/AdminModal';
 import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
 import AdminToast from '../../components/admin/AdminToast';
-import { getUsers, updateUserStatus, updateUserRole, roleIdFromName, type UserDirectoryRow } from '../../lib/api/admin';
+import { getUsers, updateUserStatus, updateUserRole, roleIdFromName, sendBroadcast, type UserDirectoryRow } from '../../lib/api/admin';
+import { ApiError } from '../../lib/http';
 
 // Phải khớp CHÍNH XÁC với nhãn role do roleName() trả về (admin.ts), nếu không <select>
 // không tìm được option khớp → mọi dòng đều rơi về option đầu tiên.
@@ -22,6 +23,24 @@ const AdminUsersPage = () => {
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState(roleOptions[3]);
   const [toast, setToast] = useState<string | null>(null);
+
+  // System broadcast — gửi thông báo tới TOÀN bộ người dùng (chuyển từ Settings sang đây).
+  const [bcTitle, setBcTitle] = useState('');
+  const [bcMessage, setBcMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const handleBroadcast = async () => {
+    if (!bcTitle.trim() || !bcMessage.trim()) { setToast('Title and message are required.'); return; }
+    setSending(true);
+    try {
+      await sendBroadcast(bcTitle.trim(), bcMessage.trim());
+      setToast('Broadcast sent to all users.');
+      setBcTitle(''); setBcMessage('');
+    } catch (e) {
+      setToast(e instanceof ApiError ? e.message : 'Failed to send broadcast.');
+    } finally {
+      setSending(false);
+    }
+  };
 
   const filteredUsers = useMemo(() => users.filter((user) => `${user.id} ${user.name} ${user.email} ${user.role}`.toLowerCase().includes(query.toLowerCase())), [query, users]);
   const pageSize = 4;
@@ -119,6 +138,31 @@ const AdminUsersPage = () => {
           accent="green"
         />
       </div>
+
+      <AdminSectionCard title="System Broadcast" subtitle="Send an announcement (alert, maintenance, notice…) to every user.">
+        <div className="space-y-3 p-5">
+          <input
+            value={bcTitle}
+            onChange={(e) => setBcTitle(e.target.value)}
+            placeholder="Broadcast title (e.g. Scheduled maintenance)"
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]"
+          />
+          <textarea
+            value={bcMessage}
+            onChange={(e) => setBcMessage(e.target.value)}
+            rows={3}
+            placeholder="Message sent to all users…"
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]"
+          />
+          <button
+            onClick={handleBroadcast}
+            disabled={sending}
+            className="rounded-md bg-[#4338ca] hover:bg-[#3730a3] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+          >
+            {sending ? 'Sending…' : 'Send to all users'}
+          </button>
+        </div>
+      </AdminSectionCard>
 
       <div className="space-y-5">
         <div className="space-y-5">
