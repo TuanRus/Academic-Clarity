@@ -23,7 +23,7 @@ import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
 import AdminPipelinesPage from '../pages/admin/AdminPipelinesPage';
 import AdminRepositoryPage from '../pages/admin/AdminRepositoryPage';
 import AdminUsersPage from '../pages/admin/AdminUsersPage';
-import AdminRevenuePage from '../pages/admin/AdminRevenuePage';
+import AdminRevenuePage from '../pages/admin/AdminPaymentPage';
 import AdminActivityLogsPage from '../pages/admin/AdminActivityLogsPage';
 import AdminSettingsPage from '../pages/admin/AdminSettingsPage';
 

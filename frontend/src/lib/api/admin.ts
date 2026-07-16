@@ -13,7 +13,7 @@ export interface RepositoryCategory { id: string; name: string; description: str
 export interface RepositoryPaper { id: string; title: string; doi: string; journal: string; year: number; citations: number; status: AdminStatus; authors: string; }
 export interface RepositoryAnomaly { id: string; label: string; title: string; tone: 'orange' | 'red'; action: 'Auto-Fill' | 'Review'; status: AdminStatus; }
 export interface UserDirectoryRow { id: string; initials: string; name: string; email: string; role: string; status: AdminStatus; }
-export interface ActivityLog { type: 'ELEVATION' | 'LEDGER' | 'AUTH_FAIL' | 'UPDATE'; time: string; title: string; ref: string; }
+export interface ActivityLog { id: number; type: 'ELEVATION' | 'LEDGER' | 'AUTH_FAIL' | 'UPDATE'; time: string; title: string; ref: string; }
 export interface RevenueRow { transactionId: string; invoiceId: string; customer: string; plan: string; amount: string; method: string; paidAt: string; status: AdminStatus; }
 export interface SubscriptionPlan { id: string; name: string; price: string; duration: string; status: AdminStatus; priceAmount: number; durationDays: number; }
 
@@ -88,11 +88,27 @@ export async function getUsers(): Promise<UserDirectoryRow[]> {
 // ---- Activity logs (GET /admin/activity-logs) ----
 interface BeActivityLog { logId: number; adminName: string; action: string; description: string; createdAt: string; }
 export async function getActivityLogs(): Promise<ActivityLog[]> {
-  const res = await apiGet<Paged<BeActivityLog>>('/admin/activity-logs', { page: 1, pageSize: 50 });
+  const res = await apiGet<Paged<BeActivityLog>>(
+    '/admin/activity-logs',
+    {
+      page: 1,
+      pageSize: 50,
+    },
+  );
+
   return res.items.map((l) => ({
-    type: l.action?.includes('RESET') || l.action?.includes('DELETE') ? 'AUTH_FAIL'
-      : l.action?.includes('REPROCESS') || l.action?.includes('REBUILD') ? 'UPDATE'
-      : l.action?.includes('SUBSCRIPTION') || l.action?.includes('REVENUE') ? 'LEDGER' : 'ELEVATION',
+    id: l.logId,
+
+    type:
+      l.action?.includes('RESET') || l.action?.includes('DELETE')
+        ? 'AUTH_FAIL'
+        : l.action?.includes('REPROCESS') || l.action?.includes('REBUILD')
+          ? 'UPDATE'
+          : l.action?.includes('SUBSCRIPTION') ||
+            l.action?.includes('REVENUE')
+            ? 'LEDGER'
+            : 'ELEVATION',
+
     time: toVnTime(l.createdAt),
     title: l.description,
     ref: `${l.action} · ${l.adminName}`,

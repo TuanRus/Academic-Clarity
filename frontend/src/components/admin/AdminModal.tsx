@@ -13,11 +13,13 @@ const AdminModal = ({ open, title, subtitle, children, footer, onClose }: AdminM
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 px-4">
-      <div className="w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-2xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 px-4">
+      <div className="w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-xl">
         <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
           <div>
-            <h2 className="text-base font-extrabold text-slate-950">{title}</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              {title}
+            </h2>
             {subtitle && <p className="mt-1 text-xs text-slate-500">{subtitle}</p>}
           </div>
           <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">×</button>
