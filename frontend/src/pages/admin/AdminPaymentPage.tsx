@@ -9,9 +9,11 @@ import {
   getTransactions,
   getPlans,
   getSystemConfig,
+  updatePlan,
   type RevenueRow,
   type SubscriptionPlan,
 } from '../../lib/api/admin';
+import { ApiError } from '../../lib/http';
 
 const AdminPaymentPage = () => {
   const [rows, setRows] = useState<RevenueRow[]>([]);
@@ -89,20 +91,32 @@ const AdminPaymentPage = () => {
 
   const openEditPlan = (plan: SubscriptionPlan) => {
     setEditingPlan(plan);
-    setPlanPrice(plan.price);
+    // Sửa trên số tiền thô (VND) để lưu backend chính xác, không phải chuỗi đã format.
+    setPlanPrice(String(plan.priceAmount));
   };
 
-  const savePlan = () => {
+  const [savingPlan, setSavingPlan] = useState(false);
+  const savePlan = async () => {
     if (!editingPlan) return;
-
-    setPlans((current) =>
-      current.map((plan) =>
-        plan.id === editingPlan.id ? { ...plan, price: planPrice } : plan,
-      ),
-    );
-
-    setEditingPlan(null);
-    setToast(`${editingPlan.name} price updated.`);
+    const amount = Number(planPrice);
+    if (!Number.isFinite(amount) || amount < 0) { setToast('Enter a valid price (number in VND).'); return; }
+    setSavingPlan(true);
+    try {
+      // Lưu THẬT xuống DB (PUT /admin/subscriptions/plans/{id}), rồi tải lại từ server.
+      await updatePlan(editingPlan.id, {
+        planName: editingPlan.name,
+        priceAmount: amount,
+        durationDays: editingPlan.durationDays,
+        isActive: editingPlan.status === 'ACTIVE',
+      });
+      setPlans(await getPlans());
+      setEditingPlan(null);
+      setToast(`${editingPlan.name} price updated.`);
+    } catch (e) {
+      setToast(e instanceof ApiError ? e.message : 'Failed to update plan.');
+    } finally {
+      setSavingPlan(false);
+    }
   };
 
   return (
@@ -318,9 +332,10 @@ const AdminPaymentPage = () => {
 
             <button
               onClick={savePlan}
-              className="rounded-md bg-[#062b4f] px-4 py-2 text-xs font-bold text-white"
+              disabled={savingPlan}
+              className="rounded-md bg-[#062b4f] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
             >
-              Save Plan
+              {savingPlan ? 'Saving…' : 'Save Plan'}
             </button>
           </>
         }
@@ -329,11 +344,17 @@ const AdminPaymentPage = () => {
           <div className="space-y-4">
             <p className="text-sm font-bold text-slate-800">{editingPlan.name}</p>
 
-            <input
-              value={planPrice}
-              onChange={(event) => setPlanPrice(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]"
-            />
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-slate-500">Price (VND)</span>
+              <input
+                value={planPrice}
+                onChange={(event) => setPlanPrice(event.target.value)}
+                inputMode="numeric"
+                placeholder="e.g. 50000"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]"
+              />
+            </label>
+            <p className="text-xs text-slate-400">Duration: {editingPlan.duration} · Status: {editingPlan.status}</p>
           </div>
         )}
       </AdminModal>
