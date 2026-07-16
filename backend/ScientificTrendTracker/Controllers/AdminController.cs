@@ -179,6 +179,7 @@ namespace ScientificTrendTracker.Controllers
             if (page < 1) page = 1;
             if (pageSize < 1 || pageSize > 200) pageSize = 50;
 
+            var now = DateTime.UtcNow;
             var query = _dbContext.Users.OrderByDescending(u => u.CreateAt);
             var total = await query.CountAsync();
             var items = await query
@@ -193,7 +194,10 @@ namespace ScientificTrendTracker.Controllers
                     u.AccountTag,
                     u.Institution,
                     u.CreateAt,
-                    u.LastLoginAt
+                    u.LastLoginAt,
+                    // Premium = có ít nhất 1 gói đang ACTIVE còn hiệu lực (dùng để phân loại User Overview).
+                    IsPremium = _dbContext.UserSubscriptions.Any(s =>
+                        s.UserId == u.UserId && s.Status == "ACTIVE" && (s.EndsAt == null || s.EndsAt > now))
                 })
                 .ToListAsync();
 

@@ -12,9 +12,9 @@ export interface PipelineEvent { id?: number; title: string; time: string; statu
 export interface RepositoryCategory { id: string; name: string; description: string; fields: number; status: AdminStatus; }
 export interface RepositoryPaper { id: string; title: string; doi: string; journal: string; year: number; citations: number; status: AdminStatus; authors: string; }
 export interface RepositoryAnomaly { id: string; label: string; title: string; tone: 'orange' | 'red'; action: 'Auto-Fill' | 'Review'; status: AdminStatus; }
-export interface UserDirectoryRow { id: string; initials: string; name: string; email: string; role: string; status: AdminStatus; }
+export interface UserDirectoryRow { id: string; initials: string; name: string; email: string; role: string; status: AdminStatus; isPremium?: boolean; }
 export interface ActivityLog { id: number; type: 'ELEVATION' | 'LEDGER' | 'AUTH_FAIL' | 'UPDATE'; time: string; title: string; ref: string; }
-export interface RevenueRow { transactionId: string; invoiceId: string; customer: string; plan: string; amount: string; method: string; paidAt: string; status: AdminStatus; }
+export interface RevenueRow { transactionId: string; invoiceId: string; customer: string; customerEmail: string; plan: string; amount: string; method: string; paidAt: string; status: AdminStatus; }
 export interface SubscriptionPlan { id: string; name: string; price: string; duration: string; status: AdminStatus; priceAmount: number; durationDays: number; }
 
 export interface DashboardStats {
@@ -72,7 +72,7 @@ export function getDashboardStats(): Promise<DashboardStats> {
 }
 
 // ---- Users directory (GET /admin/users) ----
-interface BeUser { userId: number; email: string; fullname: string; roleId: number; isActive: boolean; }
+interface BeUser { userId: number; email: string; fullname: string; roleId: number; isActive: boolean; isPremium?: boolean; }
 export async function getUsers(): Promise<UserDirectoryRow[]> {
   const res = await apiGet<Paged<BeUser>>('/admin/users', { page: 1, pageSize: 100 });
   return res.items.map((u) => ({
@@ -82,6 +82,7 @@ export async function getUsers(): Promise<UserDirectoryRow[]> {
     email: u.email,
     role: roleName(u.roleId),
     status: u.isActive ? 'ACTIVE' : 'SUSPENDED',
+    isPremium: Boolean(u.isPremium),
   }));
 }
 
@@ -225,6 +226,7 @@ export async function getTransactions(): Promise<RevenueRow[]> {
     transactionId: String(t.subscriptionId),
     invoiceId: `#SUB-${t.subscriptionId}`,
     customer: t.customerName || t.customerEmail,
+    customerEmail: t.customerEmail,
     plan: planDisplayName(t.planName),
     amount: `${t.amount.toLocaleString('vi-VN')}đ`,
     method: 'PayOS / VietQR',

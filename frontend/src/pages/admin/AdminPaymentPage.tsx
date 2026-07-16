@@ -37,7 +37,27 @@ const AdminPaymentPage = () => {
     statusFilter === 'ALL' ? rows : rows.filter((row) => row.status === statusFilter);
 
   const totalSubscriptions = rows.length;
-  const successPayments = rows.filter((row) => row.status === 'SUCCESS').length;
+  // Số USER riêng biệt đã mua gói thành công (distinct theo email, không đếm trùng khi 1 người mua nhiều lần).
+  const payingUsers = new Set(
+    rows.filter((row) => row.status === 'SUCCESS').map((row) => row.customerEmail),
+  ).size;
+
+  // Subscription Distribution (chuyển từ Dashboard sang đây) — gom theo tên gói từ giao dịch thật.
+  const planColors = ['#4338ca', '#10b981', '#fb923c', '#0ea5e9', '#e11d48'];
+  const planDistribution = (() => {
+    const map = new Map<string, number>();
+    rows.forEach((r) => map.set(r.plan, (map.get(r.plan) ?? 0) + 1));
+    const total = rows.length;
+    return [...map.entries()].map(([name, count], i) => ({
+      name,
+      count,
+      percent: total > 0 ? Math.round((count / total) * 100) : 0,
+      color: planColors[i % planColors.length],
+    }));
+  })();
+  // Đếm số lượng gói theo chu kỳ Tháng / Năm (dựa trên tên gói đã chuẩn hoá "… Monthly/Yearly").
+  const monthlyCount = rows.filter((r) => /monthly|tháng/i.test(r.plan)).length;
+  const yearlyCount = rows.filter((r) => /yearly|năm/i.test(r.plan)).length;
 
   const exportFinanceReport = () => {
     const content = rows
@@ -63,30 +83,14 @@ const AdminPaymentPage = () => {
     setToast('Finance report exported.');
   };
 
-  const refreshPayments = () => {
-    const nextInvoice: RevenueRow = {
-      invoiceId: `#INV-${Math.floor(Math.random() * 90000 + 10000)}`,
-      transactionId: `QR-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-      customer: 'new.researcher@university.edu',
-      plan: 'Premium Monthly',
-      amount: '99.000₫',
-      method: 'VietQR',
-      paidAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      status: 'PENDING',
-    };
-
-    setRows((current) => [nextInvoice, ...current]);
-    setToast('Payments refreshed. New payment callback received as PENDING.');
-
-    window.setTimeout(() => {
-      setRows((current) =>
-        current.map((row) =>
-          row.invoiceId === nextInvoice.invoiceId ? { ...row, status: 'SUCCESS' } : row,
-        ),
-      );
-
-      setToast(`${nextInvoice.invoiceId} confirmed by payment gateway.`);
-    }, 1300);
+  const refreshPayments = async () => {
+    // Tải lại dữ liệu giao dịch THẬT từ backend (trước đây bịa 1 giao dịch giả).
+    try {
+      setRows(await getTransactions());
+      setToast('Payments refreshed.');
+    } catch (e) {
+      setToast(e instanceof ApiError ? e.message : 'Failed to refresh payments.');
+    }
   };
 
   const openEditPlan = (plan: SubscriptionPlan) => {
@@ -169,13 +173,51 @@ const AdminPaymentPage = () => {
         />
 
         <AdminMetricCard
-          label="Success Payments"
-          value={String(successPayments)}
-          helper="Confirmed successful payments"
+          label="Paying Users"
+          value={String(payingUsers)}
+          helper="Distinct users who purchased a plan"
           icon="✓"
           accent="green"
         />
       </div>
+
+      <AdminSectionCard title="Subscription Distribution" subtitle="Plan allocation and billing cycle breakdown from real transactions">
+        <div className="grid gap-6 p-6 lg:grid-cols-[1fr_260px]">
+          <div className="space-y-5">
+            {planDistribution.length === 0 ? (
+              <p className="text-sm text-slate-500">No subscription data available.</p>
+            ) : (
+              planDistribution.map((plan) => (
+                <div key={plan.name}>
+                  <div className="mb-2 flex justify-between text-sm font-semibold">
+                    <span>{plan.name}</span>
+                    <span>{plan.count} · {plan.percent}%</span>
+                  </div>
+                  <div className="h-3 rounded-full bg-slate-100">
+                    <div className="h-3 rounded-full" style={{ width: `${plan.percent}%`, backgroundColor: plan.color }} />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">By billing cycle</p>
+            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <span className="h-3 w-3 rounded-full bg-[#4338ca]" /> Monthly plans
+              </span>
+              <span className="text-lg font-extrabold text-slate-950">{monthlyCount}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <span className="h-3 w-3 rounded-full bg-emerald-500" /> Yearly plans
+              </span>
+              <span className="text-lg font-extrabold text-slate-950">{yearlyCount}</span>
+            </div>
+          </div>
+        </div>
+      </AdminSectionCard>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <AdminSectionCard

@@ -67,10 +67,13 @@ const AdminDashboardPage = () => {
   const revenueBarHeight = (value: number) =>
     Math.max(4, Math.round((value / maxRevenue) * BAR_MAX_PX));
   // Số user Premium = distinct user có gói active (từ BE), KHÔNG phải tổng số dòng subscription.
+  // Phân loại từ CHÍNH danh sách user (một nguồn nhất quán) — mỗi user thuộc đúng 1 nhóm:
+  // Admin (role ADMIN) · Premium (non-admin có gói active, isPremium từ BE) · Free (còn lại).
   const totalUsers = users.length;
   const adminUsers = users.filter((u) => u.role === 'ADMIN').length;
-  const premiumUsers = Math.min(stats?.premiumUsers ?? 0, totalUsers);
-  const userOverview = { totalUsers, premiumUsers, freeUsers: Math.max(0, totalUsers - premiumUsers - adminUsers), adminUsers };
+  const premiumUsers = users.filter((u) => u.role !== 'ADMIN' && u.isPremium).length;
+  const freeUsers = users.filter((u) => u.role !== 'ADMIN' && !u.isPremium).length;
+  const userOverview = { totalUsers, premiumUsers, freeUsers, adminUsers };
   const totalRevenue = revenueTrend.reduce((sum, item) => sum + item.value, 0);
   const monthlyRevenue = revenueTrend.length ? revenueTrend[revenueTrend.length - 1].value : 0;
   const activePremium = premiumUsers;
@@ -88,14 +91,6 @@ const AdminDashboardPage = () => {
       ? `conic-gradient(#4338ca 0 ${premiumPct}%, #10b981 ${premiumPct}% ${premiumPct + freePct}%, #fb923c ${premiumPct + freePct}% 100%)`
       : '#e2e8f0';
 
-  // Subscription Distribution: dựng từ số THẬT (charts.plans = planName + count), không hardcode 70/20/10.
-  const planColors = ['#4338ca', '#10b981', '#fb923c', '#0ea5e9', '#e11d48'];
-  const planTotal = charts.plans.reduce((s, p) => s + p.count, 0);
-  const planDistribution = charts.plans.map((p, i) => ({
-    name: p.name,
-    percent: pct(p.count, planTotal),
-    color: planColors[i % planColors.length],
-  }));
   const [showRevenueDetail, setShowRevenueDetail] = useState(false);
   const [showPublicationDetail, setShowPublicationDetail] = useState(false);
 
@@ -352,34 +347,6 @@ const AdminDashboardPage = () => {
         </div>
       </AdminSectionCard>
 
-      <AdminSectionCard
-        title="Subscription Distribution"
-        subtitle="Current subscription plan allocation"
-        action={collapseButton('subscriptionDistribution')}
-      >
-        <div className={collapseClass('subscriptionDistribution', 'max-h-[260px]')}>
-          <div className="space-y-5 p-6">
-            {planDistribution.length === 0 ? (
-              <p className="text-sm text-slate-500">No subscription data available.</p>
-            ) : (
-              planDistribution.map((plan) => (
-                <div key={plan.name}>
-                  <div className="mb-2 flex justify-between text-sm font-semibold">
-                    <span>{plan.name}</span>
-                    <span>{plan.percent}%</span>
-                  </div>
-                  <div className="h-3 rounded-full bg-slate-100">
-                    <div
-                      className="h-3 rounded-full"
-                      style={{ width: `${plan.percent}%`, backgroundColor: plan.color }}
-                    />
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </AdminSectionCard>
 
       <AdminModal
         open={showPublicationDetail}
