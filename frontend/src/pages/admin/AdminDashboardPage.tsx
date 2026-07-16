@@ -177,14 +177,10 @@ const AdminDashboardPage = () => {
         />
 
         <AdminMetricCard
-          label="ACTIVE SUBSCRIPTIONS"
-          value={
-            stats
-              ? stats.activeSubscriptions.toLocaleString()
-              : '—'
-          }
-          helper="Currently active premium plans"
-          icon="★"
+          label="TOTAL USERS"
+          value={totalUsers.toLocaleString()}
+          helper="All registered user accounts"
+          icon="👥"
           accent="orange"
         />
       </div>
