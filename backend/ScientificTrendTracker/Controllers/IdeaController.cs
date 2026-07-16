@@ -40,16 +40,16 @@ namespace ScientificTrendTracker.Controllers
         {
             var text = request?.Abstract?.Trim();
             if (string.IsNullOrWhiteSpace(text))
-                return BadRequest(ApiResponse<object>.Fail(400, "Vui lòng dán nội dung abstract."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Please paste the abstract content."));
             if (text.Length < 80)
-                return BadRequest(ApiResponse<object>.Fail(400, "Abstract quá ngắn (tối thiểu 80 ký tự) để phân tích đáng tin."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Abstract is too short (minimum 80 characters) for reliable analysis."));
             if (text.Length > 6000)
-                return BadRequest(ApiResponse<object>.Fail(400, "Abstract quá dài (tối đa 6000 ký tự)."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Abstract is too long (maximum 6000 characters)."));
 
             // Xác định user + áp rate-limit 1 lần/phút.
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
-                return Unauthorized(ApiResponse<object>.Fail(401, "Danh tính người dùng không hợp lệ."));
+                return Unauthorized(ApiResponse<object>.Fail(401, "Invalid user identity."));
 
             var cacheKey = $"idea-rl:{userId}";
             if (_cache.TryGetValue(cacheKey, out DateTime lastCallAt))
@@ -65,10 +65,10 @@ namespace ScientificTrendTracker.Controllers
             var result = await _overlapService.CheckOverlapAsync(text, topN: 10, ct);
 
             var msg = result.ExtractedKeywords.Count == 0
-                ? "Không trích được keyword từ abstract (kiểm tra AI service)."
+                ? "Could not extract keywords from the abstract (check AI service)."
                 : result.Matches.Count == 0
-                    ? "Không tìm thấy bài nào trùng keyword đáng kể — ý tưởng có vẻ mới mẻ."
-                    : $"Tìm thấy {result.Matches.Count} bài chia sẻ keyword. Đây là CẢNH BÁO SỚM, không phải kết luận trùng lặp.";
+                    ? "No significant keyword matches found — the idea appears novel."
+                    : $"Found {result.Matches.Count} paper(s) sharing keywords. This is an EARLY WARNING, not a conclusion of plagiarism.";
 
             return Ok(ApiResponse<OverlapResultDto>.Ok(result, msg));
         }

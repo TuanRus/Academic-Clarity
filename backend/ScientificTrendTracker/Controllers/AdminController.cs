@@ -195,10 +195,10 @@ namespace ScientificTrendTracker.Controllers
 
             await _dbContext.Database.ExecuteSqlRawAsync(
                 "INSERT INTO Roles (role_id, role_name, description) VALUES " +
-                "(1, 'admin', 'Quản trị hệ thống'), " +
-                "(2, 'researcher', 'Nhà nghiên cứu'), " +
-                "(3, 'edu user', 'Người dùng giáo dục'), " +
-                "(4, 'regular user', 'Người dùng thường')");
+                "(1, 'admin', 'System Administrator'), " +
+                "(2, 'researcher', 'Researcher'), " +
+                "(3, 'edu user', 'Educational User'), " +
+                "(4, 'regular user', 'Regular User')");
 
             var roles = await _dbContext.Roles.Select(r => new { r.RoleId, r.RoleName }).ToListAsync();
             return Ok(ApiResponse<object>.Ok(roles, $"Inserted {roles.Count} role(s)."));

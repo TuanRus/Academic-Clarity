@@ -117,7 +117,7 @@ namespace ScientificTrendTracker
                         Scheme = "Bearer",
                         BearerFormat = "JWT",
                         In = ParameterLocation.Header,
-                        Description = "Nhập theo cú pháp: Bearer [Chuỗi_Token_Của_Bạn]"
+                        Description = "Enter using the syntax: Bearer [Your_Token_String]"
                     });
 
                     options.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -183,7 +183,7 @@ namespace ScientificTrendTracker
                     {
                         l.Status = "failed";
                         l.SyncFinishedAt = DateTime.UtcNow;
-                        l.ErrorMessage = "Tiến trình sync bị gián đoạn (backend khởi động lại giữa chừng).";
+                        l.ErrorMessage = "Sync process was interrupted (backend restarted midway).";
                     }
                     if (stale.Count > 0) db.SaveChanges();
                 }

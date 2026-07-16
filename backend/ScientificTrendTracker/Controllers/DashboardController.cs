@@ -35,7 +35,7 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> GetDashboardStatsAsync(CancellationToken ct)
         {
             var result = await _dashboardService.GetDashboardStatsAsync(ct);
-            return Ok(ApiResponse<AdminDashboardStatsDto>.Ok(result, "Lấy số liệu thống kê Dashboard thành công."));
+            return Ok(ApiResponse<AdminDashboardStatsDto>.Ok(result, "Successfully retrieved dashboard statistics."));
         }
 
         /// <summary>
@@ -52,7 +52,7 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> GetDashboardChartsAsync(CancellationToken ct)
         {
             var result = await _dashboardService.GetDashboardChartsAsync(ct);
-            return Ok(ApiResponse<AdminDashboardChartsDto>.Ok(result, "Lấy dữ liệu biểu đồ Dashboard thành công."));
+            return Ok(ApiResponse<AdminDashboardChartsDto>.Ok(result, "Successfully retrieved dashboard chart data."));
         }
     }
 }

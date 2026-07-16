@@ -54,7 +54,7 @@ namespace ScientificTrendTracker.Controllers
                 return BadRequest(
                     ApiResponse<PaymentLinkResponseDto>.Fail(
                         400, 
-                        "Mã gói dịch vụ đăng ký không hợp lệ."));
+                        "Invalid service package registration code."));
             }
 
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
@@ -63,7 +63,7 @@ namespace ScientificTrendTracker.Controllers
                 return Unauthorized(
                     ApiResponse<PaymentLinkResponseDto>.Fail(
                         401, 
-                        "Danh tính người dùng không hợp lệ."));
+                        "Invalid user identity."));
             }
 
             int userId = int.Parse(userIdClaim.Value);
@@ -76,13 +76,13 @@ namespace ScientificTrendTracker.Controllers
                 return BadRequest(
                     ApiResponse<PaymentLinkResponseDto>.Fail(
                         400, 
-                        "Gói dịch vụ không tồn tại hoặc đã bị khóa trên hệ thống."));
+                        "Service package does not exist or has been locked on the system."));
             }
 
             return Ok(
                 ApiResponse<PaymentLinkResponseDto>.Ok(
                     result, 
-                    "Khởi tạo liên kết thanh toán VietQR động thành công."));
+                    "Dynamic VietQR payment link initialized successfully."));
         }
 
         /// <summary>
@@ -109,8 +109,8 @@ namespace ScientificTrendTracker.Controllers
                 ApiResponse<object>.Ok(
                     new { processed = isSuccess },
                     isSuccess
-                        ? "Xử lý kích hoạt gói và thăng cấp tài khoản học giả hoàn tất."
-                        : "Đã tiếp nhận webhook (không có giao dịch hợp lệ để thăng cấp)."));
+                        ? "Package activation and scholar account upgrade completed."
+                        : "Webhook received (no valid transaction for upgrading)."));
         }
 
         /// <summary>
@@ -125,12 +125,12 @@ namespace ScientificTrendTracker.Controllers
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
-                return Unauthorized(ApiResponse<object>.Fail(401, "Danh tính người dùng không hợp lệ."));
+                return Unauthorized(ApiResponse<object>.Fail(401, "Invalid user identity."));
 
             bool upgraded = await _paymentService.VerifyAndUpgradeByOrderCodeAsync(orderCode, userId);
             return Ok(ApiResponse<object>.Ok(
                 new { upgraded },
-                upgraded ? "Thanh toán đã xác nhận, tài khoản đã nâng cấp." : "Chưa xác nhận được thanh toán (chưa thanh toán hoặc đơn không hợp lệ)."));
+                upgraded ? "Payment confirmed, account upgraded." : "Payment not confirmed (unpaid or invalid order)."));
         }
     }
 }

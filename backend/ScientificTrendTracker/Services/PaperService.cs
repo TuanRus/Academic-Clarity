@@ -62,7 +62,7 @@ namespace ScientificTrendTracker.Services
                     Title = p.Title,
                     PublicationYear = p.PublicationYear,
                     CitationCount = p.CitationCount,
-                    JournalName = p.Journal != null ? p.Journal.JournalName : "Không rõ",
+                    JournalName = p.Journal != null ? p.Journal.JournalName : "Unknown",
                     CreatedAt = p.CreatedAt
                 })
                 .ToListAsync(ct);

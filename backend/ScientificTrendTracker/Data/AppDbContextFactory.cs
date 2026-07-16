@@ -22,8 +22,8 @@ namespace ScientificTrendTracker.Data
 
             var connectionString = config.GetConnectionString("DefaultConnection")
                 ?? throw new InvalidOperationException(
-                    "Không tìm thấy ConnectionStrings:DefaultConnection. Chạy lệnh ef trong thư mục project " +
-                    "và đảm bảo appsettings(.Development).json tồn tại.");
+                    "ConnectionStrings:DefaultConnection not found. Run EF commands in the project directory " +
+                    "and ensure appsettings(.Development).json exists.");
 
             var optionsBuilder = new DbContextOptionsBuilder<AppDbContext>();
             optionsBuilder.UseMySql(connectionString, new MySqlServerVersion(new Version(8, 0, 0)));
