@@ -21,7 +21,7 @@ const adminSections = [
     ],
   },
   {
-    title: 'CUSTOMERS',
+    title: 'USERS',
     items: [
       {
         to: '/admin/users',

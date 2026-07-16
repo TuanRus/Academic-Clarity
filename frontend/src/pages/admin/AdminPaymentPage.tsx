@@ -12,7 +12,7 @@ import {
   type SubscriptionPlan,
 } from '../../lib/api/admin';
 
-const AdminRevenuePage = () => {
+const AdminPaymentPage = () => {
   const [rows, setRows] = useState<RevenueRow[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   useEffect(() => {
@@ -344,4 +344,4 @@ const AdminRevenuePage = () => {
   );
 };
 
-export default AdminRevenuePage;
+export default AdminPaymentPage;
