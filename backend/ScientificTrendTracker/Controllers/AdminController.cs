@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,6 +64,68 @@ namespace ScientificTrendTracker.Controllers
         }
 
         /// <summary>
+        /// [Admin] Trả về cấu hình vận hành hệ thống ở dạng READ-ONLY.
+        /// Chỉ whitelist các trường KHÔNG bí mật; tuyệt đối không trả secret
+        /// (connection string, API key, JWT secret, mật khẩu email...).
+        /// </summary>
+        [HttpGet("settings")]
+        [Authorize(Roles = "1")] // roleId 1 = Admin
+        public IActionResult GetSystemConfig(
+            [FromServices] IConfiguration config,
+            [FromServices] IWebHostEnvironment env)
+        {
+            // true nếu key có giá trị thật (không rỗng và không phải placeholder "YOUR_...").
+            bool HasRealValue(string key) =>
+                !string.IsNullOrWhiteSpace(config[key]) &&
+                !config[key].Contains("YOUR_", StringComparison.OrdinalIgnoreCase);
+
+            var aiProviders = config.GetSection("AiProviders").GetChildren()
+                .Select(s => new Models.DTOs.AiProviderInfoDto
+                {
+                    Name = s["Name"],
+                    BaseUrl = s["BaseUrl"],
+                    Model = s["Model"]
+                })
+                .ToList();
+
+            // Gemini "đã cấu hình" nếu có ít nhất 1 ApiKey thật (không rỗng, không placeholder).
+            bool geminiConfigured = config.GetSection("Gemini:ApiKeys").GetChildren()
+                .Select(c => c.Value)
+                .Any(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("YOUR_", StringComparison.OrdinalIgnoreCase));
+
+            var dto = new Models.DTOs.SystemConfigDto
+            {
+                Environment = env.EnvironmentName,
+                DotnetVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+                AllowedHosts = config["AllowedHosts"],
+                DefaultLogLevel = config["Logging:LogLevel:Default"],
+
+                OpenAlexBaseUrl = config["OpenAlex:BaseUrl"],
+                OpenAlexEmail = config["OpenAlex:Email"],
+
+                WeeklySyncEnabled = config.GetValue<bool>("WeeklySync:Enabled"),
+
+                JwtIssuer = config["Jwt:Issuer"],
+                JwtAudience = config["Jwt:Audience"],
+
+                AiProviders = aiProviders,
+                GeminiModel = config["Gemini:Model"],
+                GeminiBaseUrl = config["Gemini:BaseUrl"],
+                GeminiTimeoutSeconds = config.GetValue<int>("Gemini:TimeoutSeconds"),
+
+                Integrations = new List<Models.DTOs.IntegrationStatusDto>
+                {
+                    new() { Name = "PayOS", Configured = HasRealValue("PayOS:ClientId") && HasRealValue("PayOS:ApiKey") },
+                    new() { Name = "Email (SMTP)", Configured = HasRealValue("EmailSettings:Password") },
+                    new() { Name = "Gemini AI", Configured = geminiConfigured },
+                    new() { Name = "OpenAlex", Configured = HasRealValue("OpenAlex:BaseUrl") },
+                }
+            };
+
+            return Ok(ApiResponse<Models.DTOs.SystemConfigDto>.Ok(dto, "System configuration (read-only)."));
+        }
+
+        /// <summary>
         /// [Admin · DEV] Liệt kê session MySQL đang kết nối (chẩn đoán deadlock/lock-wait).
         /// </summary>
         [HttpGet("db-sessions")]
@@ -116,6 +179,7 @@ namespace ScientificTrendTracker.Controllers
             if (page < 1) page = 1;
             if (pageSize < 1 || pageSize > 200) pageSize = 50;
 
+            var now = DateTime.UtcNow;
             var query = _dbContext.Users.OrderByDescending(u => u.CreateAt);
             var total = await query.CountAsync();
             var items = await query
@@ -130,7 +194,10 @@ namespace ScientificTrendTracker.Controllers
                     u.AccountTag,
                     u.Institution,
                     u.CreateAt,
-                    u.LastLoginAt
+                    u.LastLoginAt,
+                    // Premium = có ít nhất 1 gói đang ACTIVE còn hiệu lực (dùng để phân loại User Overview).
+                    IsPremium = _dbContext.UserSubscriptions.Any(s =>
+                        s.UserId == u.UserId && s.Status == "ACTIVE" && (s.EndsAt == null || s.EndsAt > now))
                 })
                 .ToListAsync();
 
