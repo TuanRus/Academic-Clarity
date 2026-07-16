@@ -28,7 +28,6 @@ const AdminUsersPage = () => {
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const visibleUsers = filteredUsers.slice((page - 1) * pageSize, page * pageSize);
   const activeUsers = users.filter((user) => user.status === 'ACTIVE').length;
-  const pendingUsers = users.filter((user) => user.status === 'REGISTERED').length;
   const totalUsers = users.length;
 
 
@@ -103,7 +102,7 @@ const AdminUsersPage = () => {
         <p className="mt-1 text-xs text-slate-500">Manage user roles, account status, and system access.</p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-2">
         <AdminMetricCard
           label="Total Users"
           value={String(totalUsers)}
@@ -118,14 +117,6 @@ const AdminUsersPage = () => {
           helper="Accounts currently active"
           icon="✓"
           accent="green"
-        />
-
-        <AdminMetricCard
-          label="Pending Role Requests"
-          value={String(pendingUsers)}
-          helper="Registered users awaiting review"
-          icon="▣"
-          accent="orange"
         />
       </div>
 

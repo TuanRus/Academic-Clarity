@@ -30,8 +30,6 @@ const AdminPaymentPage = () => {
 
   const totalSubscriptions = rows.length;
   const successPayments = rows.filter((row) => row.status === 'SUCCESS').length;
-  const pendingPayments = rows.filter((row) => row.status === 'PENDING').length;
-  const failedPayments = rows.filter((row) => row.status === 'FAILED').length;
 
   const exportFinanceReport = () => {
     const content = rows
@@ -132,7 +130,7 @@ const AdminPaymentPage = () => {
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-4">
+      <div className="grid gap-5 xl:grid-cols-2">
         <AdminMetricCard
           label="Total Subscriptions"
           value={String(totalSubscriptions)}
@@ -147,22 +145,6 @@ const AdminPaymentPage = () => {
           helper="Confirmed successful payments"
           icon="✓"
           accent="green"
-        />
-
-        <AdminMetricCard
-          label="Pending Payments"
-          value={String(pendingPayments)}
-          helper="Awaiting payment confirmation"
-          icon="!"
-          accent="slate"
-        />
-
-        <AdminMetricCard
-          label="Failed Payments"
-          value={String(failedPayments)}
-          helper="Payment failed or rejected"
-          icon="×"
-          accent="red"
         />
       </div>
 
