@@ -263,6 +263,30 @@ export function sendBroadcast(title: string, message: string): Promise<unknown> 
   return apiPost('/notifications/broadcast', { title, message });
 }
 
+// ---- Cấu hình hệ thống read-only (GET /admin/settings) ----
+export interface AiProviderInfo { name: string; baseUrl: string; model: string; }
+export interface IntegrationStatus { name: string; configured: boolean; }
+export interface SystemConfig {
+  environment: string;
+  dotnetVersion: string;
+  allowedHosts: string;
+  defaultLogLevel: string;
+  openAlexBaseUrl: string;
+  openAlexEmail: string;
+  weeklySyncEnabled: boolean;
+  jwtIssuer: string;
+  jwtAudience: string;
+  aiProviders: AiProviderInfo[];
+  geminiModel: string;
+  geminiBaseUrl: string;
+  geminiTimeoutSeconds: number;
+  integrations: IntegrationStatus[];
+}
+/** GET /admin/settings — cấu hình vận hành KHÔNG bí mật (chỉ đọc). */
+export function getSystemConfig(): Promise<SystemConfig> {
+  return apiGet<SystemConfig>('/admin/settings');
+}
+
 // ---- Keywords (GET /admin/keywords) — cho tab Ontology của Article Repository ----
 interface BeKeyword { keywordId: string; keywordName: string; associatedPapersCount: number; createdAt: string; }
 export async function getKeywords(): Promise<RepositoryCategory[]> {

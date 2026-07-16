@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminToast from '../../components/admin/AdminToast';
-import { sendBroadcast } from '../../lib/api/admin';
+import { sendBroadcast, getSystemConfig, type SystemConfig } from '../../lib/api/admin';
 import { ApiError } from '../../lib/http';
 
 const AdminSettingsPage = () => {
@@ -25,11 +25,21 @@ const AdminSettingsPage = () => {
         }
     };
 
-    // Nhãn cho các khối cấu hình chưa nối backend (tránh nút "Save" giả gây hiểu nhầm).
-    const comingSoon = (
-        <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
-            Coming soon
-        </span>
+    // Cấu hình hệ thống (read-only, không bí mật).
+    const [config, setConfig] = useState<SystemConfig | null>(null);
+    const [configError, setConfigError] = useState<string | null>(null);
+    useEffect(() => {
+        getSystemConfig()
+            .then(setConfig)
+            .catch((e) => setConfigError(e instanceof ApiError ? e.message : 'Could not load system configuration.'));
+    }, []);
+
+    // Hàng key–value read-only.
+    const Row = ({ label, value }: { label: string; value: ReactNode }) => (
+        <div className="flex items-start justify-between gap-4 border-b border-slate-100 py-2 last:border-0">
+            <span className="text-sm text-slate-500">{label}</span>
+            <span className="text-right text-sm font-semibold text-slate-800 break-all">{value}</span>
+        </div>
     );
 
     return (
@@ -41,7 +51,7 @@ const AdminSettingsPage = () => {
                     System Settings
                 </h1>
                 <p className="mt-1 text-xs text-slate-500">
-                    Configure system information, OpenAlex integration, notifications and security.
+                    Send system-wide announcements and review the current (read-only) system configuration.
                 </p>
             </div>
 
@@ -70,55 +80,74 @@ const AdminSettingsPage = () => {
                 </div>
             </AdminSectionCard>
 
-            <div className="grid gap-5 xl:grid-cols-2">
-                <AdminSectionCard title="General Settings" subtitle="Basic system information." action={comingSoon}>
-                    <div className="space-y-4 p-5 opacity-60">
-                        <input disabled className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm" defaultValue="AIS Journal Trend System" />
-                        <input disabled className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm" defaultValue="FPT University" />
-                        <select disabled className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm" defaultValue="GMT+7">
-                            <option>GMT+7</option>
-                            <option>UTC</option>
-                        </select>
-                    </div>
-                </AdminSectionCard>
+            <AdminSectionCard
+                title="System Configuration"
+                subtitle="Current operational configuration (read-only). Secrets are never shown here."
+                action={
+                    <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                        Read-only
+                    </span>
+                }
+            >
+                <div className="p-5">
+                    {configError && <p className="text-sm text-red-600">{configError}</p>}
+                    {!config && !configError && <p className="text-sm text-slate-400">Loading…</p>}
 
-                <AdminSectionCard title="OpenAlex Integration" subtitle="External academic data source configuration." action={comingSoon}>
-                    <div className="space-y-4 p-5 opacity-60">
-                        <input disabled className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm" defaultValue="********************" />
-                        <select disabled className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm" defaultValue="Daily">
-                            <option>Daily</option>
-                            <option>Weekly</option>
-                            <option>Manual</option>
-                        </select>
-                    </div>
-                </AdminSectionCard>
+                    {config && (
+                        <div className="grid gap-x-10 gap-y-1 xl:grid-cols-2">
+                            <div>
+                                <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-400">Runtime</h3>
+                                <Row label="Environment" value={config.environment} />
+                                <Row label=".NET version" value={config.dotnetVersion} />
+                                <Row label="Allowed hosts" value={config.allowedHosts || '—'} />
+                                <Row label="Default log level" value={config.defaultLogLevel || '—'} />
+                                <Row
+                                    label="Auto weekly sync"
+                                    value={
+                                        <span className={config.weeklySyncEnabled ? 'text-emerald-600' : 'text-slate-400'}>
+                                            {config.weeklySyncEnabled ? 'Enabled' : 'Disabled'}
+                                        </span>
+                                    }
+                                />
+                            </div>
 
-                <AdminSectionCard title="Notification Settings" subtitle="Choose events that notify admins." action={comingSoon}>
-                    <div className="space-y-4 p-5 opacity-60">
-                        {['Notify when sync failed', 'Notify when new user registered', 'Notify when payment success'].map((item) => (
-                            <label key={item} className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-3 text-sm font-semibold">
-                                <span>{item}</span>
-                                <input type="checkbox" disabled defaultChecked className="h-4 w-4" />
-                            </label>
-                        ))}
-                    </div>
-                </AdminSectionCard>
+                            <div>
+                                <h3 className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-400">OpenAlex &amp; Auth</h3>
+                                <Row label="OpenAlex base URL" value={config.openAlexBaseUrl || '—'} />
+                                <Row label="OpenAlex contact email" value={config.openAlexEmail || '—'} />
+                                <Row label="JWT issuer" value={config.jwtIssuer || '—'} />
+                                <Row label="JWT audience" value={config.jwtAudience || '—'} />
+                            </div>
 
-                <AdminSectionCard title="Security Settings" subtitle="Control admin session and authentication behavior." action={comingSoon}>
-                    <div className="space-y-4 p-5 opacity-60">
-                        <select disabled className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm" defaultValue="60 minutes">
-                            <option>30 minutes</option>
-                            <option>60 minutes</option>
-                            <option>120 minutes</option>
-                        </select>
+                            <div>
+                                <h3 className="mb-1 mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">AI providers</h3>
+                                {config.aiProviders.length === 0 && <p className="py-2 text-sm text-slate-400">None configured.</p>}
+                                {config.aiProviders.map((p) => (
+                                    <Row key={p.name} label={p.name} value={`${p.model} · ${p.baseUrl}`} />
+                                ))}
+                                <Row label="Gemini model" value={config.geminiModel || '—'} />
+                                <Row label="Gemini base URL" value={config.geminiBaseUrl || '—'} />
+                                <Row label="Gemini timeout (s)" value={config.geminiTimeoutSeconds} />
+                            </div>
 
-                        <label className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-3 text-sm font-semibold">
-                            <span>Require 2FA for admin</span>
-                            <input type="checkbox" disabled className="h-4 w-4" />
-                        </label>
-                    </div>
-                </AdminSectionCard>
-            </div>
+                            <div>
+                                <h3 className="mb-1 mt-4 text-xs font-bold uppercase tracking-wide text-slate-400">Integrations</h3>
+                                {config.integrations.map((it) => (
+                                    <Row
+                                        key={it.name}
+                                        label={it.name}
+                                        value={
+                                            <span className={it.configured ? 'text-emerald-600' : 'text-slate-400'}>
+                                                {it.configured ? '✓ Configured' : '✗ Not configured'}
+                                            </span>
+                                        }
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </AdminSectionCard>
         </div>
     );
 };

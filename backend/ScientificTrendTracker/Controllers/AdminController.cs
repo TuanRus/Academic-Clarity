@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -60,6 +61,68 @@ namespace ScientificTrendTracker.Controllers
             _logger = logger;
             _scopeFactory = scopeFactory;
             _syncProgress = syncProgress;
+        }
+
+        /// <summary>
+        /// [Admin] Trả về cấu hình vận hành hệ thống ở dạng READ-ONLY.
+        /// Chỉ whitelist các trường KHÔNG bí mật; tuyệt đối không trả secret
+        /// (connection string, API key, JWT secret, mật khẩu email...).
+        /// </summary>
+        [HttpGet("settings")]
+        [Authorize(Roles = "1")] // roleId 1 = Admin
+        public IActionResult GetSystemConfig(
+            [FromServices] IConfiguration config,
+            [FromServices] IWebHostEnvironment env)
+        {
+            // true nếu key có giá trị thật (không rỗng và không phải placeholder "YOUR_...").
+            bool HasRealValue(string key) =>
+                !string.IsNullOrWhiteSpace(config[key]) &&
+                !config[key].Contains("YOUR_", StringComparison.OrdinalIgnoreCase);
+
+            var aiProviders = config.GetSection("AiProviders").GetChildren()
+                .Select(s => new Models.DTOs.AiProviderInfoDto
+                {
+                    Name = s["Name"],
+                    BaseUrl = s["BaseUrl"],
+                    Model = s["Model"]
+                })
+                .ToList();
+
+            // Gemini "đã cấu hình" nếu có ít nhất 1 ApiKey thật (không rỗng, không placeholder).
+            bool geminiConfigured = config.GetSection("Gemini:ApiKeys").GetChildren()
+                .Select(c => c.Value)
+                .Any(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("YOUR_", StringComparison.OrdinalIgnoreCase));
+
+            var dto = new Models.DTOs.SystemConfigDto
+            {
+                Environment = env.EnvironmentName,
+                DotnetVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+                AllowedHosts = config["AllowedHosts"],
+                DefaultLogLevel = config["Logging:LogLevel:Default"],
+
+                OpenAlexBaseUrl = config["OpenAlex:BaseUrl"],
+                OpenAlexEmail = config["OpenAlex:Email"],
+
+                WeeklySyncEnabled = config.GetValue<bool>("WeeklySync:Enabled"),
+
+                JwtIssuer = config["Jwt:Issuer"],
+                JwtAudience = config["Jwt:Audience"],
+
+                AiProviders = aiProviders,
+                GeminiModel = config["Gemini:Model"],
+                GeminiBaseUrl = config["Gemini:BaseUrl"],
+                GeminiTimeoutSeconds = config.GetValue<int>("Gemini:TimeoutSeconds"),
+
+                Integrations = new List<Models.DTOs.IntegrationStatusDto>
+                {
+                    new() { Name = "PayOS", Configured = HasRealValue("PayOS:ClientId") && HasRealValue("PayOS:ApiKey") },
+                    new() { Name = "Email (SMTP)", Configured = HasRealValue("EmailSettings:Password") },
+                    new() { Name = "Gemini AI", Configured = geminiConfigured },
+                    new() { Name = "OpenAlex", Configured = HasRealValue("OpenAlex:BaseUrl") },
+                }
+            };
+
+            return Ok(ApiResponse<Models.DTOs.SystemConfigDto>.Ok(dto, "System configuration (read-only)."));
         }
 
         /// <summary>
