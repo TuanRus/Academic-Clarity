@@ -58,7 +58,7 @@ namespace ScientificTrendTracker.Controllers
                 return BadRequest(
                     ApiResponse<List<int>>.Fail(
                         400,
-                        "Tiêu đề bài báo không được để trống."));
+                        "Paper title must not be empty."));
             }
 
             List<int> userIds = await _notificationService
@@ -84,7 +84,7 @@ namespace ScientificTrendTracker.Controllers
             return Ok(
                 ApiResponse<List<int>>.Ok(
                     userIds,
-                    $"Đã kích nổ thành công thông báo đến {userIds.Count} học giả."));
+                    $"Successfully triggered notifications to {userIds.Count} scholar(s)."));
         }
 
         /// <summary>Admin gửi thông báo TOÀN HỆ THỐNG (cảnh báo, bảo trì, thông báo chung...) tới mọi user.</summary>

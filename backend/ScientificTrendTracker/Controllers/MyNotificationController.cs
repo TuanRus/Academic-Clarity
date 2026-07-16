@@ -28,7 +28,7 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> GetMine([FromQuery] int limit = 30)
         {
             var items = await _service.GetMyNotificationsAsync(CurrentUserId, limit);
-            return Ok(ApiResponse<object>.Ok(items, $"{items.Count} thông báo."));
+            return Ok(ApiResponse<object>.Ok(items, $"{items.Count} notification(s)."));
         }
 
         /// <summary>GET /api/notifications/me/unread-count — số thông báo chưa đọc (badge chuông).</summary>
@@ -45,8 +45,8 @@ namespace ScientificTrendTracker.Controllers
         {
             var ok = await _service.MarkReadAsync(CurrentUserId, id);
             return ok
-                ? Ok(ApiResponse<object>.Ok(null, "Đã đánh dấu đã đọc."))
-                : NotFound(ApiResponse<object>.Fail(404, "Không tìm thấy thông báo."));
+                ? Ok(ApiResponse<object>.Ok(null, "Marked as read."))
+                : NotFound(ApiResponse<object>.Fail(404, "Notification not found."));
         }
 
         /// <summary>PUT /api/notifications/me/read-all — đánh dấu tất cả đã đọc.</summary>
@@ -54,7 +54,7 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> MarkAllRead()
         {
             var n = await _service.MarkAllReadAsync(CurrentUserId);
-            return Ok(ApiResponse<object>.Ok(new { updated = n }, $"Đã đánh dấu {n} thông báo là đã đọc."));
+            return Ok(ApiResponse<object>.Ok(new { updated = n }, $"Marked {n} notification(s) as read."));
         }
     }
 }
