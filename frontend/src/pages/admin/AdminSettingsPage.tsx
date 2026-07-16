@@ -25,6 +25,13 @@ const AdminSettingsPage = () => {
         }
     };
 
+    // Nhãn cho các khối cấu hình chưa nối backend (tránh nút "Save" giả gây hiểu nhầm).
+    const comingSoon = (
+        <span className="shrink-0 rounded-full bg-amber-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-amber-700">
+            Coming soon
+        </span>
+    );
+
     return (
         <div className="space-y-5">
             <AdminToast message={toast} onClose={() => setToast(null)} />
@@ -64,48 +71,42 @@ const AdminSettingsPage = () => {
             </AdminSectionCard>
 
             <div className="grid gap-5 xl:grid-cols-2">
-                <AdminSectionCard title="General Settings" subtitle="Basic system information.">
-                    <div className="space-y-4 p-5">
-                        <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" defaultValue="AIS Journal Trend System" />
-                        <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" defaultValue="FPT University" />
-                        <select className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" defaultValue="GMT+7">
+                <AdminSectionCard title="General Settings" subtitle="Basic system information." action={comingSoon}>
+                    <div className="space-y-4 p-5 opacity-60">
+                        <input disabled className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm" defaultValue="AIS Journal Trend System" />
+                        <input disabled className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm" defaultValue="FPT University" />
+                        <select disabled className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm" defaultValue="GMT+7">
                             <option>GMT+7</option>
                             <option>UTC</option>
                         </select>
                     </div>
                 </AdminSectionCard>
 
-                <AdminSectionCard title="OpenAlex Integration" subtitle="External academic data source configuration.">
-                    <div className="space-y-4 p-5">
-                        <input className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" defaultValue="********************" />
-                        <select className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" defaultValue="Daily">
+                <AdminSectionCard title="OpenAlex Integration" subtitle="External academic data source configuration." action={comingSoon}>
+                    <div className="space-y-4 p-5 opacity-60">
+                        <input disabled className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm" defaultValue="********************" />
+                        <select disabled className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm" defaultValue="Daily">
                             <option>Daily</option>
                             <option>Weekly</option>
                             <option>Manual</option>
                         </select>
-                        <button
-                            onClick={() => setToast('OpenAlex settings saved.')}
-                            className="rounded-md bg-[#4338ca] hover:bg-[#3730a3] px-4 py-2 text-xs font-bold text-white"
-                        >
-                            Save OpenAlex Config
-                        </button>
                     </div>
                 </AdminSectionCard>
 
-                <AdminSectionCard title="Notification Settings" subtitle="Choose events that notify admins.">
-                    <div className="space-y-4 p-5">
+                <AdminSectionCard title="Notification Settings" subtitle="Choose events that notify admins." action={comingSoon}>
+                    <div className="space-y-4 p-5 opacity-60">
                         {['Notify when sync failed', 'Notify when new user registered', 'Notify when payment success'].map((item) => (
                             <label key={item} className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-3 text-sm font-semibold">
                                 <span>{item}</span>
-                                <input type="checkbox" defaultChecked className="h-4 w-4" />
+                                <input type="checkbox" disabled defaultChecked className="h-4 w-4" />
                             </label>
                         ))}
                     </div>
                 </AdminSectionCard>
 
-                <AdminSectionCard title="Security Settings" subtitle="Control admin session and authentication behavior.">
-                    <div className="space-y-4 p-5">
-                        <select className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" defaultValue="60 minutes">
+                <AdminSectionCard title="Security Settings" subtitle="Control admin session and authentication behavior." action={comingSoon}>
+                    <div className="space-y-4 p-5 opacity-60">
+                        <select disabled className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm" defaultValue="60 minutes">
                             <option>30 minutes</option>
                             <option>60 minutes</option>
                             <option>120 minutes</option>
@@ -113,15 +114,8 @@ const AdminSettingsPage = () => {
 
                         <label className="flex items-center justify-between rounded-md bg-slate-50 px-4 py-3 text-sm font-semibold">
                             <span>Require 2FA for admin</span>
-                            <input type="checkbox" className="h-4 w-4" />
+                            <input type="checkbox" disabled className="h-4 w-4" />
                         </label>
-
-                        <button
-                            onClick={() => setToast('Security settings saved.')}
-                            className="rounded-md bg-[#4338ca] hover:bg-[#3730a3] px-4 py-2 text-xs font-bold text-white"
-                        >
-                            Save Security Config
-                        </button>
                     </div>
                 </AdminSectionCard>
             </div>
