@@ -9,21 +9,36 @@
 **/node_modules/
 **/dist/
 **/.vite/
+dist-ssr/
 
 # ===== IDE / editor =====
 **/.vs/
 **/.vscode/
+!.vscode/extensions.json
 **/.idea/
 *.user
 *.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 # ===== Secrets / local config =====
 **/appsettings.json
 **/appsettings.Development.json
+**/appsettings.*.json
 !**/appsettings.example.json
 **/.env
+**/.env.*
 !**/.env.example
+.env.local
+.env.*.local
 **/global.json
+**/launchSettings.json
+secrets.json
+*secrets*.json
+*.pfx
+*.publishsettings
 
 # ===== OS =====
 .DS_Store
@@ -47,29 +62,24 @@ docs/
 test_result/
 **/test_result/
 
-# ===== Backend (.NET) — gop tu backend/.gitignore =====
-# Config bi mat (mo rong) + launch profile (chua IP/port noi bo)
-**/appsettings.*.json
-!**/appsettings.example.json
-**/launchSettings.json
-secrets.json
-*secrets*.json
-*.pfx
-*.publishsettings
-
-# Logs
+# ===== Logs =====
 *.log
 **/logs/
+logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Data files (SCImago CSV... import thu cong, file lon)
+# ===== Data files =====
 *.csv
 
-# Env (cac bien the)
-**/.env.*
-!**/.env.example
+# ===== TypeScript =====
+*.tsbuildinfo
 
-# JetBrains
+# ===== JetBrains =====
 *.iml
 
-# Script noi bo
+# ===== Script noi bo =====
 describe-project.ps1
