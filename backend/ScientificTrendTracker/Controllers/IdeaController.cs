@@ -18,14 +18,16 @@ namespace ScientificTrendTracker.Controllers
     public class IdeaController : ControllerBase
     {
         private readonly IIdeaOverlapService _overlapService;
+        private readonly ISubscriptionService _subscriptionService;
         private readonly IMemoryCache _cache;
 
         // Giới hạn tần suất: mỗi user chỉ được gọi Idea Check 1 lần / 60 giây (tiết kiệm quota Gemini).
         private static readonly TimeSpan RateLimitWindow = TimeSpan.FromSeconds(60);
 
-        public IdeaController(IIdeaOverlapService overlapService, IMemoryCache cache)
+        public IdeaController(IIdeaOverlapService overlapService, ISubscriptionService subscriptionService, IMemoryCache cache)
         {
             _overlapService = overlapService;
+            _subscriptionService = subscriptionService;
             _cache = cache;
         }
 
@@ -50,6 +52,10 @@ namespace ScientificTrendTracker.Controllers
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
                 return Unauthorized(ApiResponse<object>.Fail(401, "Invalid user identity."));
+
+            // Gate CỨNG Premium (trước đây chỉ [Authorize] dù là tính năng Premium). Admin miễn (BR-26).
+            var denied = await PremiumGuard.CheckAsync(User, _subscriptionService, ct);
+            if (denied != null) return denied;
 
             var cacheKey = $"idea-rl:{userId}";
             if (_cache.TryGetValue(cacheKey, out DateTime lastCallAt))
