@@ -23,9 +23,8 @@ import AdminDashboardPage from '../pages/admin/AdminDashboardPage';
 import AdminPipelinesPage from '../pages/admin/AdminPipelinesPage';
 import AdminRepositoryPage from '../pages/admin/AdminRepositoryPage';
 import AdminUsersPage from '../pages/admin/AdminUsersPage';
-import AdminRevenuePage from '../pages/admin/AdminRevenuePage';
+import AdminPaymentPage from '../pages/admin/AdminPaymentPage';
 import AdminActivityLogsPage from '../pages/admin/AdminActivityLogsPage';
-import AdminSettingsPage from '../pages/admin/AdminSettingsPage';
 
 const AppRoutes = () => {
   return (
@@ -66,9 +65,8 @@ const AppRoutes = () => {
           <Route path="pipelines" element={<AdminPipelinesPage />} />
           <Route path="repository" element={<AdminRepositoryPage />} />
           <Route path="users" element={<AdminUsersPage />} />
-          <Route path="revenue" element={<AdminRevenuePage />} />
+          <Route path="revenue" element={<AdminPaymentPage />} />
           <Route path="logs" element={<AdminActivityLogsPage />} />
-          <Route path="settings" element={<AdminSettingsPage />} />
         </Route>
       </Route>
 

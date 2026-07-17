@@ -253,6 +253,7 @@ namespace ScientificTrendTracker.Services
             {
                 UserId = userId,
                 PlanId = matchedPlan.PlanId,
+                PaidAmount = amountPaid, // số tiền THỰC TRẢ (đã áp ưu đãi edu), để log/doanh thu không lấy giá gốc
                 Status = "ACTIVE",
                 StartedAt = now,
                 EndsAt = baseDate.AddDays(matchedPlan.DurationDays),

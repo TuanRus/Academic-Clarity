@@ -5,8 +5,9 @@ import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
 import AdminToast from '../../components/admin/AdminToast';
 import {
-  getSyncLogs, startLiveSync, getSyncProgress, getSyncedPapers,
-  type PipelineEvent, type SyncedPaper, type SyncProgress,
+  getSyncLogs, startLiveSync, getSyncProgress, getSyncedPapers, deleteEmptySyncLogs,
+  getSystemConfig,
+  type PipelineEvent, type SyncedPaper, type SyncProgress, type IntegrationStatus,
 } from '../../lib/api/admin';
 
 // Màu chữ trạng thái realtime của Live Monitor.
@@ -37,7 +38,27 @@ const AdminPipelinesPage = () => {
 
   const [history, setHistory] = useState<PipelineEvent[]>([]);
   useEffect(() => { getSyncLogs().then(setHistory).catch(() => setHistory([])); }, []);
-  const [apiKey, setApiKey] = useState('sk-openalex-demo-key');
+
+  // Trạng thái tích hợp liên quan pipeline (OpenAlex nguồn dữ liệu + AI trích keyword).
+  const [pipelineIntegrations, setPipelineIntegrations] = useState<IntegrationStatus[]>([]);
+  const [openAlexBaseUrl, setOpenAlexBaseUrl] = useState('');
+  const [openAlexEmail, setOpenAlexEmail] = useState('');
+  useEffect(() => {
+    getSystemConfig()
+      .then((c) => {
+        setPipelineIntegrations(c.integrations.filter((i) => i.name === 'OpenAlex' || i.name === 'Gemini AI'));
+        setOpenAlexBaseUrl(c.openAlexBaseUrl);
+        setOpenAlexEmail(c.openAlexEmail);
+      })
+      .catch(() => setPipelineIntegrations([]));
+  }, []);
+  const openAlexConfigured = pipelineIntegrations.find((i) => i.name === 'OpenAlex')?.configured ?? false;
+  // Che phần tên trước @, chỉ để lộ domain: "abc@gmail.com" -> "***@gmail.com".
+  const maskEmail = (email: string) => {
+    if (!email) return '—';
+    const at = email.indexOf('@');
+    return at > 0 ? `***${email.slice(at)}` : '***';
+  };
   const [isSyncing, setIsSyncing] = useState(false);
   const [showAddSourceModal, setShowAddSourceModal] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -71,23 +92,61 @@ const AdminPipelinesPage = () => {
   const [liveOpen, setLiveOpen] = useState(false);
   const [live, setLive] = useState<SyncProgress | null>(null);
   const pollRef = useRef<number | null>(null);
+  const sawRunningRef = useRef(false); // đã QUAN SÁT được trạng thái running ít nhất 1 lần chưa
+  const startWaitRef = useRef(0);      // số nhịp đã chờ background task khởi động
+  const autoPolledRef = useRef(false); // chỉ auto-poll 1 lần (tránh lặp vô hạn với log 'running' mồ côi)
 
   const stopPolling = () => { if (pollRef.current) { window.clearInterval(pollRef.current); pollRef.current = null; } };
   const startPolling = () => {
     stopPolling();
+    sawRunningRef.current = false;
+    startWaitRef.current = 0;
     const tick = async () => {
       try {
         const p = await getSyncProgress();
         setLive(p);
-        if (!p.isRunning) { stopPolling(); setIsSyncing(false); getSyncLogs().then(setHistory).catch(() => {}); }
+        if (p.isRunning) {
+          sawRunningRef.current = true;
+          return;
+        }
+        // isRunning=false: CHỈ coi là "đã xong" khi đã từng thấy running (tránh báo success ngay
+        // do race lúc mới start khi background task chưa kịp Begin), hoặc đã chờ quá lâu (~15s).
+        if (!sawRunningRef.current && startWaitRef.current < 10) {
+          startWaitRef.current += 1;
+          return;
+        }
+        stopPolling();
+        setIsSyncing(false);
+        // Lấy lịch sử để biết lần sync vừa rồi thành công hay FAILED (vd 429 rate limit / hết budget).
+        getSyncLogs().then((logs) => {
+          setHistory(logs);
+          const latest = logs.find((l) => l.id === p.syncLogId) ?? logs[0];
+          if (latest?.status === 'FAILED') {
+            setToast('Sync failed — OpenAlex API rate limited / out of budget. Try again after the daily reset.');
+          } else if (p.added > 0) {
+            setToast(`Sync finished — ${p.added} new paper(s) imported.`);
+          } else {
+            setToast('Sync finished — no new papers.');
+          }
+        }).catch(() => {});
       } catch { /* bỏ qua 1 nhịp lỗi */ }
     };
     tick();
     pollRef.current = window.setInterval(tick, 1500);
   };
-  const openLive = () => { setLiveOpen(true); startPolling(); };
-  const closeLive = () => { setLiveOpen(false); stopPolling(); };
+  const openLive = () => { setLiveOpen(true); if (pollRef.current == null) startPolling(); };
+  // Tắt monitor CHỈ ẩn modal — vẫn poll nền để Ingestion History cập nhật số bài đang chạy.
+  const closeLive = () => { setLiveOpen(false); };
   useEffect(() => () => stopPolling(), []);
+  // Tự động theo dõi 1 lần nếu có log đang RUNNING (kể cả khi tải lại trang giữa lúc sync).
+  useEffect(() => {
+    if (!autoPolledRef.current && pollRef.current == null &&
+        history.some((h) => h.status === 'RUNNING' || h.status === 'PENDING')) {
+      autoPolledRef.current = true;
+      startPolling();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [history]);
 
   const runSync = async (title = 'Manual Trigger') => {
     if (!hasActiveEndpoint) {
@@ -103,6 +162,17 @@ const AdminPipelinesPage = () => {
     } catch {
       setIsSyncing(false);
       setToast(`${title} could not start (a sync may already be running).`);
+    }
+  };
+
+  const clearEmptyLogs = async () => {
+    try {
+      const { deleted } = await deleteEmptySyncLogs();
+      const logs = await getSyncLogs();
+      setHistory(logs);
+      setToast(deleted > 0 ? `Removed ${deleted} sync log(s) with 0 papers.` : 'No empty sync logs to remove.');
+    } catch {
+      setToast('Failed to clear empty sync logs.');
     }
   };
 
@@ -202,15 +272,6 @@ const AdminPipelinesPage = () => {
     }
   };
 
-  const saveKey = () => {
-    if (apiKey.trim().length < 8) {
-      setToast('API key is too short. Please enter a valid OpenAlex key or polite pool token.');
-      return;
-    }
-
-    setToast('API key saved locally for demo.');
-  };
-
   return (
     <div className="space-y-5">
       <AdminToast message={toast} onClose={() => setToast(null)} />
@@ -218,11 +279,25 @@ const AdminPipelinesPage = () => {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">
-            OpenAlex Control Panel
+            OpenAlex Data Synchronization
           </h1>
           <p className="mt-1 text-xs text-slate-500">
-            Dedicated management of external data ingestion streams.
+            Configure OpenAlex sources and monitor synchronization jobs.
           </p>
+          {pipelineIntegrations.length > 0 && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              {pipelineIntegrations.map((it) => (
+                <span
+                  key={it.name}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                    it.configured ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                  }`}
+                >
+                  {it.configured ? '✓' : '✗'} {it.name}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="flex gap-3">
@@ -244,7 +319,7 @@ const AdminPipelinesPage = () => {
       </div>
 
       <AdminSectionCard
-        title="Ingestion Control"
+        title="Data Sources"
         action={
           <span
             className={`text-[11px] font-bold ${
@@ -261,9 +336,6 @@ const AdminPipelinesPage = () => {
           {sources.map((source) => (
             <tr key={source.id}>
               <td className="px-5 py-4 font-bold text-slate-800">
-                <span className="mr-2 rounded-md bg-blue-50 px-2 py-1 text-blue-700">
-                  ☁
-                </span>
                 {source.engine}
               </td>
 
@@ -319,7 +391,17 @@ const AdminPipelinesPage = () => {
       </AdminSectionCard>
 
       <div className="grid gap-5 lg:grid-cols-[1.25fr_0.85fr]">
-        <AdminSectionCard title="Ingestion History">
+        <AdminSectionCard
+          title="Ingestion History"
+          action={
+            <button
+              onClick={clearEmptyLogs}
+              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+            >
+              Clear 0-paper logs
+            </button>
+          }
+        >
           <div className="divide-y divide-slate-100 px-5">
             {history.map((event, index) => (
               <div
@@ -335,12 +417,20 @@ const AdminPipelinesPage = () => {
                   <AdminBadge status={event.status} />
 
                   {(event.status === 'RUNNING' || event.status === 'PENDING') && (
-                    <button
-                      onClick={openLive}
-                      className="rounded border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700 hover:bg-sky-100"
-                    >
-                      ● Live
-                    </button>
+                    <>
+                      {live && live.syncLogId === event.id && (
+                        <span className="text-xs font-semibold text-sky-700">
+                          {live.added} added · {live.added + live.exists + live.errors}
+                          {live.total ? `/${live.total}` : ''} processed
+                        </span>
+                      )}
+                      <button
+                        onClick={openLive}
+                        className="rounded border border-sky-300 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700 hover:bg-sky-100"
+                      >
+                        ● Live
+                      </button>
+                    </>
                   )}
 
                   {event.id != null && event.status !== 'RUNNING' && (
@@ -366,34 +456,36 @@ const AdminPipelinesPage = () => {
           </div>
         </AdminSectionCard>
 
-        <AdminSectionCard title="API Authentication">
-          <div className="space-y-4 p-5">
-            <label
-              className="block text-xs font-bold text-slate-700"
-              htmlFor="openalex-key"
-            >
-              API Key / Token
-            </label>
-
-            <input
-              id="openalex-key"
-              type="password"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              className="w-full rounded-md border border-slate-300 bg-slate-50 px-3 py-2 text-sm text-slate-700"
-            />
-
-            <p className="text-xs text-slate-500">
-              Your key is encrypted and used only for authenticated requests to external
-              academic APIs.
+        <AdminSectionCard
+          title="OpenAlex Access"
+          action={
+            <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+              Read-only
+            </span>
+          }
+        >
+          <div className="space-y-2 p-5">
+            <div className="flex items-center justify-between border-b border-slate-100 py-2">
+              <span className="text-sm text-slate-500">Access mode</span>
+              <span className="text-sm font-semibold text-slate-800">Polite pool (via contact email)</span>
+            </div>
+            <div className="flex items-center justify-between border-b border-slate-100 py-2">
+              <span className="text-sm text-slate-500">Base URL</span>
+              <span className="text-sm font-semibold text-slate-800 break-all">{openAlexBaseUrl || '—'}</span>
+            </div>
+            <div className="flex items-center justify-between border-b border-slate-100 py-2">
+              <span className="text-sm text-slate-500">Contact email</span>
+              <span className="text-sm font-semibold text-slate-800 break-all">{maskEmail(openAlexEmail)}</span>
+            </div>
+            <div className="flex items-center justify-between py-2">
+              <span className="text-sm text-slate-500">Status</span>
+              <span className={`text-sm font-semibold ${openAlexConfigured ? 'text-emerald-600' : 'text-slate-400'}`}>
+                {openAlexConfigured ? '✓ Configured' : '✗ Not configured'}
+              </span>
+            </div>
+            <p className="pt-1 text-xs text-slate-400">
+              OpenAlex requires no API key — requests use the polite pool via a contact email.
             </p>
-
-            <button
-              onClick={saveKey}
-              className="w-full rounded-md bg-[#4338ca] px-4 py-2 text-sm font-bold text-white hover:bg-[#3730a3]"
-            >
-              Save Key
-            </button>
           </div>
         </AdminSectionCard>
       </div>

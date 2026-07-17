@@ -44,10 +44,10 @@ public class SubscriptionController : ControllerBase
     {
         var userId = CurrentUserId;
         if (userId == null)
-            return Unauthorized(ApiResponse<SubscriptionStatusResponseDto>.Fail(401, "Danh tính người dùng không hợp lệ."));
+            return Unauthorized(ApiResponse<SubscriptionStatusResponseDto>.Fail(401, "Invalid user identity."));
 
         var result = await _subscriptionService.GetSubscriptionStatusAsync(userId.Value, ct);
-        return Ok(ApiResponse<SubscriptionStatusResponseDto>.Ok(result, "Kiểm tra thông tin Premium thành công."));
+        return Ok(ApiResponse<SubscriptionStatusResponseDto>.Ok(result, "Premium status checked successfully."));
     }
 
     /// <summary>
@@ -72,16 +72,16 @@ public class SubscriptionController : ControllerBase
     {
         var userId = CurrentUserId;
         if (userId == null)
-            return Unauthorized(ApiResponse<object>.Fail(401, "Danh tính người dùng không hợp lệ."));
+            return Unauthorized(ApiResponse<object>.Fail(401, "Invalid user identity."));
 
         var success = await _subscriptionService.SubscribePlanAsync(userId.Value, dto, ct);
 
         if (!success)
         {
-            return BadRequest(ApiResponse<object>.Fail(400, "Đăng ký gói dịch vụ thất bại. Gói không tồn tại hoặc đã bị khóa."));
+            return BadRequest(ApiResponse<object>.Fail(400, "Subscription failed. The plan does not exist or is locked."));
         }
 
-        return Ok(ApiResponse<object>.Ok(null, "Đăng ký gói dịch vụ thành công!"));
+        return Ok(ApiResponse<object>.Ok(null, "Plan subscribed successfully!"));
     }
 
     /// <summary>
@@ -110,7 +110,7 @@ public class SubscriptionController : ControllerBase
     public async Task<IActionResult> GetUserStatusForAdminAsync(int userId, CancellationToken ct)
     {
         var result = await _subscriptionService.GetSubscriptionStatusAsync(userId, ct);
-        return Ok(ApiResponse<SubscriptionStatusResponseDto>.Ok(result, $"Lấy trạng thái gói dịch vụ của người dùng {userId} thành công."));
+        return Ok(ApiResponse<SubscriptionStatusResponseDto>.Ok(result, $"Subscription status of user {userId} retrieved successfully."));
     }
 
     /// <summary>
@@ -130,6 +130,6 @@ public class SubscriptionController : ControllerBase
     public async Task<IActionResult> GetPlansAsync(CancellationToken ct)
     {
         var result = await _subscriptionService.GetActivePlansAsync(ct);
-        return Ok(ApiResponse<List<SubscriptionPlanDto>>.Ok(result, $"Tìm thấy {result.Count} gói dịch vụ khả dụng."));
+        return Ok(ApiResponse<List<SubscriptionPlanDto>>.Ok(result, $"Found {result.Count} available subscription plan(s)."));
     }
 }

@@ -64,6 +64,13 @@ namespace ScientificTrendTracker
             builder.Services.AddScoped<ITrendService, TrendService>();
             builder.Services.AddScoped<ISyncOrchestratorService, SyncOrchestratorService>();
             builder.Services.AddScoped<IIdeaOverlapService, IdeaOverlapService>();
+            // LaTeX Writer (premium): sinh citation read-only từ corpus — không có bảng riêng.
+            builder.Services.AddScoped<ILatexCitationService, LatexCitationService>();
+            // Compile LaTeX proxy qua texlive.net: tắt auto-redirect để tự xử lý 301 → GET file kết quả.
+            builder.Services.AddHttpClient<ILatexCompileService, LatexCompileService>(client =>
+            {
+                client.Timeout = TimeSpan.FromSeconds(120); // tài liệu lớn + hàng đợi dịch vụ công cộng
+            }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
             // Idea Check dùng Gemini (2 API key luân phiên + failover), fallback Ollama — có HttpClient riêng.
             builder.Services.AddHttpClient<IIdeaKeywordExtractor, GeminiIdeaKeywordExtractor>(client =>
             {
@@ -117,7 +124,7 @@ namespace ScientificTrendTracker
                         Scheme = "Bearer",
                         BearerFormat = "JWT",
                         In = ParameterLocation.Header,
-                        Description = "Nhập theo cú pháp: Bearer [Chuỗi_Token_Của_Bạn]"
+                        Description = "Enter using the syntax: Bearer [Your_Token_String]"
                     });
 
                     options.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -183,7 +190,7 @@ namespace ScientificTrendTracker
                     {
                         l.Status = "failed";
                         l.SyncFinishedAt = DateTime.UtcNow;
-                        l.ErrorMessage = "Tiến trình sync bị gián đoạn (backend khởi động lại giữa chừng).";
+                        l.ErrorMessage = "Sync process was interrupted (backend restarted midway).";
                     }
                     if (stale.Count > 0) db.SaveChanges();
                 }
@@ -198,6 +205,18 @@ namespace ScientificTrendTracker
                         .AsEnumerable().FirstOrDefault();
                     if (exists == 0)
                         db.Database.ExecuteSqlRaw("ALTER TABLE FollowedItems ADD COLUMN author_id INT NULL");
+                }
+                catch { /* không chặn khởi động */ }
+
+                // Bảo đảm cột PaidAmount (số tiền thực trả sau ưu đãi edu) tồn tại. Idempotent.
+                try
+                {
+                    var db = startupScope.ServiceProvider.GetRequiredService<ScientificTrendTracker.Data.AppDbContext>();
+                    var exists = db.Database
+                        .SqlQueryRaw<int>("SELECT COUNT(*) AS Value FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'UserSubscriptions' AND COLUMN_NAME = 'PaidAmount'")
+                        .AsEnumerable().FirstOrDefault();
+                    if (exists == 0)
+                        db.Database.ExecuteSqlRaw("ALTER TABLE UserSubscriptions ADD COLUMN PaidAmount DECIMAL(18,2) NULL");
                 }
                 catch { /* không chặn khởi động */ }
             }

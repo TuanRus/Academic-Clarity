@@ -159,18 +159,107 @@ const TrendDashboardPage = () => {
 
   const maxShare = topKeywords.reduce((m, k) => Math.max(m, k.share), 0) || 1;
 
-  const exportCsv = () => {
-    const header = 'keyword,count,rangeTotal,share,direction\n';
-    const rows = topKeywords
-      .map((k) => `"${k.name}",${k.count},${k.rangeTotal},${k.share},${k.direction}`)
-      .join('\n');
-    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'top-trending-keywords.csv';
-    a.click();
-    URL.revokeObjectURL(url);
+  const [exporting, setExporting] = useState(false);
+  const exportCsv = async () => {
+    if (topKeywords.length === 0) return;
+    setExporting(true);
+    try {
+      // Keyword tiêu điểm để lấy chi tiết: đang xem -> dùng luôn; chưa chọn -> lấy keyword top #1.
+      const focus = seriesKeyword || topKeywords[0].name;
+
+      // Nếu chi tiết trong state chưa phải của "focus" thì tải on-demand để báo cáo luôn đầy đủ.
+      let s: TrendSeries | null = series;
+      let papers: TrendPremiumPaper[] = topPapers;
+      let authors: TrendPremiumAuthor[] = topAuthors;
+      let journals: TrendPremiumJournal[] = topJournals;
+      let co: CoOccurringKeyword[] = coKeywords;
+      if (focus !== seriesKeyword) {
+        const [sr, pr, ar, jr, cr] = await Promise.allSettled([
+          getTrendSeries('keyword', focus, { fromYear: 2015, toYear: new Date().getFullYear(), groupBy: 'year' }),
+          getKeywordTopPapers(focus),
+          getKeywordTopAuthors(focus),
+          getKeywordTopJournals(focus),
+          getCoOccurringKeywords(focus),
+        ]);
+        s = sr.status === 'fulfilled' ? sr.value : null;
+        papers = pr.status === 'fulfilled' ? pr.value : [];
+        authors = ar.status === 'fulfilled' ? ar.value : [];
+        journals = jr.status === 'fulfilled' ? jr.value : [];
+        co = cr.status === 'fulfilled' ? cr.value : [];
+      }
+
+      // Escape 1 ô CSV (bọc ngoặc kép nếu chứa dấu phẩy / xuống dòng / ngoặc kép).
+      const esc = (v: unknown) => {
+        const str = String(v ?? '');
+        return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+      };
+      const row = (arr: unknown[]) => arr.map(esc).join(',');
+      const lines: string[] = [];
+      const now = new Date();
+
+      // ----- Tiêu đề báo cáo -----
+      lines.push(row(['Academic Clarity — Trend Analytics Report']));
+      lines.push(row(['Generated at', now.toLocaleString('vi-VN')]));
+      lines.push(row(['Focus keyword', focus]));
+      lines.push('');
+
+      // ----- 1) Xu hướng từ khóa -----
+      lines.push(row(['# Top Trending Keywords']));
+      lines.push(row(['Keyword', 'Count', 'Range Total', 'Share (%)', 'Slope', 'Direction']));
+      topKeywords.forEach((k) => lines.push(row([k.name, k.count, k.rangeTotal, k.share, k.slope, k.direction])));
+      lines.push('');
+
+      // ----- 2) Chuỗi thời gian của keyword tiêu điểm -----
+      if (s) {
+        lines.push(row([`# Publication Volume Trend — "${focus}" (direction: ${s.direction}, slope: ${s.slope})`]));
+        lines.push(row(['Period', 'Count', 'Period Total', 'Share (%)']));
+        s.series.forEach((p) => lines.push(row([p.period, p.count, p.periodTotal, p.share])));
+        lines.push('');
+      }
+
+      // ----- 3) Top bài báo -----
+      if (papers.length) {
+        lines.push(row([`# Top Papers — "${focus}"`]));
+        lines.push(row(['Title', 'Year', 'Citations', 'Journal', 'Source URL']));
+        papers.forEach((p) => lines.push(row([p.title, p.publicationYear ?? '', p.citationCount, p.journalName, p.sourceUrl])));
+        lines.push('');
+      }
+
+      // ----- 4) Top tác giả -----
+      if (authors.length) {
+        lines.push(row([`# Top Authors — "${focus}"`]));
+        lines.push(row(['Author', 'Paper Count']));
+        authors.forEach((a) => lines.push(row([a.fullName, a.paperCount])));
+        lines.push('');
+      }
+
+      // ----- 5) Top tạp chí -----
+      if (journals.length) {
+        lines.push(row([`# Top Journals — "${focus}"`]));
+        lines.push(row(['Journal', 'Paper Count']));
+        journals.forEach((j) => lines.push(row([j.journalName, j.paperCount])));
+        lines.push('');
+      }
+
+      // ----- 6) Từ khóa đồng xuất hiện -----
+      if (co.length) {
+        lines.push(row([`# Co-occurring Keywords — "${focus}"`]));
+        lines.push(row(['Keyword', 'Co-occurrence Count']));
+        co.forEach((c) => lines.push(row([c.keywordName, c.coOccurrenceCount])));
+        lines.push('');
+      }
+
+      // BOM (﻿) để Excel đọc UTF-8 đúng (tiếng Việt không lỗi font).
+      const blob = new Blob(['﻿' + lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `trend-report-${now.toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setExporting(false);
+    }
   };
 
   return (
@@ -185,16 +274,16 @@ const TrendDashboardPage = () => {
 
         {/* FR-22: nút Export chỉ enable khi có EXPORT_CSV (PREMIUM hoặc ADMIN) */}
         <button
-          disabled={!canExportCsv || topKeywords.length === 0}
+          disabled={!canExportCsv || topKeywords.length === 0 || exporting}
           onClick={exportCsv}
           title={!canExportCsv ? 'Upgrade to Premium to export CSV' : undefined}
           className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium ${
-            canExportCsv && topKeywords.length > 0
+            canExportCsv && topKeywords.length > 0 && !exporting
               ? 'bg-indigo-700 text-white hover:bg-indigo-800'
               : 'cursor-not-allowed bg-gray-200 text-gray-400'
           }`}
         >
-          Export Data (CSV)
+          {exporting ? 'Preparing report…' : 'Export Report (CSV)'}
         </button>
       </div>
 

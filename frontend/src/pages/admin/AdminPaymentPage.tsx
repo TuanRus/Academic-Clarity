@@ -8,16 +8,24 @@ import AdminToast from '../../components/admin/AdminToast';
 import {
   getTransactions,
   getPlans,
+  getSystemConfig,
+  updatePlan,
   type RevenueRow,
   type SubscriptionPlan,
 } from '../../lib/api/admin';
+import { ApiError } from '../../lib/http';
 
-const AdminRevenuePage = () => {
+const AdminPaymentPage = () => {
   const [rows, setRows] = useState<RevenueRow[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
+  const [payosConfigured, setPayosConfigured] = useState<boolean | null>(null);
   useEffect(() => {
     getTransactions().then(setRows).catch(() => setRows([]));
     getPlans().then(setPlans).catch(() => setPlans([]));
+    // Trạng thái cấu hình cổng thanh toán PayOS (chuyển từ Settings sang đây).
+    getSystemConfig()
+      .then((c) => setPayosConfigured(c.integrations.find((i) => i.name === 'PayOS')?.configured ?? false))
+      .catch(() => setPayosConfigured(null));
   }, []);
   const [statusFilter, setStatusFilter] = useState<'ALL' | RevenueRow['status']>('ALL');
   const [selectedRow, setSelectedRow] = useState<RevenueRow | null>(null);
@@ -29,9 +37,27 @@ const AdminRevenuePage = () => {
     statusFilter === 'ALL' ? rows : rows.filter((row) => row.status === statusFilter);
 
   const totalSubscriptions = rows.length;
-  const successPayments = rows.filter((row) => row.status === 'SUCCESS').length;
-  const pendingPayments = rows.filter((row) => row.status === 'PENDING').length;
-  const failedPayments = rows.filter((row) => row.status === 'FAILED').length;
+  // Số USER riêng biệt đã mua gói thành công (distinct theo email, không đếm trùng khi 1 người mua nhiều lần).
+  const payingUsers = new Set(
+    rows.filter((row) => row.status === 'SUCCESS').map((row) => row.customerEmail),
+  ).size;
+
+  // Subscription Distribution (chuyển từ Dashboard sang đây) — gom theo tên gói từ giao dịch thật.
+  const planColors = ['#4338ca', '#10b981', '#fb923c', '#0ea5e9', '#e11d48'];
+  const planDistribution = (() => {
+    const map = new Map<string, number>();
+    rows.forEach((r) => map.set(r.plan, (map.get(r.plan) ?? 0) + 1));
+    const total = rows.length;
+    return [...map.entries()].map(([name, count], i) => ({
+      name,
+      count,
+      percent: total > 0 ? Math.round((count / total) * 100) : 0,
+      color: planColors[i % planColors.length],
+    }));
+  })();
+  // Đếm số lượng gói theo chu kỳ Tháng / Năm (dựa trên tên gói đã chuẩn hoá "… Monthly/Yearly").
+  const monthlyCount = rows.filter((r) => /monthly|tháng/i.test(r.plan)).length;
+  const yearlyCount = rows.filter((r) => /yearly|năm/i.test(r.plan)).length;
 
   const exportFinanceReport = () => {
     const content = rows
@@ -57,48 +83,44 @@ const AdminRevenuePage = () => {
     setToast('Finance report exported.');
   };
 
-  const refreshPayments = () => {
-    const nextInvoice: RevenueRow = {
-      invoiceId: `#INV-${Math.floor(Math.random() * 90000 + 10000)}`,
-      transactionId: `QR-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-      customer: 'new.researcher@university.edu',
-      plan: 'Premium Monthly',
-      amount: '99.000₫',
-      method: 'VietQR',
-      paidAt: new Date().toISOString().slice(0, 16).replace('T', ' '),
-      status: 'PENDING',
-    };
-
-    setRows((current) => [nextInvoice, ...current]);
-    setToast('Payments refreshed. New payment callback received as PENDING.');
-
-    window.setTimeout(() => {
-      setRows((current) =>
-        current.map((row) =>
-          row.invoiceId === nextInvoice.invoiceId ? { ...row, status: 'SUCCESS' } : row,
-        ),
-      );
-
-      setToast(`${nextInvoice.invoiceId} confirmed by payment gateway.`);
-    }, 1300);
+  const refreshPayments = async () => {
+    // Tải lại dữ liệu giao dịch THẬT từ backend (trước đây bịa 1 giao dịch giả).
+    try {
+      setRows(await getTransactions());
+      setToast('Payments refreshed.');
+    } catch (e) {
+      setToast(e instanceof ApiError ? e.message : 'Failed to refresh payments.');
+    }
   };
 
   const openEditPlan = (plan: SubscriptionPlan) => {
     setEditingPlan(plan);
-    setPlanPrice(plan.price);
+    // Sửa trên số tiền thô (VND) để lưu backend chính xác, không phải chuỗi đã format.
+    setPlanPrice(String(plan.priceAmount));
   };
 
-  const savePlan = () => {
+  const [savingPlan, setSavingPlan] = useState(false);
+  const savePlan = async () => {
     if (!editingPlan) return;
-
-    setPlans((current) =>
-      current.map((plan) =>
-        plan.id === editingPlan.id ? { ...plan, price: planPrice } : plan,
-      ),
-    );
-
-    setEditingPlan(null);
-    setToast(`${editingPlan.name} price updated.`);
+    const amount = Number(planPrice);
+    if (!Number.isFinite(amount) || amount < 0) { setToast('Enter a valid price (number in VND).'); return; }
+    setSavingPlan(true);
+    try {
+      // Lưu THẬT xuống DB (PUT /admin/subscriptions/plans/{id}), rồi tải lại từ server.
+      await updatePlan(editingPlan.id, {
+        planName: editingPlan.name,
+        priceAmount: amount,
+        durationDays: editingPlan.durationDays,
+        isActive: editingPlan.status === 'ACTIVE',
+      });
+      setPlans(await getPlans());
+      setEditingPlan(null);
+      setToast(`${editingPlan.name} price updated.`);
+    } catch (e) {
+      setToast(e instanceof ApiError ? e.message : 'Failed to update plan.');
+    } finally {
+      setSavingPlan(false);
+    }
   };
 
   return (
@@ -113,6 +135,15 @@ const AdminRevenuePage = () => {
           <p className="mt-1 text-xs text-slate-500">
             Monitor subscription revenue, payment transactions and premium plan performance.
           </p>
+          {payosConfigured !== null && (
+            <span
+              className={`mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
+                payosConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+              }`}
+            >
+              {payosConfigured ? '✓' : '✗'} PayOS gateway {payosConfigured ? 'configured' : 'not configured'}
+            </span>
+          )}
         </div>
 
         <div className="flex gap-3">
@@ -132,7 +163,7 @@ const AdminRevenuePage = () => {
         </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-4">
+      <div className="grid gap-5 xl:grid-cols-2">
         <AdminMetricCard
           label="Total Subscriptions"
           value={String(totalSubscriptions)}
@@ -142,29 +173,51 @@ const AdminRevenuePage = () => {
         />
 
         <AdminMetricCard
-          label="Success Payments"
-          value={String(successPayments)}
-          helper="Confirmed successful payments"
+          label="Paying Users"
+          value={String(payingUsers)}
+          helper="Distinct users who purchased a plan"
           icon="✓"
           accent="green"
         />
-
-        <AdminMetricCard
-          label="Pending Payments"
-          value={String(pendingPayments)}
-          helper="Awaiting payment confirmation"
-          icon="!"
-          accent="slate"
-        />
-
-        <AdminMetricCard
-          label="Failed Payments"
-          value={String(failedPayments)}
-          helper="Payment failed or rejected"
-          icon="×"
-          accent="red"
-        />
       </div>
+
+      <AdminSectionCard title="Subscription Distribution" subtitle="Plan allocation and billing cycle breakdown from real transactions">
+        <div className="grid gap-6 p-6 lg:grid-cols-[1fr_260px]">
+          <div className="space-y-5">
+            {planDistribution.length === 0 ? (
+              <p className="text-sm text-slate-500">No subscription data available.</p>
+            ) : (
+              planDistribution.map((plan) => (
+                <div key={plan.name}>
+                  <div className="mb-2 flex justify-between text-sm font-semibold">
+                    <span>{plan.name}</span>
+                    <span>{plan.count} · {plan.percent}%</span>
+                  </div>
+                  <div className="h-3 rounded-full bg-slate-100">
+                    <div className="h-3 rounded-full" style={{ width: `${plan.percent}%`, backgroundColor: plan.color }} />
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="space-y-3">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">By billing cycle</p>
+            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <span className="h-3 w-3 rounded-full bg-[#4338ca]" /> Monthly plans
+              </span>
+              <span className="text-lg font-extrabold text-slate-950">{monthlyCount}</span>
+            </div>
+            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <span className="h-3 w-3 rounded-full bg-emerald-500" /> Yearly plans
+              </span>
+              <span className="text-lg font-extrabold text-slate-950">{yearlyCount}</span>
+            </div>
+          </div>
+        </div>
+      </AdminSectionCard>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
         <AdminSectionCard
@@ -261,7 +314,7 @@ const AdminRevenuePage = () => {
             ))}
 
             <div className="rounded-md bg-emerald-50 p-4 text-sm text-emerald-800">
-              Edu accounts are receiving a configured 20% discount for premium checkout.
+              Edu accounts are receiving a configured 50% discount for premium checkout.
             </div>
           </div>
         </AdminSectionCard>
@@ -321,9 +374,10 @@ const AdminRevenuePage = () => {
 
             <button
               onClick={savePlan}
-              className="rounded-md bg-[#062b4f] px-4 py-2 text-xs font-bold text-white"
+              disabled={savingPlan}
+              className="rounded-md bg-[#062b4f] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
             >
-              Save Plan
+              {savingPlan ? 'Saving…' : 'Save Plan'}
             </button>
           </>
         }
@@ -332,11 +386,17 @@ const AdminRevenuePage = () => {
           <div className="space-y-4">
             <p className="text-sm font-bold text-slate-800">{editingPlan.name}</p>
 
-            <input
-              value={planPrice}
-              onChange={(event) => setPlanPrice(event.target.value)}
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]"
-            />
+            <label className="block">
+              <span className="mb-1 block text-xs font-semibold text-slate-500">Price (VND)</span>
+              <input
+                value={planPrice}
+                onChange={(event) => setPlanPrice(event.target.value)}
+                inputMode="numeric"
+                placeholder="e.g. 50000"
+                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]"
+              />
+            </label>
+            <p className="text-xs text-slate-400">Duration: {editingPlan.duration} · Status: {editingPlan.status}</p>
           </div>
         )}
       </AdminModal>
@@ -344,4 +404,4 @@ const AdminRevenuePage = () => {
   );
 };
 
-export default AdminRevenuePage;
+export default AdminPaymentPage;

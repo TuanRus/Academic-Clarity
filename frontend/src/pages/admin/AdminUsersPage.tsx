@@ -5,9 +5,12 @@ import AdminModal from '../../components/admin/AdminModal';
 import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
 import AdminToast from '../../components/admin/AdminToast';
-import { getUsers, updateUserStatus, type UserDirectoryRow } from '../../lib/api/admin';
+import { getUsers, updateUserStatus, updateUserRole, roleIdFromName, sendBroadcast, type UserDirectoryRow } from '../../lib/api/admin';
+import { ApiError } from '../../lib/http';
 
-const roleOptions = ['Admin Overseer', 'Researcher (Nhà nghiên cứu)', 'Lecturer (Giảng viên)', 'Student (Sinh viên)', 'Regular User'];
+// Phải khớp CHÍNH XÁC với nhãn role do roleName() trả về (admin.ts), nếu không <select>
+// không tìm được option khớp → mọi dòng đều rơi về option đầu tiên.
+const roleOptions = ['ADMIN', 'RESEARCHER', 'STUDENT', 'Member'];
 
 const AdminUsersPage = () => {
   const [users, setUsers] = useState<UserDirectoryRow[]>([]);
@@ -21,18 +24,40 @@ const AdminUsersPage = () => {
   const [newUserRole, setNewUserRole] = useState(roleOptions[3]);
   const [toast, setToast] = useState<string | null>(null);
 
+  // System broadcast — gửi thông báo tới TOÀN bộ người dùng (chuyển từ Settings sang đây).
+  const [bcTitle, setBcTitle] = useState('');
+  const [bcMessage, setBcMessage] = useState('');
+  const [sending, setSending] = useState(false);
+  const handleBroadcast = async () => {
+    if (!bcTitle.trim() || !bcMessage.trim()) { setToast('Title and message are required.'); return; }
+    setSending(true);
+    try {
+      await sendBroadcast(bcTitle.trim(), bcMessage.trim());
+      setToast('Broadcast sent to all users.');
+      setBcTitle(''); setBcMessage('');
+    } catch (e) {
+      setToast(e instanceof ApiError ? e.message : 'Failed to send broadcast.');
+    } finally {
+      setSending(false);
+    }
+  };
+
   const filteredUsers = useMemo(() => users.filter((user) => `${user.id} ${user.name} ${user.email} ${user.role}`.toLowerCase().includes(query.toLowerCase())), [query, users]);
   const pageSize = 4;
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / pageSize));
   const visibleUsers = filteredUsers.slice((page - 1) * pageSize, page * pageSize);
   const activeUsers = users.filter((user) => user.status === 'ACTIVE').length;
-  const pendingUsers = users.filter((user) => user.status === 'REGISTERED').length;
   const totalUsers = users.length;
 
 
   const changeRole = (userId: string, role: string) => {
-    setUsers((current) => current.map((user) => (user.id === userId ? { ...user, role } : user)));
-    setToast(`${userId} role updated.`);
+    // Lưu DB thật rồi cập nhật UI (rollback bằng reload nếu lỗi).
+    updateUserRole(userId, roleIdFromName(role))
+      .then(() => {
+        setUsers((current) => current.map((user) => (user.id === userId ? { ...user, role } : user)));
+        setToast(`${userId} role updated.`);
+      })
+      .catch(() => setToast('Update role failed.'));
   };
 
   const toggleUserStatus = (user: UserDirectoryRow) => {
@@ -47,7 +72,7 @@ const AdminUsersPage = () => {
   };
 
   const approveResearcher = (user: UserDirectoryRow) => {
-    setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, role: 'Researcher (Nhà nghiên cứu)', status: 'ACTIVE' } : item)));
+    setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, role: 'RESEARCHER', status: 'ACTIVE' } : item)));
     setToast(`${user.name} approved as Researcher.`);
   };
 
@@ -87,28 +112,16 @@ const AdminUsersPage = () => {
     setToast(`${nextUser.name} has been provisioned.`);
   };
 
-  const downloadComplianceReport = () => {
-    const content = `Total Users,Active Users,Pending Role Requests\n${users.length},${activeUsers},${pendingUsers}`;
-    const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = 'compliance-report.csv';
-    anchor.click();
-    URL.revokeObjectURL(url);
-    setToast('Compliance report downloaded.');
-  };
-
   return (
     <div className="space-y-5">
       <AdminToast message={toast} onClose={() => setToast(null)} />
 
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">User Directory Governance</h1>
-        <p className="mt-1 text-xs text-slate-500">Manage institution access, audit role transitions, and oversee global RBAC alignment across academic departments.</p>
+        <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">User Account Management</h1>
+        <p className="mt-1 text-xs text-slate-500">Manage user roles, account status, and system access.</p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-3">
+      <div className="grid gap-5 lg:grid-cols-2">
         <AdminMetricCard
           label="Total Users"
           value={String(totalUsers)}
@@ -124,15 +137,32 @@ const AdminUsersPage = () => {
           icon="✓"
           accent="green"
         />
-
-        <AdminMetricCard
-          label="Pending Role Requests"
-          value={String(pendingUsers)}
-          helper="Registered users awaiting review"
-          icon="▣"
-          accent="orange"
-        />
       </div>
+
+      <AdminSectionCard title="System Broadcast" subtitle="Send an announcement (alert, maintenance, notice…) to every user.">
+        <div className="space-y-3 p-5">
+          <input
+            value={bcTitle}
+            onChange={(e) => setBcTitle(e.target.value)}
+            placeholder="Broadcast title (e.g. Scheduled maintenance)"
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]"
+          />
+          <textarea
+            value={bcMessage}
+            onChange={(e) => setBcMessage(e.target.value)}
+            rows={3}
+            placeholder="Message sent to all users…"
+            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]"
+          />
+          <button
+            onClick={handleBroadcast}
+            disabled={sending}
+            className="rounded-md bg-[#4338ca] hover:bg-[#3730a3] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+          >
+            {sending ? 'Sending…' : 'Send to all users'}
+          </button>
+        </div>
+      </AdminSectionCard>
 
       <div className="space-y-5">
         <div className="space-y-5">
@@ -179,13 +209,6 @@ const AdminUsersPage = () => {
                   <button key={pageNumber} onClick={() => setPage(pageNumber)} className={`h-7 w-7 rounded border text-xs font-bold ${pageNumber === page ? 'bg-[#062b4f] text-white' : 'border-slate-200 bg-white text-slate-600'}`}>{pageNumber}</button>
                 ))}
               </div>
-            </div>
-          </AdminSectionCard>
-
-          <AdminSectionCard title="Compliance Status">
-            <div className="p-5">
-              <p className="text-sm text-slate-600">The current RBAC configuration matches the institutional policy 2024-B. No unauthorized role elevations detected in the last 24 hours.</p>
-              <button onClick={downloadComplianceReport} className="mt-3 text-xs font-bold text-[#0b6fb8]">Download Compliance Report →</button>
             </div>
           </AdminSectionCard>
         </div>

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -63,6 +64,68 @@ namespace ScientificTrendTracker.Controllers
         }
 
         /// <summary>
+        /// [Admin] Trả về cấu hình vận hành hệ thống ở dạng READ-ONLY.
+        /// Chỉ whitelist các trường KHÔNG bí mật; tuyệt đối không trả secret
+        /// (connection string, API key, JWT secret, mật khẩu email...).
+        /// </summary>
+        [HttpGet("settings")]
+        [Authorize(Roles = "1")] // roleId 1 = Admin
+        public IActionResult GetSystemConfig(
+            [FromServices] IConfiguration config,
+            [FromServices] IWebHostEnvironment env)
+        {
+            // true nếu key có giá trị thật (không rỗng và không phải placeholder "YOUR_...").
+            bool HasRealValue(string key) =>
+                !string.IsNullOrWhiteSpace(config[key]) &&
+                !config[key].Contains("YOUR_", StringComparison.OrdinalIgnoreCase);
+
+            var aiProviders = config.GetSection("AiProviders").GetChildren()
+                .Select(s => new Models.DTOs.AiProviderInfoDto
+                {
+                    Name = s["Name"],
+                    BaseUrl = s["BaseUrl"],
+                    Model = s["Model"]
+                })
+                .ToList();
+
+            // Gemini "đã cấu hình" nếu có ít nhất 1 ApiKey thật (không rỗng, không placeholder).
+            bool geminiConfigured = config.GetSection("Gemini:ApiKeys").GetChildren()
+                .Select(c => c.Value)
+                .Any(k => !string.IsNullOrWhiteSpace(k) && !k.Contains("YOUR_", StringComparison.OrdinalIgnoreCase));
+
+            var dto = new Models.DTOs.SystemConfigDto
+            {
+                Environment = env.EnvironmentName,
+                DotnetVersion = System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,
+                AllowedHosts = config["AllowedHosts"],
+                DefaultLogLevel = config["Logging:LogLevel:Default"],
+
+                OpenAlexBaseUrl = config["OpenAlex:BaseUrl"],
+                OpenAlexEmail = config["OpenAlex:Email"],
+
+                WeeklySyncEnabled = config.GetValue<bool>("WeeklySync:Enabled"),
+
+                JwtIssuer = config["Jwt:Issuer"],
+                JwtAudience = config["Jwt:Audience"],
+
+                AiProviders = aiProviders,
+                GeminiModel = config["Gemini:Model"],
+                GeminiBaseUrl = config["Gemini:BaseUrl"],
+                GeminiTimeoutSeconds = config.GetValue<int>("Gemini:TimeoutSeconds"),
+
+                Integrations = new List<Models.DTOs.IntegrationStatusDto>
+                {
+                    new() { Name = "PayOS", Configured = HasRealValue("PayOS:ClientId") && HasRealValue("PayOS:ApiKey") },
+                    new() { Name = "Email (SMTP)", Configured = HasRealValue("EmailSettings:Password") },
+                    new() { Name = "Gemini AI", Configured = geminiConfigured },
+                    new() { Name = "OpenAlex", Configured = HasRealValue("OpenAlex:BaseUrl") },
+                }
+            };
+
+            return Ok(ApiResponse<Models.DTOs.SystemConfigDto>.Ok(dto, "System configuration (read-only)."));
+        }
+
+        /// <summary>
         /// [Admin · DEV] Liệt kê session MySQL đang kết nối (chẩn đoán deadlock/lock-wait).
         /// </summary>
         [HttpGet("db-sessions")]
@@ -106,7 +169,7 @@ namespace ScientificTrendTracker.Controllers
                 catch (Exception ex) { _logger.LogWarning("Không kill được session {Id}: {Msg}", id, ex.Message); }
             }
             _logger.LogWarning("DB-KILL-IDLE: đã kill {N} session treo.", killed.Count);
-            return Ok(ApiResponse<object>.Ok(new { Killed = killed }, $"Đã kill {killed.Count} session idle."));
+            return Ok(ApiResponse<object>.Ok(new { Killed = killed }, $"Killed {killed.Count} idle session(s)."));
         }
 
         /// <summary>[Admin] Danh sách user (cho trang quản trị Users), phân trang.</summary>
@@ -116,6 +179,7 @@ namespace ScientificTrendTracker.Controllers
             if (page < 1) page = 1;
             if (pageSize < 1 || pageSize > 200) pageSize = 50;
 
+            var now = DateTime.UtcNow;
             var query = _dbContext.Users.OrderByDescending(u => u.CreateAt);
             var total = await query.CountAsync();
             var items = await query
@@ -130,7 +194,10 @@ namespace ScientificTrendTracker.Controllers
                     u.AccountTag,
                     u.Institution,
                     u.CreateAt,
-                    u.LastLoginAt
+                    u.LastLoginAt,
+                    // Premium = có ít nhất 1 gói đang ACTIVE còn hiệu lực (dùng để phân loại User Overview).
+                    IsPremium = _dbContext.UserSubscriptions.Any(s =>
+                        s.UserId == u.UserId && s.Status == "ACTIVE" && (s.EndsAt == null || s.EndsAt > now))
                 })
                 .ToListAsync();
 
@@ -150,11 +217,11 @@ namespace ScientificTrendTracker.Controllers
         {
             bool roleExists = await _dbContext.Roles.AnyAsync(r => r.RoleId == dto.RoleId, ct);
             if (!roleExists)
-                return BadRequest(ApiResponse<object>.Fail(400, "RoleId không hợp lệ."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Invalid RoleId."));
 
             var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.UserId == userId, ct);
             if (user == null)
-                return NotFound(ApiResponse<object>.Fail(404, "Không tìm thấy user."));
+                return NotFound(ApiResponse<object>.Fail(404, "User not found."));
 
             user.RoleId = dto.RoleId;
             user.UpdatedAt = DateTime.UtcNow;
@@ -162,9 +229,9 @@ namespace ScientificTrendTracker.Controllers
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "UPDATE_USER_ROLE",
-                $"Đổi vai trò user {userId} ({user.Email}) thành RoleId {dto.RoleId}.", ip);
+                $"Changed role of user {userId} ({user.Email}) to RoleId {dto.RoleId}.", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, "Đổi vai trò user thành công."));
+            return Ok(ApiResponse<object>.Ok(null, "User role changed successfully."));
         }
 
         /// <summary>[Admin] Bật/tắt trạng thái hoạt động (suspend/activate) của một user.</summary>
@@ -173,7 +240,7 @@ namespace ScientificTrendTracker.Controllers
         {
             var user = await _dbContext.Users.FirstOrDefaultAsync(u => u.UserId == userId, ct);
             if (user == null)
-                return NotFound(ApiResponse<object>.Fail(404, "Không tìm thấy user."));
+                return NotFound(ApiResponse<object>.Fail(404, "User not found."));
 
             user.IsActive = isActive;
             user.UpdatedAt = DateTime.UtcNow;
@@ -181,9 +248,9 @@ namespace ScientificTrendTracker.Controllers
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "UPDATE_USER_STATUS",
-                $"{(isActive ? "Kích hoạt" : "Tạm khóa")} user {userId} ({user.Email}).", ip);
+                $"{(isActive ? "Activated" : "Suspended")} user {userId} ({user.Email}).", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, $"Cập nhật trạng thái user thành {(isActive ? "ACTIVE" : "SUSPENDED")}."));
+            return Ok(ApiResponse<object>.Ok(null, $"Updated user status to {(isActive ? "ACTIVE" : "SUSPENDED")}."));
         }
 
         /// <summary>[Admin · DEV] Chèn 4 role chuẩn (1-admin, 2-researcher, 3-edu user, 4-regular user) nếu chưa có.</summary>
@@ -191,17 +258,17 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> SeedRolesInsert()
         {
             if (await _dbContext.Roles.AnyAsync())
-                return Conflict(ApiResponse<object>.Fail(409, "Bảng Roles đã có dữ liệu — không chèn lại."));
+                return Conflict(ApiResponse<object>.Fail(409, "Roles table already contains data — will not re-insert."));
 
             await _dbContext.Database.ExecuteSqlRawAsync(
                 "INSERT INTO Roles (role_id, role_name, description) VALUES " +
-                "(1, 'admin', 'Quản trị hệ thống'), " +
-                "(2, 'researcher', 'Nhà nghiên cứu'), " +
-                "(3, 'edu user', 'Người dùng giáo dục'), " +
-                "(4, 'regular user', 'Người dùng thường')");
+                "(1, 'admin', 'System Administrator'), " +
+                "(2, 'researcher', 'Researcher'), " +
+                "(3, 'edu user', 'Educational User'), " +
+                "(4, 'regular user', 'Regular User')");
 
             var roles = await _dbContext.Roles.Select(r => new { r.RoleId, r.RoleName }).ToListAsync();
-            return Ok(ApiResponse<object>.Ok(roles, $"Đã chèn {roles.Count} role."));
+            return Ok(ApiResponse<object>.Ok(roles, $"Inserted {roles.Count} role(s)."));
         }
 
         /// <summary>[Admin · DEV] Liệt kê các role (RoleId + RoleName) để biết id admin.</summary>
@@ -223,9 +290,9 @@ namespace ScientificTrendTracker.Controllers
             [FromQuery] string password = "Test@12345")
         {
             if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(name))
-                return BadRequest(ApiResponse<object>.Fail(400, "Thiếu email/name."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Email or name is missing."));
             if (await _dbContext.Users.AnyAsync(u => u.Email == email))
-                return Conflict(ApiResponse<object>.Fail(409, $"Email '{email}' đã tồn tại."));
+                return Conflict(ApiResponse<object>.Fail(409, $"Email '{email}' already exists."));
 
             var user = new Models.Entities.User
             {
@@ -240,7 +307,7 @@ namespace ScientificTrendTracker.Controllers
             _dbContext.Users.Add(user);
             await _dbContext.SaveChangesAsync();
             return Ok(ApiResponse<object>.Ok(new { user.UserId, user.Email, user.RoleId, password },
-                $"Đã tạo user '{email}' (roleId={roleId}, password='{password}')."));
+                $"Created user '{email}' (roleId={roleId}, password='{password}')."));
         }
 
         /// <summary>
@@ -264,11 +331,11 @@ namespace ScientificTrendTracker.Controllers
         {
             if (!confirm)
                 return BadRequest(ApiResponse<object>.Fail(400,
-                    "Thao tác này xoá TOÀN BỘ keyword. Gọi lại với ?confirm=true nếu chắc chắn."));
+                    "This deletes ALL keywords. Please call with ?confirm=true if sure."));
 
             if (_reprocessService.GetState().IsRunning)
                 return Conflict(ApiResponse<object>.Fail(409,
-                    "Đang có job reprocess chạy. Dừng/chờ job xong trước khi reset."));
+                    "Reprocessing job is running. Stop/wait before resetting."));
 
             var linksDeleted = await _dbContext.PaperKeywords.ExecuteDeleteAsync();
             var keywordsDeleted = await _dbContext.Keywords.ExecuteDeleteAsync();
@@ -282,11 +349,11 @@ namespace ScientificTrendTracker.Controllers
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "RESET_KEYWORDS", 
-                $"Đã reset từ khóa hệ thống: xóa {linksDeleted} liên kết, {keywordsDeleted} từ khóa, đặt lại {papersReset} bài báo.", ip);
+                $"Reset system keywords: deleted {linksDeleted} links, {keywordsDeleted} keywords, reset {papersReset} papers.", ip);
 
             return Ok(ApiResponse<object>.Ok(
                 new { LinksDeleted = linksDeleted, KeywordsDeleted = keywordsDeleted, PapersReset = papersReset },
-                $"Đã reset: xoá {linksDeleted} link, {keywordsDeleted} keyword, {papersReset} paper về chưa xử lý."));
+                $"Reset complete: deleted {linksDeleted} links, {keywordsDeleted} keywords, reset {papersReset} papers."));
         }
 
         /// <summary>
@@ -299,7 +366,7 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> MarkAllUnprocessed()
         {
             if (_reprocessService.GetState().IsRunning)
-                return Conflict(ApiResponse<object>.Fail(409, "Đang có job reprocess chạy. Chờ/dừng job xong trước."));
+                return Conflict(ApiResponse<object>.Fail(409, "A reprocessing job is currently running. Please wait or stop it first."));
 
             // UPDATE hàng chục nghìn dòng trên DB NAS có thể > 30s mặc định → nâng timeout.
             _dbContext.Database.SetCommandTimeout(300);
@@ -309,7 +376,7 @@ namespace ScientificTrendTracker.Controllers
 
             _logger.LogWarning("MARK-ALL-UNPROCESSED: đặt lại {N} bài về chưa-xử-lý-AI (giữ keyword OpenAlex).", n);
             return Ok(ApiResponse<object>.Ok(new { PapersReset = n },
-                $"Đã đặt lại {n} bài về chưa-xử-lý-AI. Giờ chạy reprocess-all để đào keyword AI hybrid."));
+                $"Reset {n} papers to unprocessed-AI. Run reprocess-all for AI hybrid keywords."));
         }
 
         /// <summary>
@@ -325,14 +392,14 @@ namespace ScientificTrendTracker.Controllers
         {
             var started = _reprocessService.StartBackground();
             if (!started)
-                return Conflict(ApiResponse<object>.Fail(409, "Đã có job reprocess đang chạy. Xem /api/admin/reprocess-status."));
+                return Conflict(ApiResponse<object>.Fail(409, "A reprocessing job is already running. Check status at /api/admin/reprocess-status."));
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "REPROCESS_KEYWORDS",
-                "Khởi chạy tiến trình đào từ khóa nền (AI local).", ip);
+                "Started background keyword extraction process (local AI).", ip);
 
             return Accepted(ApiResponse<object>.Ok(_reprocessService.GetState(),
-                "Đã khởi động reprocess-all chạy nền. Theo dõi qua /api/admin/reprocess-status."));
+                "Started background reprocess. Track progress via /api/admin/reprocess-status."));
         }
 
         /// <summary>
@@ -344,10 +411,10 @@ namespace ScientificTrendTracker.Controllers
         {
             var state = _reprocessService.GetState();
             var msg = state.IsRunning
-                ? $"Đang chạy: {state.Processed} xong, {state.Failed} thất bại, còn {state.Remaining}."
+                ? $"Running: {state.Processed} done, {state.Failed} failed, {state.Remaining} remaining."
                 : state.StartedAtUtc == null
-                    ? "Chưa có job nào chạy."
-                    : $"Đã xong: {state.Processed} xong, {state.Failed} thất bại. {state.StopReason}";
+                    ? "No job has run yet."
+                    : $"Completed: {state.Processed} done, {state.Failed} failed. {state.StopReason}";
             return Ok(ApiResponse<object>.Ok(state, msg));
         }
 
@@ -357,9 +424,9 @@ namespace ScientificTrendTracker.Controllers
         {
             var started = _topicBackfillService.StartBackground();
             if (!started)
-                return Conflict(ApiResponse<object>.Fail(409, "Đã có job backfill topic đang chạy. Xem /api/admin/backfill-topics-status."));
+                return Conflict(ApiResponse<object>.Fail(409, "A topic backfilling job is already running. Check status at /api/admin/backfill-topics-status."));
             return Accepted(ApiResponse<object>.Ok(_topicBackfillService.GetState(),
-                "Đã khởi động backfill Topic chạy nền. Theo dõi qua /api/admin/backfill-topics-status."));
+                "Started background topic backfill. Track via /api/admin/backfill-topics-status."));
         }
 
         /// <summary>[Admin · theo dõi] Tiến độ job cào lại Topic.</summary>
@@ -368,9 +435,9 @@ namespace ScientificTrendTracker.Controllers
         {
             var s = _topicBackfillService.GetState();
             var msg = s.IsRunning
-                ? $"Đang chạy: {s.Processed}/{s.Total} bài, cập nhật {s.Updated}, lỗi {s.Failed}."
-                : s.StartedAtUtc == null ? "Chưa chạy lần nào."
-                : $"Đã xong: {s.Processed}/{s.Total}, cập nhật {s.Updated}, lỗi {s.Failed}.";
+                ? $"Running: {s.Processed}/{s.Total} papers, updated {s.Updated}, failed {s.Failed}."
+                : s.StartedAtUtc == null ? "Not run yet."
+                : $"Completed: {s.Processed}/{s.Total}, updated {s.Updated}, failed {s.Failed}.";
             return Ok(ApiResponse<object>.Ok(s, msg));
         }
 
@@ -393,7 +460,7 @@ namespace ScientificTrendTracker.Controllers
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "RUN_WEEKLY_SYNC", 
-                $"Chạy tay tiến trình đồng bộ hàng tuần: fetch {result.Added} bài mới, {result.AlreadyExists} bài trùng.", ip);
+                $"Manually ran weekly sync process: fetched {result.Added} new papers, {result.AlreadyExists} duplicates.", ip);
 
             return Ok(ApiResponse<object>.Ok(new
             {
@@ -401,8 +468,8 @@ namespace ScientificTrendTracker.Controllers
                 result.AlreadyExists,
                 result.Errors,
                 ReprocessStarted = started
-            }, $"Fetch {result.Added} bài mới ({result.AlreadyExists} đã có). " +
-               (started ? "Đã bắt đầu đào keyword nền — theo dõi /reprocess-status." : "Reprocess đang chạy sẵn.")));
+            }, $"Fetched {result.Added} new papers ({result.AlreadyExists} already existed). " +
+               (started ? "Started background AI mining — track via /reprocess-status." : "Reprocess already running.")));
         }
 
         /// <summary>
@@ -434,16 +501,16 @@ namespace ScientificTrendTracker.Controllers
             [FromQuery] bool purge = false)
         {
             if (perYear < 1 || perYear > 10000)
-                return BadRequest(ApiResponse<object>.Fail(400, "perYear phải từ 1 đến 10000."));
+                return BadRequest(ApiResponse<object>.Fail(400, "perYear must be between 1 and 10000."));
             if (fromYear < 2000 || toYear > DateTime.UtcNow.Year + 1 || fromYear > toYear)
-                return BadRequest(ApiResponse<object>.Fail(400, "Khoảng năm không hợp lệ."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Invalid year range."));
 
             // REBUILD: purge=true → xoá sạch papers/keywords/authors/links/citations cũ (GIỮ Journals + Q-rank SCImago)
             // rồi fetch lại từ đầu bằng filter mới (English + primary CS field) → corpus 100% đúng chuẩn.
             if (purge)
             {
                 await PurgeCorpusAsync();
-                _logger.LogWarning("REBUILD: đã purge toàn bộ papers/keywords/authors (giữ Journals).");
+                _logger.LogWarning("REBUILD: purged all papers/keywords/authors (kept Journals).");
             }
 
             var result = await _syncOrchestrator.RunBalancedBackfillAsync(perYear, fromYear, toYear, skipKeywords: true);
@@ -455,7 +522,7 @@ namespace ScientificTrendTracker.Controllers
                 result.AlreadyExists,
                 result.NoTitle,
                 result.Errors
-            }, $"{(purge ? "Rebuild" : "Backfill")} {fromYear}-{toYear} ({perYear}/năm): {result.Added} thêm mới, {result.AlreadyExists} đã có, {result.Errors} lỗi."));
+            }, $"{(purge ? "Rebuild" : "Backfill")} {fromYear}-{toYear} ({perYear}/year): {result.Added} added, {result.AlreadyExists} exists, {result.Errors} errors."));
         }
 
         /// <summary>
@@ -468,7 +535,7 @@ namespace ScientificTrendTracker.Controllers
             // Bảng legacy chỉ tồn tại trong DB (không có trong DbContext) — xoá rows trước để khỏi vướng FK.
             // Bọc try/catch: DB nào không có bảng này thì bỏ qua.
             try { await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM PublicationTrends"); }
-            catch (Exception ex) { _logger.LogWarning("Bỏ qua dọn PublicationTrends: {Msg}", ex.Message); }
+            catch (Exception ex) { _logger.LogWarning("Skipping PublicationTrends cleanup: {Msg}", ex.Message); }
 
             await _dbContext.PaperCitations.ExecuteDeleteAsync();
             await _dbContext.PaperKeywords.ExecuteDeleteAsync();
@@ -495,16 +562,16 @@ namespace ScientificTrendTracker.Controllers
             [FromQuery] int toYear = 2026)
         {
             if (perYear < 1 || perYear > 10000)
-                return BadRequest(ApiResponse<object>.Fail(400, "perYear phải từ 1 đến 10000."));
+                return BadRequest(ApiResponse<object>.Fail(400, "perYear must be between 1 and 10000."));
             if (fromYear < 2000 || toYear > DateTime.UtcNow.Year + 1 || fromYear > toYear)
-                return BadRequest(ApiResponse<object>.Fail(400, "Khoảng năm không hợp lệ."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Invalid year range."));
             if (_reprocessService.GetState().IsRunning)
                 return Conflict(ApiResponse<object>.Fail(409,
-                    "Đang có job reprocess chạy. Chờ/dừng job xong trước khi rebuild."));
+                    "Reprocess job is running. Stop/wait before rebuild."));
 
             // B1: PURGE (giữ Journals + Q-rank + accounts) → fetch lại keyword OpenAlex.
             await PurgeCorpusAsync();
-            _logger.LogWarning("REBUILD-CORPUS: đã purge toàn bộ papers/keywords/authors (giữ Journals + accounts).");
+            _logger.LogWarning("REBUILD-CORPUS: purged all papers/keywords/authors (kept Journals + accounts).");
 
             var result = await _syncOrchestrator.RunBalancedBackfillAsync(perYear, fromYear, toYear, skipKeywords: true);
 
@@ -514,7 +581,7 @@ namespace ScientificTrendTracker.Controllers
             // Ghi nhật ký hoạt động admin (theo convention của team).
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "REBUILD_CORPUS",
-                $"Chạy rebuild corpus năm {fromYear}-{toYear} (tối đa {perYear} bài/năm): thêm {result.Added} bài mới, {result.AlreadyExists} bài trùng.", ip);
+                $"Ran corpus rebuild for years {fromYear}-{toYear} (up to {perYear} papers/year): added {result.Added} new papers, {result.AlreadyExists} duplicates.", ip);
 
             return Ok(ApiResponse<object>.Ok(new
             {
@@ -523,9 +590,9 @@ namespace ScientificTrendTracker.Controllers
                 result.NoTitle,
                 result.Errors,
                 AiMiningStarted = started
-            }, $"Rebuild {fromYear}-{toYear} ({perYear}/năm): {result.Added} bài + keyword OpenAlex. " +
-               (started ? "Đã bắt đầu đào keyword AI nền — theo dõi /api/admin/reprocess-status."
-                        : "Job đào AI đang chạy sẵn.")));
+            }, $"Rebuild {fromYear}-{toYear} ({perYear}/year): {result.Added} added. " +
+               (started ? "Started AI mining — track via /api/admin/reprocess-status."
+                        : "AI mining job already running.")));
         }
 
         /// <summary>
@@ -536,26 +603,26 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> ImportScimagoFromPath([FromQuery] string path)
         {
             if (string.IsNullOrWhiteSpace(path))
-                return BadRequest(ApiResponse<object>.Fail(400, "Thiếu tham số 'path'."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Missing 'path' parameter."));
 
             if (!System.IO.File.Exists(path))
-                return BadRequest(ApiResponse<object>.Fail(400, $"Không tìm thấy file: {path}"));
+                return BadRequest(ApiResponse<object>.Fail(400, $"File not found: {path}"));
 
-            _logger.LogInformation("Admin import SCImago từ path: {Path}", path);
+            _logger.LogInformation("Admin import SCImago from path: {Path}", path);
 
             using var stream = System.IO.File.OpenRead(path);
             var result = await _scimagoImportService.ImportFromCsvAsync(stream);
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "IMPORT_SCIMAGO", 
-                $"Nhập danh sách SCImago từ đường dẫn file: {path}. Đọc {result.TotalRowsRead} dòng, cập nhật {result.UpdatedCount} journal.", ip);
+                $"Imported SCImago list from file path: {path}. Read {result.TotalRowsRead} rows, updated {result.UpdatedCount} journals.", ip);
 
             return Ok(ApiResponse<object>.Ok(new
             {
                 result.TotalRowsRead,
                 result.UpdatedCount,
                 result.SkippedCount
-            }, $"Import hoàn thành: {result.UpdatedCount} journals đã được cập nhật Q-rank."));
+            }, $"Import complete: {result.UpdatedCount} journals updated."));
         }
 
         /// <summary>
@@ -572,7 +639,7 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> GetPlansForAdminAsync(CancellationToken ct)
         {
             var result = await _subscriptionService.GetAllPlansForAdminAsync(ct);
-            return Ok(ApiResponse<List<AdminSubscriptionPlanDto>>.Ok(result, "Lấy danh sách quản trị gói cước thành công."));
+            return Ok(ApiResponse<List<AdminSubscriptionPlanDto>>.Ok(result, "Subscription plan list retrieved successfully."));
         }
 
         /// <summary>
@@ -591,14 +658,14 @@ namespace ScientificTrendTracker.Controllers
             var success = await _subscriptionService.CreatePlanAsync(dto, ct);
             if (!success)
             {
-                return BadRequest(ApiResponse<object>.Fail(400, "Tạo gói cước thất bại. Tên gói cước đã tồn tại trong hệ thống."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Failed to create subscription plan. The plan name already exists."));
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "CREATE_SUBSCRIPTION_PLAN", 
-                $"Tạo gói cước mới: '{dto.PlanName}' với giá {dto.PriceAmount} VNĐ, thời hạn {dto.DurationDays} ngày.", ip);
+                $"Created new subscription plan: '{dto.PlanName}' priced at {dto.PriceAmount} VND, duration {dto.DurationDays} days.", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, "Tạo gói cước mới thành công!"));
+            return Ok(ApiResponse<object>.Ok(null, "Subscription plan created successfully!"));
         }
 
         /// <summary>
@@ -618,14 +685,14 @@ namespace ScientificTrendTracker.Controllers
             var success = await _subscriptionService.UpdatePlanAsync(planId, dto, ct);
             if (!success)
             {
-                return BadRequest(ApiResponse<object>.Fail(400, "Cập nhật thất bại. Gói cước không tồn tại hoặc tên mới bị trùng với gói khác."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Failed to update plan. Plan not found or name conflict."));
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "UPDATE_SUBSCRIPTION_PLAN", 
-                $"Cập nhật thông tin gói cước ID {planId} (Tên mới: '{dto.PlanName}', Giá mới: {dto.PriceAmount} VNĐ).", ip);
+                $"Updated subscription plan ID {planId} (New name: '{dto.PlanName}', New price: {dto.PriceAmount} VND).", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, "Cập nhật thông tin gói cước thành công!"));
+            return Ok(ApiResponse<object>.Ok(null, "Subscription plan updated successfully!"));
         }
 
         /// <summary>
@@ -645,14 +712,14 @@ namespace ScientificTrendTracker.Controllers
             var success = await _subscriptionService.TogglePlanStatusAsync(planId, isActive, ct);
             if (!success)
             {
-                return BadRequest(ApiResponse<object>.Fail(400, "Không tìm thấy gói cước với ID yêu cầu."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Subscription plan not found."));
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "TOGGLE_SUBSCRIPTION_PLAN", 
-                $"Thay đổi trạng thái gói cước ID {planId} thành {(isActive ? "Hoạt động" : "Tạm ngưng")}.", ip);
+                $"Changed status of subscription plan ID {planId} to {(isActive ? "Active" : "Inactive")}.", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, $"Thay đổi trạng thái hoạt động của gói cước thành {isActive} thành công."));
+            return Ok(ApiResponse<object>.Ok(null, $"Changed plan status to {isActive} successfully."));
         }
 
         /// <summary>
@@ -666,15 +733,15 @@ namespace ScientificTrendTracker.Controllers
         {
             var result = await _subscriptionService.DeletePlanAsync(planId, ct);
             if (result == "NOT_FOUND")
-                return NotFound(ApiResponse<object>.Fail(404, "Không tìm thấy gói cước với ID yêu cầu."));
+                return NotFound(ApiResponse<object>.Fail(404, "Plan not found."));
             if (result == "IN_USE")
-                return Conflict(ApiResponse<object>.Fail(409, "Gói đã có người đăng ký — không thể xoá. Hãy dùng Disable để khóa gói."));
+                return Conflict(ApiResponse<object>.Fail(409, "Plan has active subscribers — cannot delete. Use Disable to lock it."));
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "DELETE_SUBSCRIPTION_PLAN",
-                $"Xoá gói cước ID {planId}.", ip);
+                $"Deleted subscription plan ID {planId}.", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, "Xoá gói cước thành công."));
+            return Ok(ApiResponse<object>.Ok(null, "Subscription plan deleted successfully."));
         }
 
         /// <summary>
@@ -696,13 +763,14 @@ namespace ScientificTrendTracker.Controllers
                     CustomerName = u.Fullname,
                     CustomerEmail = u.Email,
                     PlanName = p.PlanName,
-                    Amount = p.PriceAmount,
+                    Amount = s.PaidAmount ?? p.PriceAmount, // ưu tiên số thực trả; fallback giá gốc cho dữ liệu cũ
+
                     Status = s.Status,
                     CreatedAt = s.CreatedAt
                 }
             ).Take(100).ToListAsync(ct);
 
-            return Ok(ApiResponse<List<TransactionRowDto>>.Ok(rows, $"Tìm thấy {rows.Count} giao dịch."));
+            return Ok(ApiResponse<List<TransactionRowDto>>.Ok(rows, $"Found {rows.Count} transaction(s)."));
         }
 
         /// <summary>
@@ -718,7 +786,32 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> GetSyncLogsAsync([FromQuery] int page = 1, [FromQuery] int pageSize = 10, CancellationToken ct = default)
         {
             var result = await _apiSyncLogService.GetSyncLogsAsync(page, pageSize, ct);
-            return Ok(ApiResponse<PagedResult<ApiSyncLogResponseDto>>.Ok(result, "Lấy danh sách nhật ký đồng bộ thành công."));
+            return Ok(ApiResponse<PagedResult<ApiSyncLogResponseDto>>.Ok(result, "Sync logs retrieved successfully."));
+        }
+
+        /// <summary>
+        /// Dọn dẹp lịch sử sync: xoá các nhật ký KHÔNG thêm bài nào (RecordsImported = 0),
+        /// bỏ qua lần đang chạy (Status = 'running'). Trả về số dòng đã xoá.
+        /// </summary>
+        [HttpDelete("sync-logs/empty")]
+        public async Task<IActionResult> DeleteEmptySyncLogsAsync(CancellationToken ct)
+        {
+            var emptyLogs = await _dbContext.ApiSyncLogs
+                .Where(l => l.RecordsImported == 0 && l.Status != "running")
+                .ToListAsync(ct);
+
+            if (emptyLogs.Count == 0)
+                return Ok(ApiResponse<object>.Ok(new { deleted = 0 }, "No empty sync logs to delete."));
+
+            _dbContext.ApiSyncLogs.RemoveRange(emptyLogs);
+            await _dbContext.SaveChangesAsync(ct);
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(1, "CLEANUP_SYNC_LOGS",
+                $"Deleted {emptyLogs.Count} sync log(s) with 0 imported papers.", ip);
+
+            return Ok(ApiResponse<object>.Ok(new { deleted = emptyLogs.Count },
+                $"Deleted {emptyLogs.Count} sync log(s) with 0 imported papers."));
         }
 
         /// <summary>
@@ -733,14 +826,14 @@ namespace ScientificTrendTracker.Controllers
         {
             var log = await _dbContext.ApiSyncLogs.FirstOrDefaultAsync(l => l.SyncLogId == id, ct);
             if (log == null)
-                return NotFound(ApiResponse<object>.Fail(404, $"Không tìm thấy nhật ký sync #{id}."));
+                return NotFound(ApiResponse<object>.Fail(404, $"Sync log #{id} not found."));
 
             // Lần sync không thêm bài nào (thất bại/mồ côi/không có bài mới) → không có gì để liệt kê.
             if (log.RecordsImported <= 0)
             {
                 return Ok(ApiResponse<object>.Ok(
                     new { log.SyncLogId, log.Status, log.RecordsImported, count = 0, papers = new List<SyncedPaperDto>() },
-                    $"Lần sync #{id} không thêm bài nào (RecordsImported = 0)."));
+                    $"Sync #{id} imported 0 papers."));
             }
 
             // Đối chiếu theo khung thời gian: bài tạo trong [SyncStartedAt, SyncFinishedAt],
@@ -765,7 +858,7 @@ namespace ScientificTrendTracker.Controllers
 
             return Ok(ApiResponse<object>.Ok(
                 new { log.SyncLogId, log.Status, log.RecordsImported, count = papers.Count, papers },
-                $"Lần sync #{id}: {papers.Count} bài (≈ theo khung thời gian, RecordsImported = {log.RecordsImported})."));
+                $"Sync #{id}: {papers.Count} papers found."));
         }
 
         /// <summary>
@@ -777,7 +870,7 @@ namespace ScientificTrendTracker.Controllers
         public IActionResult StartLiveSync([FromQuery] int maxPages = 2, [FromQuery] int? fromYear = null)
         {
             if (_syncProgress.IsRunning)
-                return Conflict(ApiResponse<object>.Fail(409, "Đang có một tiến trình sync chạy. Vui lòng đợi."));
+                return Conflict(ApiResponse<object>.Fail(409, "A sync process is already running."));
 
             if (maxPages < 1) maxPages = 1;
             if (maxPages > 50) maxPages = 50;
@@ -800,14 +893,14 @@ namespace ScientificTrendTracker.Controllers
             });
 
             return Ok(ApiResponse<object>.Ok(new { started = true, maxPages },
-                "Đã bắt đầu sync. Theo dõi realtime qua /sync/progress."));
+                "Sync started. Track via /sync/progress."));
         }
 
         /// <summary>Tiến độ sync realtime (time - paper - status) để FE poll hiển thị.</summary>
         [HttpGet("sync/progress")]
         public IActionResult GetSyncProgress()
         {
-            return Ok(ApiResponse<object>.Ok(_syncProgress.Snapshot(), "Tiến độ sync hiện tại."));
+            return Ok(ApiResponse<object>.Ok(_syncProgress.Snapshot(), "Current sync progress."));
         }
 
         /// <summary>
@@ -823,7 +916,7 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> GetActivityLogsAsync([FromQuery] int page = 1, [FromQuery] int pageSize = 10, CancellationToken ct = default)
         {
             var result = await _adminActivityLogService.GetActivityLogsAsync(page, pageSize, ct);
-            return Ok(ApiResponse<PagedResult<AdminActivityLogResponseDto>>.Ok(result, "Lấy danh sách nhật ký hoạt động Admin thành công."));
+            return Ok(ApiResponse<PagedResult<AdminActivityLogResponseDto>>.Ok(result, "Activity logs retrieved successfully."));
         }
 
         #region Paper CRUD Admin
@@ -848,7 +941,7 @@ namespace ScientificTrendTracker.Controllers
             CancellationToken ct = default)
         {
             var result = await _paperService.GetPapersForAdminAsync(search, year, journalId, page, pageSize, ct);
-            return Ok(ApiResponse<PagedResult<PaperAdminDto>>.Ok(result, "Lấy danh sách bài báo thành công."));
+            return Ok(ApiResponse<PagedResult<PaperAdminDto>>.Ok(result, "Papers list retrieved successfully."));
         }
 
         /// <summary>
@@ -863,9 +956,9 @@ namespace ScientificTrendTracker.Controllers
             var result = await _paperService.GetPaperDetailAsync(paperId, ct);
             if (result == null)
             {
-                return NotFound(ApiResponse<object>.Fail(404, $"Không tìm thấy bài báo với ID: {paperId}"));
+                return NotFound(ApiResponse<object>.Fail(404, $"Paper not found with ID: {paperId}"));
             }
-            return Ok(ApiResponse<PaperDetailDto>.Ok(result, "Lấy chi tiết bài báo thành công."));
+            return Ok(ApiResponse<PaperDetailDto>.Ok(result, "Paper details retrieved successfully."));
         }
 
         /// <summary>
@@ -880,14 +973,14 @@ namespace ScientificTrendTracker.Controllers
             var success = await _paperService.CreatePaperAsync(dto, ct);
             if (!success)
             {
-                return BadRequest(ApiResponse<object>.Fail(400, "Tạo bài báo thất bại. Tiêu đề bài báo có thể đã tồn tại."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Failed to create paper. The paper title may already exist."));
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "CREATE_PAPER", 
-                $"Đăng tải bài báo thủ công: '{dto.Title}'. Tạp chí: '{dto.JournalName}'.", ip);
+                $"Manually uploaded paper: '{dto.Title}'. Journal: '{dto.JournalName}'.", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, "Thêm mới bài báo thành công!"));
+            return Ok(ApiResponse<object>.Ok(null, "Paper added successfully!"));
         }
 
         /// <summary>
@@ -912,7 +1005,7 @@ namespace ScientificTrendTracker.Controllers
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "CREATE_PAPER_FROM_LINK",
-                $"Thêm bài báo tự động từ link: '{dto.Link}'.", ip);
+                $"Automatically added paper from link: '{dto.Link}'.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, message));
         }
@@ -930,14 +1023,14 @@ namespace ScientificTrendTracker.Controllers
             var success = await _paperService.UpdatePaperAsync(paperId, dto, ct);
             if (!success)
             {
-                return BadRequest(ApiResponse<object>.Fail(400, "Cập nhật bài báo thất bại. Không tìm thấy bài viết hoặc tiêu đề mới bị trùng lặp."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Failed to update paper. Paper not found or the new title is a duplicate."));
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "UPDATE_PAPER", 
-                $"Cập nhật bài báo thủ công ID: {paperId} (Tiêu đề mới: '{dto.Title}').", ip);
+                $"Manually updated paper ID: {paperId} (New title: '{dto.Title}').", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, "Cập nhật thông tin bài báo thành công!"));
+            return Ok(ApiResponse<object>.Ok(null, "Paper updated successfully!"));
         }
 
         /// <summary>
@@ -952,14 +1045,14 @@ namespace ScientificTrendTracker.Controllers
             var success = await _paperService.DeletePaperAsync(paperId, ct);
             if (!success)
             {
-                return NotFound(ApiResponse<object>.Fail(404, "Không tìm thấy bài báo cần xóa."));
+                return NotFound(ApiResponse<object>.Fail(404, "Paper to delete not found."));
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "DELETE_PAPER", 
-                $"Xóa bài báo thủ công ID: {paperId}.", ip);
+                $"Manually deleted paper ID: {paperId}.", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, "Xóa bài báo thành công!"));
+            return Ok(ApiResponse<object>.Ok(null, "Paper deleted successfully!"));
         }
 
         #endregion
@@ -982,7 +1075,7 @@ namespace ScientificTrendTracker.Controllers
             CancellationToken ct = default)
         {
             var result = await _keywordService.GetKeywordsForAdminAsync(search, page, pageSize, ct);
-            return Ok(ApiResponse<PagedResult<KeywordAdminDto>>.Ok(result, "Lấy danh sách từ khóa thành công."));
+            return Ok(ApiResponse<PagedResult<KeywordAdminDto>>.Ok(result, "Keywords list retrieved successfully."));
         }
 
         /// <summary>
@@ -997,14 +1090,14 @@ namespace ScientificTrendTracker.Controllers
             var success = await _keywordService.CreateKeywordAsync(dto, ct);
             if (!success)
             {
-                return BadRequest(ApiResponse<object>.Fail(400, "Tạo từ khóa thất bại. Tên từ khóa đã tồn tại."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Failed to create keyword. Keyword name already exists."));
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "CREATE_KEYWORD", 
-                $"Tạo mới từ khóa hệ thống: '{dto.KeywordName}'.", ip);
+                $"Created new system keyword: '{dto.KeywordName}'.", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, "Tạo từ khóa mới thành công!"));
+            return Ok(ApiResponse<object>.Ok(null, "Keyword created successfully!"));
         }
 
         /// <summary>
@@ -1020,14 +1113,14 @@ namespace ScientificTrendTracker.Controllers
             var success = await _keywordService.UpdateKeywordAsync(keywordId, dto, ct);
             if (!success)
             {
-                return BadRequest(ApiResponse<object>.Fail(400, "Cập nhật từ khóa thất bại. Không tìm thấy ID hoặc tên mới bị trùng."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Failed to update keyword. ID not found or the new name is a duplicate."));
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "UPDATE_KEYWORD", 
-                $"Cập nhật từ khóa ID: {keywordId} thành: '{dto.KeywordName}'.", ip);
+                $"Updated keyword ID: {keywordId} to: '{dto.KeywordName}'.", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, "Cập nhật tên từ khóa thành công!"));
+            return Ok(ApiResponse<object>.Ok(null, "Keyword updated successfully!"));
         }
 
         /// <summary>
@@ -1042,14 +1135,14 @@ namespace ScientificTrendTracker.Controllers
             var success = await _keywordService.DeleteKeywordAsync(keywordId, ct);
             if (!success)
             {
-                return NotFound(ApiResponse<object>.Fail(404, "Không tìm thấy từ khóa cần xóa."));
+                return NotFound(ApiResponse<object>.Fail(404, "Keyword to delete not found."));
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(1, "DELETE_KEYWORD", 
-                $"Xóa từ khóa hệ thống ID: {keywordId}.", ip);
+                $"Deleted system keyword ID: {keywordId}.", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, "Xóa từ khóa thành công!"));
+            return Ok(ApiResponse<object>.Ok(null, "Keyword deleted successfully!"));
         }
 
         #endregion

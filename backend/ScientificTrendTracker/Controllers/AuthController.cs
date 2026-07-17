@@ -32,9 +32,9 @@ namespace ScientificTrendTracker.Controllers
         {
             var result = await _authService.SendOtpAsync(request);
             if (result == null)
-                return BadRequest(ApiResponse<string>.Fail(400, "Email này đã được sử dụng trên hệ thống."));
+                return BadRequest(ApiResponse<string>.Fail(400, "This email is already in use on the system."));
 
-            return Ok(ApiResponse<string>.Ok(result, $"Mã OTP đã sinh thành công! [MOCK OTP HIỂN THỊ TẠI CONSOLE LOG]"));
+            return Ok(ApiResponse<string>.Ok(result, $"OTP code generated successfully! [MOCK OTP DISPLAYED IN CONSOLE LOG]"));
         }
 
         /// <summary>
@@ -50,9 +50,9 @@ namespace ScientificTrendTracker.Controllers
         {
             var result = await _authService.RegisterAsync(request);
             if (result == null)
-                return BadRequest(ApiResponse<string>.Fail(400, "Mã OTP không chính xác, hoặc phiên làm việc đã quá hạn 5 phút."));
+                return BadRequest(ApiResponse<string>.Fail(400, "Incorrect OTP code, or the session has expired (5 minutes)."));
 
-            return Ok(ApiResponse<string>.Ok(result.Email, "Chúc mừng bạn đã tạo tài khoản thành công!"));
+            return Ok(ApiResponse<string>.Ok(result.Email, "Congratulations, your account has been created successfully!"));
         }
 
         /// <summary>
@@ -65,13 +65,13 @@ namespace ScientificTrendTracker.Controllers
         {
             var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             if (!int.TryParse(userIdClaim, out int userId))
-                return Unauthorized(ApiResponse<UserProfileDto>.Fail(401, "Phiên đăng nhập không hợp lệ."));
+                return Unauthorized(ApiResponse<UserProfileDto>.Fail(401, "Invalid login session."));
 
             var profile = await _authService.GetProfileAsync(userId);
             if (profile == null)
-                return NotFound(ApiResponse<UserProfileDto>.Fail(404, "Không tìm thấy tài khoản."));
+                return NotFound(ApiResponse<UserProfileDto>.Fail(404, "Account not found."));
 
-            return Ok(ApiResponse<UserProfileDto>.Ok(profile, "Lấy hồ sơ thành công."));
+            return Ok(ApiResponse<UserProfileDto>.Ok(profile, "Profile retrieved successfully."));
         }
 
         /// <summary>
@@ -85,13 +85,13 @@ namespace ScientificTrendTracker.Controllers
         {
             var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             if (!int.TryParse(userIdClaim, out int userId))
-                return Unauthorized(ApiResponse<UserProfileDto>.Fail(401, "Phiên đăng nhập không hợp lệ."));
+                return Unauthorized(ApiResponse<UserProfileDto>.Fail(401, "Invalid login session."));
 
             var updated = await _authService.UpdateProfileAsync(userId, dto);
             if (updated == null)
-                return NotFound(ApiResponse<UserProfileDto>.Fail(404, "Không tìm thấy tài khoản."));
+                return NotFound(ApiResponse<UserProfileDto>.Fail(404, "Account not found."));
 
-            return Ok(ApiResponse<UserProfileDto>.Ok(updated, "Cập nhật hồ sơ thành công."));
+            return Ok(ApiResponse<UserProfileDto>.Ok(updated, "Profile updated successfully."));
         }
 
         /// <summary>
@@ -105,13 +105,13 @@ namespace ScientificTrendTracker.Controllers
         {
             var userIdClaim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
             if (!int.TryParse(userIdClaim, out int userId))
-                return Unauthorized(ApiResponse<string>.Fail(401, "Phiên đăng nhập không hợp lệ."));
+                return Unauthorized(ApiResponse<string>.Fail(401, "Invalid login session."));
 
             var error = await _authService.ChangePasswordAsync(userId, dto);
             if (error != null)
                 return BadRequest(ApiResponse<string>.Fail(400, error));
 
-            return Ok(ApiResponse<string>.Ok("SUCCESS", "Đổi mật khẩu thành công."));
+            return Ok(ApiResponse<string>.Ok("SUCCESS", "Password changed successfully."));
         }
 
         /// <summary>
@@ -127,9 +127,9 @@ namespace ScientificTrendTracker.Controllers
         {
             var result = await _authService.LoginAsync(request);
             if (result == null)
-                return BadRequest(ApiResponse<AuthResponseDto>.Fail(400, "Tài khoản hoặc mật khẩu không chính xác."));
+                return BadRequest(ApiResponse<AuthResponseDto>.Fail(400, "Incorrect account or password."));
 
-            return Ok(ApiResponse<AuthResponseDto>.Ok(result, "Đăng nhập ứng dụng thành công!"));
+            return Ok(ApiResponse<AuthResponseDto>.Ok(result, "Login successful!"));
         }
 
         /// <summary>
@@ -145,9 +145,9 @@ namespace ScientificTrendTracker.Controllers
         {
             var result = await _authService.RefreshTokenAsync(request);
             if (result == null)
-                return BadRequest(ApiResponse<AuthResponseDto>.Fail(400, "Phiên làm việc không tồn tại hoặc chữ ký số không hợp lệ."));
+                return BadRequest(ApiResponse<AuthResponseDto>.Fail(400, "Session does not exist or signature is invalid."));
 
-            return Ok(ApiResponse<AuthResponseDto>.Ok(result, "Xoay vòng Token thành công!"));
+            return Ok(ApiResponse<AuthResponseDto>.Ok(result, "Token refreshed successfully!"));
         }
 
         /// <summary>
@@ -160,9 +160,9 @@ namespace ScientificTrendTracker.Controllers
         {
             var isRevoked = await _authService.RevokeTokenAsync(request);
             if (!isRevoked)
-                return BadRequest(ApiResponse<string>.Fail(400, "Yêu cầu đăng xuất thất bại do Token không tồn tại hoặc đã bị hủy trước đó."));
+                return BadRequest(ApiResponse<string>.Fail(400, "Logout request failed because the token does not exist or was already revoked."));
 
-            return Ok(ApiResponse<string>.Ok("SUCCESS", "Đăng xuất tài khoản và xóa session thành công!"));
+            return Ok(ApiResponse<string>.Ok("SUCCESS", "Logged out and session cleared successfully!"));
         }
 
         /// <summary>
@@ -179,9 +179,9 @@ namespace ScientificTrendTracker.Controllers
         {
             var isValid = await _authService.VerifyOtpAsync(dto);
             if (!isValid)
-                return BadRequest(ApiResponse<string>.Fail(400, "Mã OTP khôi phục mật khẩu không chính xác."));
+                return BadRequest(ApiResponse<string>.Fail(400, "Incorrect password recovery OTP code."));
 
-            return Ok(ApiResponse<string>.Ok("PASSED", "Xác thực danh tính thành công! Mời chuyển sang màn hình đặt lại mật khẩu."));
+            return Ok(ApiResponse<string>.Ok("PASSED", "Identity verified successfully! Please proceed to reset your password."));
         }
 
         /// <summary>
@@ -198,9 +198,9 @@ namespace ScientificTrendTracker.Controllers
         {
             var isSuccess = await _authService.ResetPasswordAsync(dto);
             if (!isSuccess)
-                return BadRequest(ApiResponse<string>.Fail(400, "Yêu cầu gãy do sai thông tin hoặc mật khẩu mới trùng khít mật khẩu cũ."));
+                return BadRequest(ApiResponse<string>.Fail(400, "Request failed due to incorrect information or the new password matching the old one."));
 
-            return Ok(ApiResponse<string>.Ok("SUCCESS", "Đặt lại mật khẩu tài khoản thành công!"));
+            return Ok(ApiResponse<string>.Ok("SUCCESS", "Password reset successfully!"));
         }
         /// <summary>
         /// API bí mật dùng để kiểm tra xem màng lọc bảo mật JWT có hoạt động không
@@ -215,7 +215,7 @@ namespace ScientificTrendTracker.Controllers
         {
             // Trả về dữ liệu bọc qua hộp ApiResponse chuẩn PascalCase factory mới
             var payload = new { message = "Happy new year!!!!" };
-            return Ok(ApiResponse<object>.Ok(payload, "Quẹt thẻ bảo mật thành công! Chào mừng Tài đã vào phòng bí mật."));
+            return Ok(ApiResponse<object>.Ok(payload, "Security authentication successful! Welcome to the secret room."));
         }
         /// <summary>
         /// API Quên mật khẩu Bước 0: Tiếp nhận Email, kiểm tra sự tồn tại và cấp mã OTP khôi phục lên két RAM.
@@ -230,9 +230,9 @@ namespace ScientificTrendTracker.Controllers
         {
             var result = await _authService.SendForgotPasswordOtpAsync(request);
             if (result == null)
-                return BadRequest(ApiResponse<string>.Fail(400, "Địa chỉ email này chưa từng được đăng ký trong hệ thống."));
+                return BadRequest(ApiResponse<string>.Fail(400, "This email address has not been registered in the system."));
 
-            return Ok(ApiResponse<string>.Ok(result, "Mã OTP khôi phục mật khẩu đã được gửi thành công! [MOCK OTP TẠI CONSOLE LOG]"));
+            return Ok(ApiResponse<string>.Ok(result, "Password recovery OTP code sent successfully! [MOCK OTP IN CONSOLE LOG]"));
         }
     }
 }

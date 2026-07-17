@@ -37,8 +37,8 @@ namespace ScientificTrendTracker.Models.DTOs.Keyword
         /// <summary>
         /// Tên từ khóa mới (bắt buộc).
         /// </summary>
-        [Required(ErrorMessage = "Tên từ khóa không được để trống.")]
-        [MaxLength(150, ErrorMessage = "Tên từ khóa không được vượt quá 150 ký tự.")]
+        [Required(ErrorMessage = "Keyword name cannot be empty.")]
+        [MaxLength(150, ErrorMessage = "Keyword name cannot exceed 150 characters.")]
         public string KeywordName { get; set; }
     }
 
@@ -50,8 +50,8 @@ namespace ScientificTrendTracker.Models.DTOs.Keyword
         /// <summary>
         /// Tên từ khóa được cập nhật (bắt buộc).
         /// </summary>
-        [Required(ErrorMessage = "Tên từ khóa không được để trống.")]
-        [MaxLength(150, ErrorMessage = "Tên từ khóa không được vượt quá 150 ký tự.")]
+        [Required(ErrorMessage = "Keyword name cannot be empty.")]
+        [MaxLength(150, ErrorMessage = "Keyword name cannot exceed 150 characters.")]
         public string KeywordName { get; set; }
     }
 }

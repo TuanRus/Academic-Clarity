@@ -62,7 +62,7 @@ namespace ScientificTrendTracker.Services
                     Title = p.Title,
                     PublicationYear = p.PublicationYear,
                     CitationCount = p.CitationCount,
-                    JournalName = p.Journal != null ? p.Journal.JournalName : "Không rõ",
+                    JournalName = p.Journal != null ? p.Journal.JournalName : "Unknown",
                     CreatedAt = p.CreatedAt
                 })
                 .ToListAsync(ct);
@@ -130,6 +130,7 @@ namespace ScientificTrendTracker.Services
                 PublicationYear = dto.PublicationYear,
                 PublicationDate = dto.PublicationDate,
                 SourceUrl = dto.SourceUrl?.Trim(),
+                OpenAlexId = string.IsNullOrWhiteSpace(dto.OpenAlexId) ? null : dto.OpenAlexId.Trim(),
                 Topic = string.IsNullOrWhiteSpace(dto.Topic) ? null : dto.Topic.Trim(),
                 IsAiProcessed = dto.Keywords.Any(), // Đánh dấu là đã xử lý nếu Admin tự truyền keyword vào
                 CreatedAt = now
@@ -303,6 +304,10 @@ namespace ScientificTrendTracker.Services
                 PublicationYear = work.PublicationYear,
                 PublicationDate = pubDate,
                 SourceUrl = work.Id, // URL OpenAlex của bài báo
+                // Lưu OpenAlexId (bỏ prefix URL) để Paper Detail enrich abstract/topic/institutions/OA on-demand
+                // — GIỐNG bài sync; nếu không có, màn chi tiết sẽ báo thiếu dữ liệu.
+                OpenAlexId = work.Id?.Replace("https://openalex.org/", ""),
+                Topic = work.Topic, // chủ đề chính (primary_topic) từ OpenAlex
                 JournalName = work.PrimaryLocation?.Source?.DisplayName,
                 Authors = (work.Authorships ?? new List<OpenAlexAuthorship>())
                     .Where(a => a.Author != null && !string.IsNullOrWhiteSpace(a.Author.DisplayName))

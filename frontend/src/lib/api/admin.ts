@@ -12,14 +12,14 @@ export interface PipelineEvent { id?: number; title: string; time: string; statu
 export interface RepositoryCategory { id: string; name: string; description: string; fields: number; status: AdminStatus; }
 export interface RepositoryPaper { id: string; title: string; doi: string; journal: string; year: number; citations: number; status: AdminStatus; authors: string; }
 export interface RepositoryAnomaly { id: string; label: string; title: string; tone: 'orange' | 'red'; action: 'Auto-Fill' | 'Review'; status: AdminStatus; }
-export interface UserDirectoryRow { id: string; initials: string; name: string; email: string; role: string; status: AdminStatus; }
-export interface ActivityLog { type: 'ELEVATION' | 'LEDGER' | 'AUTH_FAIL' | 'UPDATE'; time: string; title: string; ref: string; }
-export interface RevenueRow { transactionId: string; invoiceId: string; customer: string; plan: string; amount: string; method: string; paidAt: string; status: AdminStatus; }
+export interface UserDirectoryRow { id: string; initials: string; name: string; email: string; role: string; status: AdminStatus; isPremium?: boolean; }
+export interface ActivityLog { id: number; type: 'ELEVATION' | 'LEDGER' | 'AUTH_FAIL' | 'UPDATE'; time: string; title: string; ref: string; }
+export interface RevenueRow { transactionId: string; invoiceId: string; customer: string; customerEmail: string; plan: string; amount: string; method: string; paidAt: string; status: AdminStatus; }
 export interface SubscriptionPlan { id: string; name: string; price: string; duration: string; status: AdminStatus; priceAmount: number; durationDays: number; }
 
 export interface DashboardStats {
   totalPapers: number; totalAuthors: number; totalRevenue: number;
-  activeSubscriptions: number; newPapersThisWeek: number;
+  activeSubscriptions: number; newPapersThisWeek: number; premiumUsers: number;
 }
 
 interface Paged<T> { items: T[]; totalCount: number; page: number; pageSize: number; totalPages: number; }
@@ -34,6 +34,19 @@ const toVnTime = (utc: string): string => {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return utc;
   return d.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh', hour12: false });
+};
+
+// Chuẩn hóa tên gói cước từ DB (tiếng Việt) sang nhãn tiếng Anh để hiển thị.
+export const planDisplayName = (name: string): string => {
+  if (!name) return name;
+  let s = name;
+  s = s.replace(/\bg[oó]i\b/gi, '').trim();          // bỏ tiền tố "Gói"
+  s = s.replace(/premium\s*th[aá]ng/gi, 'Premium Monthly');
+  s = s.replace(/premium\s*n[aă]m/gi, 'Premium Yearly');
+  s = s.replace(/\bth[aá]ng\b/gi, 'Monthly');
+  s = s.replace(/\bn[aă]m\b/gi, 'Yearly');
+  s = s.replace(/\bmi[eễ]n ph[ií]\b/gi, 'Free');
+  return s.replace(/\s+/g, ' ').trim();
 };
 
 const roleName = (roleId: number) =>
@@ -59,7 +72,7 @@ export function getDashboardStats(): Promise<DashboardStats> {
 }
 
 // ---- Users directory (GET /admin/users) ----
-interface BeUser { userId: number; email: string; fullname: string; roleId: number; isActive: boolean; }
+interface BeUser { userId: number; email: string; fullname: string; roleId: number; isActive: boolean; isPremium?: boolean; }
 export async function getUsers(): Promise<UserDirectoryRow[]> {
   const res = await apiGet<Paged<BeUser>>('/admin/users', { page: 1, pageSize: 100 });
   return res.items.map((u) => ({
@@ -69,17 +82,34 @@ export async function getUsers(): Promise<UserDirectoryRow[]> {
     email: u.email,
     role: roleName(u.roleId),
     status: u.isActive ? 'ACTIVE' : 'SUSPENDED',
+    isPremium: Boolean(u.isPremium),
   }));
 }
 
 // ---- Activity logs (GET /admin/activity-logs) ----
 interface BeActivityLog { logId: number; adminName: string; action: string; description: string; createdAt: string; }
 export async function getActivityLogs(): Promise<ActivityLog[]> {
-  const res = await apiGet<Paged<BeActivityLog>>('/admin/activity-logs', { page: 1, pageSize: 50 });
+  const res = await apiGet<Paged<BeActivityLog>>(
+    '/admin/activity-logs',
+    {
+      page: 1,
+      pageSize: 50,
+    },
+  );
+
   return res.items.map((l) => ({
-    type: l.action?.includes('RESET') || l.action?.includes('DELETE') ? 'AUTH_FAIL'
-      : l.action?.includes('REPROCESS') || l.action?.includes('REBUILD') ? 'UPDATE'
-      : l.action?.includes('SUBSCRIPTION') || l.action?.includes('REVENUE') ? 'LEDGER' : 'ELEVATION',
+    id: l.logId,
+
+    type:
+      l.action?.includes('RESET') || l.action?.includes('DELETE')
+        ? 'AUTH_FAIL'
+        : l.action?.includes('REPROCESS') || l.action?.includes('REBUILD')
+          ? 'UPDATE'
+          : l.action?.includes('SUBSCRIPTION') ||
+            l.action?.includes('REVENUE')
+            ? 'LEDGER'
+            : 'ELEVATION',
+
     time: toVnTime(l.createdAt),
     title: l.description,
     ref: `${l.action} · ${l.adminName}`,
@@ -101,11 +131,16 @@ export async function getSyncLogs(): Promise<PipelineEvent[]> {
   const res = await apiGet<Paged<BeSyncLog>>('/admin/sync-logs', { page: 1, pageSize: 50 });
   return res.items.map((s) => ({
     id: s.syncLogId,
-    title: `Sync OpenAlex — ${s.recordsImported} bài`,
+    title: `Sync OpenAlex — ${s.recordsImported} papers`,
     time: toVnTime(s.syncStartedAt), // đổi UTC → giờ VN (trước đây hiện chuỗi UTC thô)
     status: mapSyncStatus(s.status),
     recordsImported: s.recordsImported,
   }));
+}
+
+/** DELETE /admin/sync-logs/empty — xoá các nhật ký sync 0 bài (bỏ qua lần đang chạy). */
+export async function deleteEmptySyncLogs(): Promise<{ deleted: number }> {
+  return apiDelete('/admin/sync-logs/empty') as Promise<{ deleted: number }>;
 }
 
 // ---- Chi tiết bài đã sync (GET /admin/sync-logs/{id}/papers) ----
@@ -151,9 +186,9 @@ export async function getPlans(): Promise<SubscriptionPlan[]> {
   const res = await apiGet<BePlan[]>('/admin/subscriptions/plans');
   return res.map((p) => ({
     id: String(p.planId),
-    name: p.planName,
+    name: planDisplayName(p.planName),
     price: `${p.priceAmount.toLocaleString('vi-VN')}đ`,
-    duration: `${p.durationDays} ngày`,
+    duration: `${p.durationDays} days`,
     status: p.isActive ? 'ACTIVE' : 'EXPIRED',
     priceAmount: p.priceAmount,
     durationDays: p.durationDays,
@@ -191,7 +226,8 @@ export async function getTransactions(): Promise<RevenueRow[]> {
     transactionId: String(t.subscriptionId),
     invoiceId: `#SUB-${t.subscriptionId}`,
     customer: t.customerName || t.customerEmail,
-    plan: t.planName,
+    customerEmail: t.customerEmail,
+    plan: planDisplayName(t.planName),
     amount: `${t.amount.toLocaleString('vi-VN')}đ`,
     method: 'PayOS / VietQR',
     paidAt: toVnTime(t.createdAt),
@@ -220,13 +256,37 @@ export async function getDashboardCharts(): Promise<DashboardCharts> {
   return {
     revenue: (res.monthlyRevenues ?? []).map((m) => ({ month: m.month, value: m.revenue })),
     papers: (res.paperGrowths ?? []).map((p) => ({ month: p.month, value: p.newPapersCount })),
-    plans: (res.planDistributions ?? []).map((p) => ({ name: p.planName, count: p.count })),
+    plans: (res.planDistributions ?? []).map((p) => ({ name: planDisplayName(p.planName), count: p.count })),
   };
 }
 
 // ---- Admin broadcast toàn hệ thống (POST /notifications/broadcast) ----
 export function sendBroadcast(title: string, message: string): Promise<unknown> {
   return apiPost('/notifications/broadcast', { title, message });
+}
+
+// ---- Cấu hình hệ thống read-only (GET /admin/settings) ----
+export interface AiProviderInfo { name: string; baseUrl: string; model: string; }
+export interface IntegrationStatus { name: string; configured: boolean; }
+export interface SystemConfig {
+  environment: string;
+  dotnetVersion: string;
+  allowedHosts: string;
+  defaultLogLevel: string;
+  openAlexBaseUrl: string;
+  openAlexEmail: string;
+  weeklySyncEnabled: boolean;
+  jwtIssuer: string;
+  jwtAudience: string;
+  aiProviders: AiProviderInfo[];
+  geminiModel: string;
+  geminiBaseUrl: string;
+  geminiTimeoutSeconds: number;
+  integrations: IntegrationStatus[];
+}
+/** GET /admin/settings — cấu hình vận hành KHÔNG bí mật (chỉ đọc). */
+export function getSystemConfig(): Promise<SystemConfig> {
+  return apiGet<SystemConfig>('/admin/settings');
 }
 
 // ---- Keywords (GET /admin/keywords) — cho tab Ontology của Article Repository ----

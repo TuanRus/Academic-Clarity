@@ -26,20 +26,20 @@ namespace ScientificTrendTracker.Controllers
             [FromQuery] int maxSubBranches = 3)
         {
             if (string.IsNullOrWhiteSpace(keyword))
-                return BadRequest(ApiResponse<object>.Fail(400, "Keyword không được để trống."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Keyword cannot be empty."));
 
             if (maxBranches < 1 || maxBranches > 15)
-                return BadRequest(ApiResponse<object>.Fail(400, "maxBranches phải từ 1 đến 15."));
+                return BadRequest(ApiResponse<object>.Fail(400, "maxBranches must be between 1 and 15."));
             if (maxSubBranches < 0 || maxSubBranches > 10)
-                return BadRequest(ApiResponse<object>.Fail(400, "maxSubBranches phải từ 0 đến 10."));
+                return BadRequest(ApiResponse<object>.Fail(400, "maxSubBranches must be between 0 and 10."));
 
             var graph = await _graphBuilderService.BuildKeywordTreeAsync(keyword.Trim(), maxBranches, maxSubBranches);
 
             if (graph.TotalNodes == 0)
-                return NotFound(ApiResponse<object>.Fail(404, $"Không tìm thấy keyword '{keyword}'."));
+                return NotFound(ApiResponse<object>.Fail(404, $"Could not find keyword '{keyword}'."));
 
             return Ok(ApiResponse<MindmapGraphDto>.Ok(graph,
-                $"Cây mind map: {graph.TotalNodes} nodes, {graph.TotalEdges} nhánh."));
+                $"Mind map tree: {graph.TotalNodes} nodes, {graph.TotalEdges} branch(es)."));
         }
 
         /// <summary>Tìm bài báo theo từ khóa (tiêu đề / DOI / keyword), phân trang.</summary>
@@ -52,7 +52,7 @@ namespace ScientificTrendTracker.Controllers
             [FromQuery] int? toYear = null)
         {
             if (string.IsNullOrWhiteSpace(q))
-                return BadRequest(ApiResponse<object>.Fail(400, "Từ khóa tìm kiếm không được để trống."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Search query cannot be empty."));
 
             if (page < 1) page = 1;
             if (pageSize < 1 || pageSize > 100) pageSize = 20;
@@ -60,7 +60,7 @@ namespace ScientificTrendTracker.Controllers
             var result = await _graphBuilderService.SearchPapersAsync(q.Trim(), page, pageSize, fromYear, toYear);
 
             return Ok(ApiResponse<PagedResult<PaperSearchItemDto>>.Ok(result,
-                $"Tìm thấy {result.TotalCount} bài báo cho '{q}'."));
+                $"Found {result.TotalCount} paper(s) for '{q}'."));
         }
 
         /// <summary>Autocomplete: gợi ý keyword có sẵn trong DB, sắp theo số bài giảm dần.</summary>
@@ -69,7 +69,7 @@ namespace ScientificTrendTracker.Controllers
         {
             if (limit < 1 || limit > 25) limit = 10;
             var items = await _graphBuilderService.SuggestKeywordsAsync(q, limit);
-            return Ok(ApiResponse<List<string>>.Ok(items, $"{items.Count} gợi ý."));
+            return Ok(ApiResponse<List<string>>.Ok(items, $"{items.Count} suggestion(s)."));
         }
 
         /// <summary>Tìm bài báo theo tên tác giả (gần đúng), phân trang.</summary>
@@ -80,7 +80,7 @@ namespace ScientificTrendTracker.Controllers
             [FromQuery] int pageSize = 20)
         {
             if (string.IsNullOrWhiteSpace(author))
-                return BadRequest(ApiResponse<object>.Fail(400, "Tên tác giả không được để trống."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Author name cannot be empty."));
 
             if (page < 1) page = 1;
             if (pageSize < 1 || pageSize > 100) pageSize = 20;
@@ -88,7 +88,7 @@ namespace ScientificTrendTracker.Controllers
             var result = await _graphBuilderService.SearchPapersByAuthorAsync(author.Trim(), page, pageSize);
 
             return Ok(ApiResponse<PagedResult<PaperSearchItemDto>>.Ok(result,
-                $"Tìm thấy {result.TotalCount} bài báo của tác giả '{author}'."));
+                $"Found {result.TotalCount} paper(s) by author '{author}'."));
         }
 
         /// <summary>Tìm bài báo theo tên tạp chí (gần đúng), phân trang.</summary>
@@ -99,7 +99,7 @@ namespace ScientificTrendTracker.Controllers
             [FromQuery] int pageSize = 20)
         {
             if (string.IsNullOrWhiteSpace(journal))
-                return BadRequest(ApiResponse<object>.Fail(400, "Tên tạp chí không được để trống."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Journal name cannot be empty."));
 
             if (page < 1) page = 1;
             if (pageSize < 1 || pageSize > 100) pageSize = 20;
@@ -107,7 +107,7 @@ namespace ScientificTrendTracker.Controllers
             var result = await _graphBuilderService.SearchPapersByJournalAsync(journal.Trim(), page, pageSize);
 
             return Ok(ApiResponse<PagedResult<PaperSearchItemDto>>.Ok(result,
-                $"Tìm thấy {result.TotalCount} bài báo trong tạp chí '{journal}'."));
+                $"Found {result.TotalCount} paper(s) in journal '{journal}'."));
         }
 
         /// <summary>Chi tiết 1 bài báo cho màn Paper Detail (DB + abstract/topic/OA lấy on-demand từ OpenAlex).</summary>
@@ -115,14 +115,14 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> GetPaperDetail(string paperId)
         {
             if (string.IsNullOrWhiteSpace(paperId))
-                return BadRequest(ApiResponse<object>.Fail(400, "PaperId không được để trống."));
+                return BadRequest(ApiResponse<object>.Fail(400, "PaperId cannot be empty."));
 
             var detail = await _graphBuilderService.GetPaperDetailAsync(paperId);
 
             if (detail == null)
-                return NotFound(ApiResponse<object>.Fail(404, $"Không tìm thấy bài báo với PaperId '{paperId}'."));
+                return NotFound(ApiResponse<object>.Fail(404, $"Could not find paper with PaperId '{paperId}'."));
 
-            return Ok(ApiResponse<PaperDetailDto>.Ok(detail, $"Chi tiết bài '{detail.Title}'."));
+            return Ok(ApiResponse<PaperDetailDto>.Ok(detail, $"Details for '{detail.Title}'."));
         }
 
         /// <summary>Top bài báo của 1 keyword (panel chi tiết khi click node). distinctFrom để bỏ trùng megahit của chủ đề gốc.</summary>
@@ -133,7 +133,7 @@ namespace ScientificTrendTracker.Controllers
             [FromQuery] int limit = 10)
         {
             if (string.IsNullOrWhiteSpace(keyword))
-                return BadRequest(ApiResponse<object>.Fail(400, "keyword không được để trống."));
+                return BadRequest(ApiResponse<object>.Fail(400, "keyword cannot be empty."));
 
             if (limit < 1 || limit > 50) limit = 10;
 
@@ -141,10 +141,10 @@ namespace ScientificTrendTracker.Controllers
 
             if (papers.Count == 0)
                 return NotFound(ApiResponse<object>.Fail(404,
-                    $"Không tìm thấy bài báo nào cho keyword '{keyword}'."));
+                    $"No papers found for keyword '{keyword}'."));
 
             return Ok(ApiResponse<List<PaperSearchItemDto>>.Ok(papers,
-                $"Top {papers.Count} bài cho '{keyword}'" + (string.IsNullOrWhiteSpace(distinctFrom) ? "." : $" (đặc trưng so với '{distinctFrom}').")));
+                $"Top {papers.Count} paper(s) for '{keyword}'" + (string.IsNullOrWhiteSpace(distinctFrom) ? "." : $" (distinct from '{distinctFrom}').")));
         }
     }
 }

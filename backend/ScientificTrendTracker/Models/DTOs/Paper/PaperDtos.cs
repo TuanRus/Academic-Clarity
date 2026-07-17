@@ -129,8 +129,8 @@ namespace ScientificTrendTracker.Models.DTOs.Paper
         /// <summary>
         /// Tiêu đề bài báo (bắt buộc).
         /// </summary>
-        [Required(ErrorMessage = "Tiêu đề bài báo không được để trống.")]
-        [MaxLength(500, ErrorMessage = "Tiêu đề không được vượt quá 500 ký tự.")]
+        [Required(ErrorMessage = "Paper title cannot be empty.")]
+        [MaxLength(500, ErrorMessage = "Title cannot exceed 500 characters.")]
         public string Title { get; set; }
 
         /// <summary>
@@ -154,6 +154,13 @@ namespace ScientificTrendTracker.Models.DTOs.Paper
         /// </summary>
         [MaxLength(500)]
         public string SourceUrl { get; set; }
+
+        /// <summary>
+        /// Mã OpenAlex (dạng "W..."). Cần thiết để màn Paper Detail enrich abstract/topic/institutions/open-access
+        /// on-demand giống bài sync. Thiếu field này thì bài thêm-từ-link sẽ hiện "Missing data".
+        /// </summary>
+        [MaxLength(50)]
+        public string OpenAlexId { get; set; }
 
         /// <summary>
         /// Chủ đề chính của bài báo (ResearchTopic). Dùng để thông báo cho follower đang theo dõi topic.
@@ -193,8 +200,8 @@ namespace ScientificTrendTracker.Models.DTOs.Paper
         /// Link bài báo: URL OpenAlex ("https://openalex.org/W..."), URL DOI ("https://doi.org/10..."),
         /// ID work ("W...") hoặc DOI trần ("10.xxxx/...").
         /// </summary>
-        [Required(ErrorMessage = "Link bài báo không được để trống.")]
-        [MaxLength(500, ErrorMessage = "Link không được vượt quá 500 ký tự.")]
+        [Required(ErrorMessage = "Paper link cannot be empty.")]
+        [MaxLength(500, ErrorMessage = "Link cannot exceed 500 characters.")]
         public string Link { get; set; }
     }
 
@@ -206,8 +213,8 @@ namespace ScientificTrendTracker.Models.DTOs.Paper
         /// <summary>
         /// Tiêu đề bài báo (bắt buộc).
         /// </summary>
-        [Required(ErrorMessage = "Tiêu đề bài báo không được để trống.")]
-        [MaxLength(500, ErrorMessage = "Tiêu đề không được vượt quá 500 ký tự.")]
+        [Required(ErrorMessage = "Paper title cannot be empty.")]
+        [MaxLength(500, ErrorMessage = "Title cannot exceed 500 characters.")]
         public string Title { get; set; }
 
         /// <summary>

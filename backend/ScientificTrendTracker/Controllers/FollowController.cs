@@ -49,13 +49,13 @@ namespace ScientificTrendTracker.Controllers
                 return Unauthorized(
                     ApiResponse<object>.Fail(
                         401,
-                        "Danh tính không hợp lệ."));
+                        "Invalid user identity."));
             }
 
             if (!int.TryParse(userIdClaim.Value, out int userId))
             {
                 return Unauthorized(
-                    ApiResponse<object>.Fail(401, "Danh tính không hợp lệ."));
+                    ApiResponse<object>.Fail(401, "Invalid user identity."));
             }
 
             // 2. Gọi tầng Service xử lý thô dữ liệu nghiệp vụ (Mục 1)
@@ -70,14 +70,14 @@ namespace ScientificTrendTracker.Controllers
                 return BadRequest(
                     ApiResponse<object>.Fail(
                         400,
-                        "Loại mục hoặc mã định danh mục tiêu sai."));
+                        "Invalid item type or target ID."));
             }
 
             // Thao tác thành công -> Bọc ApiResponse qua static factory (Mục 6)
             return Ok(
                 ApiResponse<FollowResultDto>.Ok(
                     result,
-                    "Thay đổi trạng thái theo dõi thành công."));
+                    "Changed follow state successfully."));
         }
 
         /// <summary>Lấy danh sách các mục (topic/journal) người dùng hiện đang theo dõi.</summary>
@@ -87,10 +87,10 @@ namespace ScientificTrendTracker.Controllers
         {
             var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
             if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
-                return Unauthorized(ApiResponse<object>.Fail(401, "Danh tính không hợp lệ."));
+                return Unauthorized(ApiResponse<object>.Fail(401, "Invalid user identity."));
 
             var items = await _followService.GetMyFollowsAsync(userId);
-            return Ok(ApiResponse<System.Collections.Generic.List<FollowedItemDto>>.Ok(items, $"{items.Count} mục đang theo dõi."));
+            return Ok(ApiResponse<System.Collections.Generic.List<FollowedItemDto>>.Ok(items, $"{items.Count} followed item(s)."));
         }
     }
 }
