@@ -25,6 +25,7 @@ const TIER_PERMISSIONS: Record<AccessTier, FeaturePermission[]> = {
     FeaturePermission.BOOKMARK,
     FeaturePermission.EXPORT_CSV,
     FeaturePermission.OVERLAP_CHECK,
+    FeaturePermission.LATEX_WRITER,
   ],
 };
 

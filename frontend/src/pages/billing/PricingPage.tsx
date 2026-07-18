@@ -14,6 +14,7 @@ const FEATURES: { label: string; basic: boolean; premium: boolean; fr: string }[
   { label: 'Trending Keywords + custom date filter', basic: true, premium: true, fr: 'FR-20,21 / DASHBOARD_ADVANCED' },
   { label: 'Export dashboard data to CSV', basic: false, premium: true, fr: 'FR-22 / EXPORT_CSV' },
   { label: 'Idea Overlap Checker', basic: false, premium: true, fr: 'OVERLAP_CHECK' },
+  { label: 'LaTeX Writer (soạn bài + citation)', basic: false, premium: true, fr: 'LATEX_WRITER' },
   { label: 'Bookmark papers & citation alerts', basic: true, premium: true, fr: 'FR-23..26 / BOOKMARK' },
 ];
 

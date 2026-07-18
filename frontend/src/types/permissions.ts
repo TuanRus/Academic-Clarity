@@ -11,5 +11,6 @@ export const FeaturePermission = {
   EXPORT_CSV: 'EXPORT_CSV',
   BOOKMARK: 'BOOKMARK',
   OVERLAP_CHECK: 'OVERLAP_CHECK',
+  LATEX_WRITER: 'LATEX_WRITER',
 } as const;
 export type FeaturePermission = typeof FeaturePermission[keyof typeof FeaturePermission];

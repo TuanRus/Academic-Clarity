@@ -136,3 +136,16 @@ export interface OverlapResult {
   aiAssessment?: string | null;   // nhận định tổng hợp của AI
   finalVerdict?: OverlapTier | null; // kết luận cuối = max(keyword tier, aiRisk)
 }
+
+// --- LaTeX Writer (api/latex) ---
+
+export interface Citation {
+  bibtexKey: string; // key dùng trong \cite{...}
+  bibtex: string;    // entry @article{...} đầy đủ để copy
+  bibitem: string;   // dòng \bibitem{...} chèn vào thebibliography
+}
+
+export interface LatexCompileResult {
+  pdf: string | null; // PDF base64 khi compile thành công
+  log: string | null; // log TeX khi thất bại
+}

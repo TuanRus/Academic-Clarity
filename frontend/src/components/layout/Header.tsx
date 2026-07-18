@@ -53,6 +53,9 @@ const Header = () => {
           <NavLink to="/overlap" className={navLinkClass}>
             Overlap Checker
           </NavLink>
+          <NavLink to="/latex" className={navLinkClass}>
+            LaTeX Writer
+          </NavLink>
           <NavLink to="/library" className={navLinkClass}>
             Saved Library
           </NavLink>
