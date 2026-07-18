@@ -6,7 +6,7 @@ import * as authApi from '../lib/api/auth';
 interface AuthContextValue {
   user: User | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (email: string, password: string) => Promise<User | null>;
   logout: () => void;
   /** Cập nhật tier sau khi thanh toán thành công (BR-27a). */
   upgradeToPremium: (validUntil: string) => void;
@@ -114,6 +114,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const u = await buildUser(res.accessToken);
     setUser(u);
     window.dispatchEvent(new Event('stt-auth-changed'));
+    return u;
   };
 
   const refreshUser = async () => {

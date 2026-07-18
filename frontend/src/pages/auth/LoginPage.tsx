@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { ApiError } from '../../lib/http';
+import { Role } from '../../types/auth';
 
 // S-02 · Login Screen (FR-02)
 const LoginPage = () => {
@@ -17,8 +18,9 @@ const LoginPage = () => {
     setError(null);
     setSubmitting(true);
     try {
-      await login(email, password);
-      navigate('/');
+      const u = await login(email, password);
+      // Admin đăng nhập thì vào thẳng khu quản trị (FR-27/28)
+      navigate(u?.role === Role.ADMIN ? '/admin' : '/');
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Đăng nhập thất bại.');
     } finally {
