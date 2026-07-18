@@ -138,7 +138,7 @@ const AdminDashboardPage = () => {
           Admin Dashboard Overview
         </h1>
         <p className="mt-1 text-xs text-slate-500">
-          Overview of the system's articles, revenue and subscription metrics.
+          Overview of the system's articles, authors, revenue and subscription metrics.
         </p>
       </div>
 

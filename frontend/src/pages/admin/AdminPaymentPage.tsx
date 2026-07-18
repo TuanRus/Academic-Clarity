@@ -130,7 +130,7 @@ const AdminPaymentPage = () => {
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">
-            Revenue & Subscription Dashboard
+            Subscription & Payment Dashboard
           </h1>
           <p className="mt-1 text-xs text-slate-500">
             Monitor subscription revenue, payment transactions and premium plan performance.
