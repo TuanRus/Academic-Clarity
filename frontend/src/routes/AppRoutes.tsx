@@ -15,6 +15,8 @@ import NotificationCenterPage from '../pages/notifications/NotificationCenterPag
 import ResearchLandscapePage from '../pages/landscape/ResearchLandscapePage';
 import TrendDashboardPage from '../pages/dashboard/TrendDashboardPage';
 import OverlapCheckerPage from '../pages/idea/OverlapCheckerPage';
+import LatexListPage from '../pages/latex/LatexListPage';
+import LatexEditorPage from '../pages/latex/LatexEditorPage';
 import PricingPage from '../pages/billing/PricingPage';
 import CheckoutPage from '../pages/billing/CheckoutPage';
 import PaymentReturnPage from '../pages/billing/PaymentReturnPage';
@@ -53,6 +55,9 @@ const AppRoutes = () => {
           <Route path="/dashboard" element={<TrendDashboardPage />} />
           {/* Premium: Idea Overlap Checker - gate bằng <RequireFeature OVERLAP_CHECK> trong page */}
           <Route path="/overlap" element={<OverlapCheckerPage />} />
+          {/* Premium: LaTeX Writer - tài liệu lưu localStorage, gate bằng <RequireFeature LATEX_WRITER> trong page */}
+          <Route path="/latex" element={<LatexListPage />} />
+          <Route path="/latex/:docId" element={<LatexEditorPage />} />
 
           {/* MỚI: luồng Premium / Payment (BR-26..31) */}
           <Route path="/pricing" element={<PricingPage />} />

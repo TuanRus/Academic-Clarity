@@ -1,0 +1,74 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath}
+
+\title{A Transformer-Based Approach for Forecasting\\Emerging Research Trends in Scientific Literature}
+\author{Hoang Tien Dat \\ FPT University}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+% ============================================================
+% DEMO STEP 1: Tab "Overlap Check" se tu trich abstract duoi day
+% (khong can boi den) va so voi corpus -> ra danh sach bai trung.
+% ============================================================
+\begin{abstract}
+The rapid growth of scientific publications makes it increasingly difficult
+for researchers to identify emerging topics before they become mainstream.
+In this paper, we propose a transformer-based deep learning framework that
+forecasts emerging research trends by analyzing keyword co-occurrence
+networks extracted from large-scale bibliographic databases. Our approach
+combines a pretrained language model for semantic keyword embedding with a
+temporal graph neural network that captures the evolution of topic
+communities over time. We evaluate the framework on a corpus of publications
+in machine learning and natural language processing, and show that it
+predicts breakout keywords twelve months in advance with higher accuracy
+than frequency-based baselines. These results suggest that semantic trend
+forecasting can help researchers, students, and funding agencies position
+their work earlier in the research life cycle.
+\end{abstract}
+
+\section{Introduction}
+Keeping track of where a research field is heading is a challenge for both
+newcomers and experienced scholars. Existing tools mostly rank topics by
+raw publication counts, which lags behind the actual emergence of new ideas.
+% DEMO STEP 2: dat con tro sau chu "attention mechanisms" roi bam "Cite"
+% o tab Overlap Check -> \cite{...} duoc chen tai day va \bibitem tu dong
+% xuat hien trong thebibliography cuoi file.
+Our work builds on recent advances in attention mechanisms and graph
+representation learning.
+
+\section{Methodology}
+Let $G_t = (V, E_t)$ denote the keyword co-occurrence graph at time step
+$t$, where each node $v \in V$ is a keyword and each edge weight represents
+the number of papers mentioning both keywords. We embed every keyword with
+a pretrained encoder and update the temporal state with
+\begin{equation}
+  h_v^{(t)} = \mathrm{GRU}\!\left(h_v^{(t-1)},\;
+  \sum_{u \in \mathcal{N}(v)} \alpha_{uv}\, W h_u^{(t-1)}\right),
+\end{equation}
+where $\alpha_{uv}$ is an attention coefficient over neighboring keywords.
+
+\section{Experiments}
+We collect publication metadata from an open bibliographic database and
+split it chronologically: models observe five years of history and predict
+which keywords will double their publication share within the next year.
+
+\section{Conclusion}
+We presented a semantic framework for research trend forecasting. Future
+work includes modeling author collaboration networks and extending the
+evaluation to additional scientific domains.
+
+% ============================================================
+% DEMO STEP 3: cac \bibitem do nut "Cite" sinh ra se duoc chen
+% ngay truoc \end{thebibliography} ben duoi.
+% ============================================================
+\begin{thebibliography}{99}
+\bibitem{vaswani2017} Ashish Vaswani, Noam Shazeer, Niki Parmar et al.
+Attention Is All You Need. \textit{Advances in Neural Information
+Processing Systems}, 2017.
+\end{thebibliography}
+
+\end{document}
