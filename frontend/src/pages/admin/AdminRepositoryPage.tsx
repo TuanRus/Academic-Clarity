@@ -83,13 +83,23 @@ const AdminRepositoryPage = () => {
       .includes(keywordQuery.trim().toLowerCase()),
   );
 
-  const exportRepository = () => {
-    const content = papers
-      .map((paper) => `${paper.id} ${paper.title} ${paper.authors} ${paper.doi} ${paper.journal} ${paper.year} ${paper.citations}`)
-      .join('\n');
+  // Ô CSV phải bọc ngoặc kép khi chứa dấu phẩy/ngoặc kép/xuống dòng, nếu không cột sẽ bị vỡ
+  const csvCell = (value: string | number) => {
+    const s = String(value ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
 
+  const exportRepository = () => {
+    const header = ['Paper ID', 'Title', 'Authors', 'Journal', 'Year', 'Citations', 'DOI'];
+    const rows = papers.map((paper) =>
+      [paper.id, paper.title, paper.authors, paper.journal, paper.year, paper.citations, paper.doi]
+        .map(csvCell)
+        .join(','),
+    );
+
+    // BOM để Excel nhận đúng UTF-8 (tên bài báo/tạp chí có ký tự ngoài ASCII)
     const blob = new Blob(
-      [`ID,Title,Journal,Year,Citations,DOI\n${content}`],
+      ['\uFEFF' + [header.join(','), ...rows].join('\r\n')],
       { type: 'text/csv;charset=utf-8;' },
     );
 
