@@ -83,3 +83,6 @@ lerna-debug.log*
 
 # ===== Script noi bo =====
 describe-project.ps1
+
+# ===== Claude Code (cau hinh local, khong push) =====
+.claude/
