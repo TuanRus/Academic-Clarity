@@ -876,6 +876,10 @@ namespace ScientificTrendTracker.Controllers
             if (maxPages > 50) maxPages = 50;
             var effFromYear = fromYear ?? (DateTime.UtcNow.Year - 1);
 
+            // Bật cờ "đang chạy" NGAY tại đây: task nền còn phải tạo scope + ghi ApiSyncLog mới gọi Begin(),
+            // nên nếu chờ nó thì FE poll ngay sau response sẽ trúng snapshot của lần sync trước (nháy FINISHED).
+            _syncProgress.BeginPending();
+
             // Chạy nền: scope của request kết thúc ngay sau response nên phải tạo scope riêng.
             _ = Task.Run(async () =>
             {
@@ -889,6 +893,12 @@ namespace ScientificTrendTracker.Controllers
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Lỗi sync nền.");
+                }
+                finally
+                {
+                    // RunSyncAsync tự End() trong finally của nó, NHƯNG nếu nó ném lỗi trước đó
+                    // (vd ghi ApiSyncLog lỗi) thì cờ running do BeginPending() bật sẽ kẹt mãi. End() idempotent.
+                    _syncProgress.End();
                 }
             });
 

@@ -36,16 +36,24 @@ namespace ScientificTrendTracker.Services
 
         public bool IsRunning { get { lock (_lock) { return _running; } } }
 
+        public void BeginPending()
+        {
+            lock (_lock) { Reset(null); }
+        }
+
         public void Begin(int syncLogId)
         {
-            lock (_lock)
-            {
-                _running = true;
-                _syncLogId = syncLogId;
-                _entries.Clear();
-                _seenTitles.Clear();
-                _added = _exists = _errors = _total = 0;
-            }
+            lock (_lock) { Reset(syncLogId); }
+        }
+
+        /// <summary>Đặt lại toàn bộ bộ đếm/feed và bật cờ đang chạy. Gọi trong lock.</summary>
+        private void Reset(int? syncLogId)
+        {
+            _running = true;
+            _syncLogId = syncLogId;
+            _entries.Clear();
+            _seenTitles.Clear();
+            _added = _exists = _errors = _total = 0;
         }
 
         public void Push(string title, string status)
@@ -58,12 +66,14 @@ namespace ScientificTrendTracker.Services
                 if (status == "Error") { _errors++; return; }
                 if (status != "Success") return;
 
-                // Feed realtime CHỈ hiển thị bài MỚI thực sự được thêm vào DB (giống màn Detail lúc kết thúc).
-                // Dedup theo tiêu đề: OpenAlex đôi khi trả cùng 1 bài trên 2 trang → tránh đếm/hiển thị trùng.
+                // Mỗi Success = 1 bài MỚI thực sự thêm vào DB (đã dedup theo OpenAlexId ở orchestrator) → luôn đếm.
+                _added++;
+
+                // Dedup theo tiêu đề CHỈ cho danh sách hiển thị realtime: 2 bài khác OpenAlexId nhưng trùng
+                // tiêu đề vẫn được đếm ở trên, chỉ hiển thị 1 dòng cho gọn.
                 var key = string.IsNullOrWhiteSpace(title) ? "(no title)" : title.Trim();
                 if (!_seenTitles.Add(key)) return;
 
-                _added++;
                 _entries.Add(new SyncProgressEntry
                 {
                     Time = DateTime.UtcNow,
