@@ -136,11 +136,11 @@ const AdminLogsPage = () => {
     return (
         <div className="space-y-5">
             <div>
-                <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">
+                <h1 className="text-2xl font-bold tracking-tight text-gray-900">
                     Activity Logs
                 </h1>
 
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-gray-500">
                     Track administrative actions and system events across the platform.
                 </p>
             </div>
@@ -189,7 +189,7 @@ const AdminLogsPage = () => {
                             onChange={(event) =>
                                 setFilter(event.target.value as 'ALL' | LogStatus)
                             }
-                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 outline-none focus:border-[#4338ca]"
+                            className="rounded-md border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 outline-none focus:border-indigo-700"
                         >
                             <option value="ALL">All Status</option>
                             <option value="SUCCESS">Success</option>
@@ -201,7 +201,7 @@ const AdminLogsPage = () => {
                             type="button"
                             onClick={reload}
                             disabled={loading}
-                            className="rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            className="rounded-md border border-gray-200 bg-white px-3 py-2 text-xs font-bold text-gray-600 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                             {loading ? 'Refreshing...' : '↻ Refresh'}
                         </button>
@@ -209,11 +209,11 @@ const AdminLogsPage = () => {
                 }
             >
                 {loading && tableLogs.length === 0 ? (
-                    <p className="p-5 text-sm text-slate-500">
+                    <p className="p-5 text-sm text-gray-500">
                         Loading activity logs...
                     </p>
                 ) : filteredLogs.length === 0 ? (
-                    <p className="p-5 text-sm text-slate-400">
+                    <p className="p-5 text-sm text-gray-400">
                         No activity logs found.
                     </p>
                 ) : (
@@ -228,24 +228,24 @@ const AdminLogsPage = () => {
                         ]}
                     >
                         {filteredLogs.map((log) => (
-                            <tr key={log.id} className="hover:bg-slate-50">
-                                <td className="px-5 py-4 font-bold text-slate-700">
+                            <tr key={log.id} className="hover:bg-gray-50">
+                                <td className="px-5 py-4 font-bold text-gray-700">
                                     {log.id}
                                 </td>
 
-                                <td className="whitespace-nowrap px-5 py-4 text-slate-600">
+                                <td className="whitespace-nowrap px-5 py-4 text-gray-600">
                                     {log.time}
                                 </td>
 
-                                <td className="px-5 py-4 font-semibold text-slate-700">
+                                <td className="px-5 py-4 font-semibold text-gray-700">
                                     {log.actor}
                                 </td>
 
-                                <td className="px-5 py-4 text-slate-700">
+                                <td className="px-5 py-4 text-gray-700">
                                     {log.action}
                                 </td>
 
-                                <td className="px-5 py-4 font-semibold text-slate-700">
+                                <td className="px-5 py-4 font-semibold text-gray-700">
                                     {log.module}
                                 </td>
 

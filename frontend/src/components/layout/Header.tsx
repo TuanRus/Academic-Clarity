@@ -9,9 +9,26 @@ const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     ? 'whitespace-nowrap border-b-2 border-indigo-700 pb-1 text-sm font-semibold text-indigo-700'
     : 'whitespace-nowrap pb-1 text-sm text-gray-700 hover:text-indigo-700';
 
+// Menu mobile: link dạng block, active nền indigo thay vì gạch chân
+const mobileNavLinkClass = ({ isActive }: { isActive: boolean }) =>
+  isActive
+    ? 'block rounded-md bg-indigo-50 px-3 py-2 text-sm font-semibold text-indigo-700'
+    : 'block rounded-md px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 hover:text-indigo-700';
+
+// Admin Console đã chuyển vào trang Profile (chỉ admin) → bỏ khỏi header user.
+const NAV_ITEMS = [
+  { to: '/search', label: 'Search' },
+  { to: '/landscape', label: 'Research Landscape' },
+  { to: '/dashboard', label: 'Journal & Keywords' },
+  { to: '/overlap', label: 'Overlap Checker' },
+  { to: '/latex', label: 'LaTeX Writer' },
+  { to: '/library', label: 'Saved Library' },
+];
+
 const Header = () => {
   const { user } = useAuth();
   const [unread, setUnread] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Poll số thông báo chưa đọc cho badge chuông (mỗi 30s). Nhẹ, đủ "gần real-time".
   useEffect(() => {
@@ -33,39 +50,31 @@ const Header = () => {
     .slice(-2)
     .join('');
 
+  const showUpgrade = user.accessTier === AccessTier.BASIC && user.role !== Role.ADMIN;
+
   return (
     <header className="border-b border-gray-200 bg-white">
-      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
         <Link to="/" className="text-xl font-bold text-indigo-800">
           Academic Clarity
         </Link>
 
-        <nav className="flex items-center gap-5">
-          <NavLink to="/search" className={navLinkClass}>
-            Search
-          </NavLink>
-          <NavLink to="/landscape" className={navLinkClass}>
-            Research Landscape
-          </NavLink>
-          <NavLink to="/dashboard" className={navLinkClass}>
-            Journal & Keywords
-          </NavLink>
-          <NavLink to="/overlap" className={navLinkClass}>
-            Overlap Checker
-          </NavLink>
-          <NavLink to="/latex" className={navLinkClass}>
-            LaTeX Writer
-          </NavLink>
-          <NavLink to="/library" className={navLinkClass}>
-            Saved Library
-          </NavLink>
-          {/* Admin Console đã chuyển vào trang Profile (chỉ admin) → bỏ khỏi header user. */}
+        {/* 6 link nav khá rộng nên chỉ hiện từ lg trở lên; dưới đó dùng menu hamburger */}
+        <nav className="hidden items-center gap-5 lg:flex">
+          {NAV_ITEMS.map((item) => (
+            <NavLink key={item.to} to={item.to} className={navLinkClass}>
+              {item.label}
+            </NavLink>
+          ))}
         </nav>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 lg:gap-4">
           {/* Hiện CTA upgrade cho user BASIC (trừ Admin, vì Admin luôn full quyền - BR-26) */}
-          {user.accessTier === AccessTier.BASIC && user.role !== Role.ADMIN && (
-            <Link to="/pricing" className="rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700">
+          {showUpgrade && (
+            <Link
+              to="/pricing"
+              className="hidden rounded-full bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 sm:inline-block"
+            >
               Upgrade
             </Link>
           )}
@@ -87,8 +96,49 @@ const Header = () => {
           >
             {initials}
           </Link>
+
+          <button
+            type="button"
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label={menuOpen ? 'Đóng menu' : 'Mở menu'}
+            aria-expanded={menuOpen}
+            className="flex h-8 w-8 items-center justify-center rounded-md text-gray-600 hover:bg-gray-50 hover:text-indigo-700 lg:hidden"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.5} className="h-5 w-5">
+              {menuOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18 18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              )}
+            </svg>
+          </button>
         </div>
       </div>
+
+      {menuOpen && (
+        <nav className="space-y-1 border-t border-gray-200 px-4 py-3 lg:hidden">
+          {NAV_ITEMS.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={mobileNavLinkClass}
+              onClick={() => setMenuOpen(false)}
+            >
+              {item.label}
+            </NavLink>
+          ))}
+
+          {showUpgrade && (
+            <Link
+              to="/pricing"
+              onClick={() => setMenuOpen(false)}
+              className="block rounded-md px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50 sm:hidden"
+            >
+              Upgrade to Premium
+            </Link>
+          )}
+        </nav>
+      )}
     </header>
   );
 };

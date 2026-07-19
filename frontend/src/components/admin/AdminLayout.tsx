@@ -246,18 +246,18 @@ const AdminLayout = () => {
     .toUpperCase();
 
   return (
-    <div className="min-h-screen bg-[#f4f7fa] text-slate-900">
-      <aside className="fixed left-0 top-0 z-20 flex h-screen w-[244px] flex-col border-r border-slate-200 bg-slate-50 text-slate-700">
+    <div className="min-h-screen bg-gray-100 text-gray-900">
+      <aside className="fixed left-0 top-0 z-20 flex h-screen w-[244px] flex-col border-r border-gray-200 bg-white text-gray-700">
         <div className="px-4 pb-5 pt-5">
           <Link
             to="/admin"
-            className="flex items-center gap-2 text-lg font-extrabold tracking-tight text-[#1e1b4b]"
+            className="flex items-center gap-2 text-lg font-bold tracking-tight text-indigo-800"
           >
-            <span className="text-sm text-[#4338ca]" />
+            <span className="text-sm text-indigo-700" />
             <span className="text-xl font-bold text-indigo-800" >Academic Clarity</span>
           </Link>
 
-          <p className="ml-5 mt-1 text-[11px] text-slate-500">
+          <p className="ml-5 mt-1 text-[11px] text-gray-500">
             System Administration
           </p>
         </div>
@@ -265,7 +265,7 @@ const AdminLayout = () => {
         <nav className="flex flex-1 flex-col gap-5 overflow-y-auto px-3 pb-4">
           {adminSections.map((section) => (
             <div key={section.title}>
-              <p className="mb-2 px-3 text-[10px] font-extrabold uppercase tracking-[0.18em] text-slate-400">
+              <p className="mb-2 px-3 text-[10px] font-bold uppercase tracking-[0.18em] text-gray-400">
                 {section.title}
               </p>
 
@@ -277,10 +277,10 @@ const AdminLayout = () => {
                     end={item.end}
                     className={({ isActive }) =>
                       [
-                        'flex items-center gap-3 rounded-xl px-3 py-3 text-sm font-bold transition',
+                        'flex items-center gap-3 rounded-md px-3 py-2.5 text-sm font-medium transition',
                         isActive
-                          ? 'bg-[#4338ca] text-white shadow-md shadow-indigo-200'
-                          : 'text-slate-600 hover:bg-violet-50 hover:text-[#4338ca]',
+                          ? 'bg-indigo-700 font-semibold text-white'
+                          : 'text-gray-600 hover:bg-indigo-50 hover:text-indigo-700',
                       ].join(' ')
                     }
                   >
@@ -298,13 +298,13 @@ const AdminLayout = () => {
       </aside>
 
       <div className="ml-[244px] min-h-screen">
-        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-slate-200 bg-white px-8 shadow-sm">
+        <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-gray-200 bg-white px-8 shadow-sm">
           <div />
 
-          <div className="flex items-center gap-4 text-slate-600">
+          <div className="flex items-center gap-4 text-gray-600">
             <Link
               to="/"
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-700 hover:bg-slate-50"
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
             >
               ← Back to app
             </Link>
@@ -316,7 +316,7 @@ const AdminLayout = () => {
                 onClick={handleToggleNotifications}
                 aria-label="Activity notifications"
                 aria-expanded={showNotifications}
-                className="relative flex h-9 w-9 items-center justify-center rounded-full text-slate-500 transition hover:bg-violet-50 hover:text-[#4338ca]"
+                className="relative flex h-9 w-9 items-center justify-center rounded-full text-gray-500 transition hover:bg-indigo-50 hover:text-indigo-700"
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -344,15 +344,15 @@ const AdminLayout = () => {
 
               {/* Notification Popup */}
               {showNotifications && (
-                <div className="absolute right-0 top-11 z-30 w-80 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl">
-                  <div className="border-b border-slate-100 px-4 py-3">
+                <div className="absolute right-0 top-11 z-30 w-80 overflow-hidden rounded-xl border border-gray-200 bg-white shadow-xl">
+                  <div className="border-b border-gray-100 px-4 py-3">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-extrabold text-slate-900">
+                        <p className="text-sm font-bold text-gray-900">
                           Recent activity
                         </p>
 
-                        <p className="mt-0.5 text-xs text-slate-500">
+                        <p className="mt-0.5 text-xs text-gray-500">
                           Latest admin and system events
                         </p>
                       </div>
@@ -365,7 +365,7 @@ const AdminLayout = () => {
                           )
                         }
                         disabled={notificationsLoading}
-                        className="shrink-0 text-xs font-bold text-[#4338ca] hover:underline disabled:cursor-not-allowed disabled:opacity-50"
+                        className="shrink-0 text-xs font-bold text-indigo-700 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
                       >
                         {notificationsLoading
                           ? 'Loading...'
@@ -378,7 +378,7 @@ const AdminLayout = () => {
                     {notificationsLoading &&
                       recentLogs.length === 0 ? (
                       <div className="px-3 py-8 text-center">
-                        <p className="text-sm font-semibold text-slate-500">
+                        <p className="text-sm font-semibold text-gray-500">
                           Loading activity...
                         </p>
                       </div>
@@ -395,14 +395,14 @@ const AdminLayout = () => {
                               true,
                             )
                           }
-                          className="mt-2 text-xs font-bold text-[#4338ca] hover:underline"
+                          className="mt-2 text-xs font-bold text-indigo-700 hover:underline"
                         >
                           Try again
                         </button>
                       </div>
                     ) : recentLogs.length === 0 ? (
                       <div className="px-3 py-8 text-center">
-                        <p className="text-sm font-semibold text-slate-500">
+                        <p className="text-sm font-semibold text-gray-500">
                           No activity recorded
                         </p>
                       </div>
@@ -412,7 +412,7 @@ const AdminLayout = () => {
                           key={`${getActivityFingerprint(
                             log,
                           )}-${index}`}
-                          className="flex gap-3 rounded-lg px-3 py-3 hover:bg-slate-50"
+                          className="flex gap-3 rounded-lg px-3 py-3 hover:bg-gray-50"
                         >
                           <span
                             className={[
@@ -423,11 +423,11 @@ const AdminLayout = () => {
 
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
-                              <p className="text-sm font-bold text-slate-800">
+                              <p className="text-sm font-bold text-gray-800">
                                 {log.title}
                               </p>
 
-                              <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[9px] font-extrabold text-slate-500">
+                              <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[9px] font-bold text-gray-500">
                                 {
                                   activityTypeLabel[
                                   log.type
@@ -436,11 +436,11 @@ const AdminLayout = () => {
                               </span>
                             </div>
 
-                            <p className="mt-1 truncate text-[11px] text-slate-500">
+                            <p className="mt-1 truncate text-[11px] text-gray-500">
                               {log.ref}
                             </p>
 
-                            <p className="mt-1 text-[10px] text-slate-400">
+                            <p className="mt-1 text-[10px] text-gray-400">
                               {log.time}
                             </p>
                           </div>
@@ -454,7 +454,7 @@ const AdminLayout = () => {
                     onClick={() =>
                       setShowNotifications(false)
                     }
-                    className="block border-t border-slate-100 px-4 py-3 text-center text-xs font-bold text-[#4338ca] hover:bg-violet-50"
+                    className="block border-t border-gray-100 px-4 py-3 text-center text-xs font-bold text-indigo-700 hover:bg-indigo-50"
                   >
                     View all activity logs
                   </Link>
@@ -462,20 +462,20 @@ const AdminLayout = () => {
               )}
             </div>
 
-            <div className="flex items-center gap-3 border-l border-slate-200 pl-4">
+            <div className="flex items-center gap-3 border-l border-gray-200 pl-4">
               <div className="text-right">
-                <p className="text-xs font-bold text-slate-900">
+                <p className="text-xs font-bold text-gray-900">
                   {user.fullName}
                 </p>
 
-                <p className="text-[10px] text-slate-500">
+                <p className="text-[10px] text-gray-500">
                   Administrator
                 </p>
               </div>
 
               <Link
                 to="/profile"
-                className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-700 text-xs font-bold text-white"
+                className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-700 text-xs font-semibold text-white"
               >
                 {initials}
               </Link>

@@ -15,17 +15,17 @@ const AdminModal = ({ open, title, subtitle, children, footer, onClose }: AdminM
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-900/40 px-4">
       <div className="w-full max-w-xl overflow-hidden rounded-xl bg-white shadow-xl">
-        <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+        <div className="flex items-start justify-between gap-4 border-b border-gray-200 px-5 py-4">
           <div>
             <h2 className="text-lg font-semibold text-gray-900">
               {title}
             </h2>
-            {subtitle && <p className="mt-1 text-xs text-slate-500">{subtitle}</p>}
+            {subtitle && <p className="mt-1 text-xs text-gray-500">{subtitle}</p>}
           </div>
-          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-700">×</button>
+          <button type="button" onClick={onClose} className="rounded-md px-2 py-1 text-xl leading-none text-gray-400 hover:bg-gray-100 hover:text-gray-700">×</button>
         </div>
         <div className="max-h-[70vh] overflow-y-auto p-5">{children}</div>
-        {footer && <div className="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4">{footer}</div>}
+        {footer && <div className="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 px-5 py-4">{footer}</div>}
       </div>
     </div>
   );

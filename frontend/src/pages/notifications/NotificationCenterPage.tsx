@@ -49,14 +49,14 @@ const NotificationCenterPage = () => {
   return (
     <div className="grid gap-6 lg:grid-cols-3">
       <div className="space-y-4 lg:col-span-2">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p className="text-xs font-medium uppercase tracking-wide text-gray-400">Notification Center</p>
             <h1 className="text-2xl font-bold text-gray-900">Notifications</h1>
           </div>
           <button
             onClick={onMarkAll}
-            className="rounded-md bg-indigo-700 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-800"
+            className="self-start rounded-md bg-indigo-700 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-800 sm:self-auto"
           >
             Mark All as Read
           </button>
