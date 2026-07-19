@@ -10,6 +10,8 @@ import {
   getDoc,
   exportDoc,
   importDocFromFile,
+  storageUsageBytes,
+  formatBytes,
   type LatexDocMeta,
 } from '../../lib/latexStorage';
 
@@ -137,7 +139,9 @@ const LatexListPage = () => {
                   <p className={`truncate text-sm font-semibold hover:underline ${d.title.trim() ? 'text-indigo-700' : 'italic text-gray-400'}`}>
                     {d.title.trim() || 'Untitled document'}
                   </p>
-                  <p className="mt-0.5 text-xs text-gray-500">Last edited {formatTime(d.updatedAt)}</p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    Last edited {formatTime(d.updatedAt)} · {formatBytes(d.sizeBytes)}
+                  </p>
                 </button>
                 <div className="flex shrink-0 items-center gap-2">
                   <button
@@ -158,6 +162,13 @@ const LatexListPage = () => {
               </li>
             ))}
           </ul>
+        )}
+
+        {/* Tổng dung lượng localStorage đang dùng — user biết trước khi chạm trần ~5MB */}
+        {docs.length > 0 && (
+          <p className="text-right text-xs text-gray-400">
+            Browser storage used: {formatBytes(storageUsageBytes())} / ~5 MB
+          </p>
         )}
       </RequireFeature>
     </div>
