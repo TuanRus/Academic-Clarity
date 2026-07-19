@@ -24,8 +24,11 @@ const LatexEditorPage = () => {
 
   const [title, setTitle] = useState(initialDoc?.title ?? '');
   const [content, setContent] = useState(initialDoc?.content ?? '');
-  const [saveState, setSaveState] = useState<'saved' | 'saving'>('saved');
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [tab, setTab] = useState<RightTab>('pdf');
+  // Tăng số này = yêu cầu PdfPreview compile (dùng cho Ctrl+S).
+  const [compileSignal, setCompileSignal] = useState(0);
 
   const viewRef = useRef<EditorView | null>(null);
   const saveTimer = useRef<number | undefined>(undefined);
@@ -36,12 +39,19 @@ const LatexEditorPage = () => {
   const extensions = useMemo(() => [StreamLanguage.define(stex), EditorView.lineWrapping], []);
 
   // Autosave: gõ xong 1s không đụng phím → ghi localStorage.
+  // localStorage đầy → writeAll ném lỗi: hiện trạng thái lỗi thay vì "Saved" giả.
   const scheduleSave = () => {
     setSaveState('saving');
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(() => {
-      updateDoc(docId, { title: latest.current.title, content: latest.current.content });
-      setSaveState('saved');
+      try {
+        updateDoc(docId, { title: latest.current.title, content: latest.current.content });
+        setSaveState('saved');
+        setSaveError(null);
+      } catch (e) {
+        setSaveState('error');
+        setSaveError(e instanceof Error ? e.message : 'Could not save to browser storage.');
+      }
     }, 1000);
   };
 
@@ -49,10 +59,24 @@ const LatexEditorPage = () => {
   useEffect(() => {
     return () => {
       window.clearTimeout(saveTimer.current);
-      if (getDoc(docId)) updateDoc(docId, { title: latest.current.title, content: latest.current.content });
+      try {
+        if (getDoc(docId)) updateDoc(docId, { title: latest.current.title, content: latest.current.content });
+      } catch {
+        // storage đầy: không chặn được unmount, dữ liệu vẫn còn trong phiên trước đó
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [docId]);
+
+  // Đóng tab/reload khi chưa lưu xong (đang debounce hoặc lưu lỗi) → hỏi xác nhận.
+  useEffect(() => {
+    if (saveState === 'saved') return;
+    const warn = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [saveState]);
 
   /** Chèn \cite tại cursor + \bibitem vào thebibliography (tạo env nếu chưa có, không trùng key). */
   const insertCitation = (c: Citation) => {
@@ -75,6 +99,19 @@ const LatexEditorPage = () => {
     view.dispatch({ changes }); // onChange của CodeMirror sẽ sync state + autosave
     view.focus();
   };
+
+  // Ctrl+S / Cmd+S = compile PDF (thay vì dialog save của browser) — thói quen Overleaf.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        setTab('pdf');
+        setCompileSignal((s) => s + 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   if (!initialDoc) {
     return (
@@ -103,7 +140,12 @@ const LatexEditorPage = () => {
           placeholder="Untitled document"
           className="min-w-0 flex-1 rounded-md border border-transparent px-2 py-1 text-lg font-semibold text-gray-900 hover:border-gray-200 focus:border-gray-300 focus:outline-none"
         />
-        <span className="text-xs text-gray-400">{saveState === 'saving' ? 'Saving…' : 'Saved ✓'}</span>
+        <span
+          className={`text-xs ${saveState === 'error' ? 'font-medium text-red-600' : 'text-gray-400'}`}
+          title={saveError ?? undefined}
+        >
+          {saveState === 'saving' ? 'Saving…' : saveState === 'error' ? `Not saved — ${saveError}` : 'Saved ✓'}
+        </span>
         <button
           type="button"
           onClick={() => exportDoc({ title: latest.current.title, content: latest.current.content })}
@@ -151,7 +193,7 @@ const LatexEditorPage = () => {
             </div>
             <div className="h-[64vh] min-h-[300px]">
               {tab === 'pdf' ? (
-                <PdfPreview getSource={() => latest.current.content} />
+                <PdfPreview getSource={() => latest.current.content} compileSignal={compileSignal} />
               ) : (
                 <OverlapPanel
                   getDraft={() => {

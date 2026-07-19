@@ -10,6 +10,8 @@ import {
   getDoc,
   exportDoc,
   importDocFromFile,
+  storageUsageBytes,
+  formatBytes,
   type LatexDocMeta,
 } from '../../lib/latexStorage';
 
@@ -133,8 +135,13 @@ const LatexListPage = () => {
                   onClick={() => navigate(`/latex/${d.id}`)}
                   className="min-w-0 flex-1 text-left"
                 >
-                  <p className="truncate text-sm font-semibold text-indigo-700 hover:underline">{d.title}</p>
-                  <p className="mt-0.5 text-xs text-gray-500">Last edited {formatTime(d.updatedAt)}</p>
+                  {/* Tài liệu bị xóa hết tên trong editor → hiển thị fallback thay vì dòng trống */}
+                  <p className={`truncate text-sm font-semibold hover:underline ${d.title.trim() ? 'text-indigo-700' : 'italic text-gray-400'}`}>
+                    {d.title.trim() || 'Untitled document'}
+                  </p>
+                  <p className="mt-0.5 text-xs text-gray-500">
+                    Last edited {formatTime(d.updatedAt)} · {formatBytes(d.sizeBytes)}
+                  </p>
                 </button>
                 <div className="flex shrink-0 items-center gap-2">
                   <button
@@ -155,6 +162,13 @@ const LatexListPage = () => {
               </li>
             ))}
           </ul>
+        )}
+
+        {/* Tổng dung lượng localStorage đang dùng — user biết trước khi chạm trần ~5MB */}
+        {docs.length > 0 && (
+          <p className="text-right text-xs text-gray-400">
+            Browser storage used: {formatBytes(storageUsageBytes())} / ~5 MB
+          </p>
         )}
       </RequireFeature>
     </div>
