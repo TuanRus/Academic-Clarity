@@ -21,6 +21,10 @@ namespace ScientificTrendTracker.Services
         private const double HighTier = 0.30;
         private const double MediumTier = 0.15;
 
+        // Số keyword TRÙNG tối thiểu để đạt "độ phủ" đầy đủ. Trùng ít hơn → điểm bị phạt theo tỉ lệ.
+        // Mục đích: tránh "trùng 1/3 keyword = 33% = High" phi thực tế khi abstract có ít keyword.
+        private const int MinSharedForFullCoverage = 3;
+
         public IdeaOverlapService(AppDbContext dbContext, IIdeaKeywordExtractor keywordExtractor)
         {
             _dbContext = dbContext;
@@ -38,44 +42,79 @@ namespace ScientificTrendTracker.Services
             result.ExtractedKeywords = keywords;
             if (keywords.Count == 0) return result;
 
-            // 2. Lấy KeywordId + df (số bài chứa) cho các keyword khớp database.
-            var kwInfos = await _dbContext.Keywords
-                .Where(k => keywords.Contains(k.KeywordName))
-                .Select(k => new { k.KeywordId, k.KeywordName, Df = k.PaperKeywords.Count })
+            // 2. Nạp TOÀN BỘ catalog keyword (id, name) + df để khớp LINH HOẠT theo từ chung,
+            //    không chỉ khớp đúng chữ. Tránh trường hợp abstract dùng "cnn"/"image augmentation
+            //    algorithms" mà bài lưu "convolutional neural network"/"image data augmentation".
+            var catalog = await _dbContext.Keywords
+                .AsNoTracking()
+                .Select(k => new { k.KeywordId, k.KeywordName })
                 .ToListAsync();
-
-            result.MatchedKeywordCount = kwInfos.Count;
-            if (kwInfos.Count == 0) return result; // không keyword nào có trong DB → không có bài để so
+            var dfById = await _dbContext.PaperKeywords
+                .GroupBy(pk => pk.KeywordId)
+                .Select(g => new { KeywordId = g.Key, Df = g.Count() })
+                .ToDictionaryAsync(x => x.KeywordId, x => x.Df);
 
             var totalPapers = await _dbContext.ResearchPapers.CountAsync();
-
-            // IDF mượt: keyword hiếm → trọng số cao. Keyword không có trong DB coi df=0 (hiếm nhất).
             double Idf(int df) => Math.Log((double)(totalPapers + 1) / (df + 1)) + 1.0;
 
-            var dfByName = kwInfos.ToDictionary(k => k.KeywordName, k => k.Df);
-            var userWeight = keywords.ToDictionary(
-                n => n,
-                n => Idf(dfByName.TryGetValue(n, out var df) ? df : 0));
+            // Cache token của keyword catalog (tính 1 lần) để khớp nhanh.
+            var catalogToks = catalog.ToDictionary(k => k.KeywordId, k => Tokenize(k.KeywordName));
+
+            // Với mỗi keyword người dùng: tìm tập keyword-DB tương đương + df ĐẠI DIỆN (khớp sát nhất;
+            // nếu nhiều cái ngang nhau lấy df lớn hơn = nghĩa phổ biến, tránh thổi phồng trọng số).
+            var matchIdsByUser = new Dictionary<string, HashSet<string>>();
+            var userWeight = new Dictionary<string, double>();
+            foreach (var u in keywords)
+            {
+                var ut = Tokenize(u);
+                var set = new HashSet<string>();
+                int repDf = -1; double bestSim = -1;
+                foreach (var c in catalog)
+                {
+                    bool exact = c.KeywordName == u;
+                    var ctoks = catalogToks[c.KeywordId];
+                    if (!exact && !ConceptMatch(ut, ctoks)) continue;
+                    set.Add(c.KeywordId);
+                    int df = dfById.TryGetValue(c.KeywordId, out var d) ? d : 0;
+                    int inter = ut.Count(x => ctoks.Contains(x));
+                    int uni = ut.Count + ctoks.Count - inter;
+                    double sim = exact ? 2.0 : (uni > 0 ? (double)inter / uni : 0);
+                    if (sim > bestSim || (Math.Abs(sim - bestSim) < 1e-9 && df > repDf)) { bestSim = sim; repDf = df; }
+                }
+                matchIdsByUser[u] = set;
+                userWeight[u] = Idf(repDf < 0 ? 0 : repDf); // không khớp gì → df=0 (hiếm nhất) → vẫn vào mẫu số
+            }
+
+            result.MatchedKeywordCount = matchIdsByUser.Count(kv => kv.Value.Count > 0);
             var denom = userWeight.Values.Sum();
             if (denom <= 0) return result;
 
-            // 3. Candidate = các bài chia sẻ ≥1 keyword (không quét toàn corpus).
-            var kwIdToName = kwInfos.ToDictionary(k => k.KeywordId, k => k.KeywordName);
-            var matchedKwIds = kwInfos.Select(k => k.KeywordId).ToList();
+            // 3. Map keyword-DB → keyword người dùng (concept). 1 keyword-DB có thể thuộc nhiều concept.
+            var kwIdToUsers = new Dictionary<string, List<string>>();
+            foreach (var u in keywords)
+                foreach (var id in matchIdsByUser[u])
+                {
+                    if (!kwIdToUsers.TryGetValue(id, out var lst)) { lst = new(); kwIdToUsers[id] = lst; }
+                    lst.Add(u);
+                }
+            if (kwIdToUsers.Count == 0) return result; // không concept nào khớp DB
 
+            var matchedKwIds = kwIdToUsers.Keys.ToList();
             var links = await _dbContext.PaperKeywords
                 .Where(pk => matchedKwIds.Contains(pk.KeywordId))
                 .Select(pk => new { pk.PaperId, pk.KeywordId })
                 .ToListAsync();
 
-            // 4. Tính điểm weighted cho từng bài, lấy topN.
+            // 4. Điểm mỗi bài = (tổng trọng số CONCEPT bài chạm / denom) × coverage.
+            //    coverage phạt bài trùng ÍT concept (vd 1/3) để không bị đẩy lên High phi thực tế.
             var scored = links
                 .GroupBy(l => l.PaperId)
                 .Select(g =>
                 {
-                    var shared = g.Select(x => kwIdToName[x.KeywordId]).Distinct().ToList();
-                    var num = shared.Sum(n => userWeight[n]);
-                    return new { PaperId = g.Key, Shared = shared, Score = num / denom };
+                    var concepts = g.SelectMany(x => kwIdToUsers[x.KeywordId]).Distinct().ToList();
+                    var weighted = concepts.Sum(u => userWeight[u]) / denom;
+                    var coverage = Math.Min(1.0, (double)concepts.Count / MinSharedForFullCoverage);
+                    return new { PaperId = g.Key, Shared = concepts, Score = weighted * coverage };
                 })
                 .OrderByDescending(x => x.Score)
                 .Take(topN)
@@ -103,7 +142,7 @@ namespace ScientificTrendTracker.Services
                     SourceUrl = p?.SourceUrl,
                     SharedKeywords = s.Shared,
                     Score = Math.Round(s.Score, 3),
-                    Tier = s.Score >= HighTier ? "high" : s.Score >= MediumTier ? "medium" : "low"
+                    Tier = TierOf(s.Score, s.Shared.Count)
                 };
             }).ToList();
 
@@ -174,6 +213,56 @@ namespace ScientificTrendTracker.Services
             // Kết luận cuối = mức CAO HƠN giữa tier keyword của bài top và mức rủi ro AI.
             var keywordTop = result.Matches.Count > 0 ? result.Matches[0].Tier : "low";
             result.FinalVerdict = MaxSeverity(keywordTop, result.AiRisk ?? "low");
+        }
+
+        /// <summary>
+        /// Xếp mức cảnh báo theo điểm + SỐ concept trùng.
+        /// - High: trùng ≥3 concept (đủ tự tin) HOẶC 2 concept nhưng điểm rất cao (≥0.55).
+        /// - 1 concept: KHÔNG bao giờ high (tránh cảnh báo giả khi chỉ trùng đúng 1 từ).
+        /// </summary>
+        private static string TierOf(double score, int sharedCount)
+        {
+            if ((score >= HighTier && sharedCount >= 3) || (score >= 0.55 && sharedCount >= 2)) return "high";
+            if (score >= MediumTier && sharedCount >= 2) return "medium";
+            return "low";
+        }
+
+        // Stopword loại khỏi token khi so khớp khái niệm (từ chung/generic không mang nghĩa phân biệt).
+        private static readonly HashSet<string> _tokenStop = new()
+        {
+            "deep","based","using","via","approach","method","algorithm","model","technique","system",
+            "a","an","the","for","of","and","in","on","to","with","from","by",
+            "survey","review","comprehensive","general","novel","new","study","analysis"
+        };
+
+        /// <summary>Tách keyword thành tập token: lowercase, bỏ ký tự lạ, bỏ stopword, chuẩn hoá số nhiều đơn giản.</summary>
+        private static HashSet<string> Tokenize(string s)
+        {
+            var set = new HashSet<string>();
+            if (string.IsNullOrWhiteSpace(s)) return set;
+            var raw = new string(s.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : ' ').ToArray())
+                .Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            foreach (var t0 in raw)
+            {
+                if (_tokenStop.Contains(t0)) continue;
+                var t = t0.Length > 3 && t0.EndsWith("s") ? t0[..^1] : t0; // số nhiều: bỏ 's' cuối
+                if (t.Length >= 2 && !_tokenStop.Contains(t)) set.Add(t);
+            }
+            return set;
+        }
+
+        /// <summary>
+        /// Hai keyword "khớp khái niệm" nếu chia sẻ đủ từ: Jaccard token ≥ 0.5 HOẶC tập nhỏ nằm trọn
+        /// trong tập lớn (containment). Giúp "image augmentation algorithms" ≈ "image data augmentation".
+        /// </summary>
+        private static bool ConceptMatch(HashSet<string> a, HashSet<string> b)
+        {
+            if (a.Count == 0 || b.Count == 0) return false;
+            int inter = a.Count(x => b.Contains(x));
+            if (inter == 0) return false;
+            int uni = a.Count + b.Count - inter;
+            double jac = (double)inter / uni;
+            return jac >= 0.5 || inter == Math.Min(a.Count, b.Count);
         }
 
         private static string NormalizeRisk(string s)
