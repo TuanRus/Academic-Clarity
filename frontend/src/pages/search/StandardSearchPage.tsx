@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { searchPapers, searchPapersByAuthor, searchPapersByJournal, suggestKeywords } from '../../lib/api/mindmap';
+import { searchPapers, searchPapersByAuthor, searchPapersByJournal, suggestKeywords, suggestAuthors } from '../../lib/api/mindmap';
 import { getHistory, saveHistory, clearHistory } from '../../lib/api/searchHistory';
 import { ApiError } from '../../lib/http';
 import type { PaperSearchItem } from '../../types/api';
@@ -43,17 +43,16 @@ const StandardSearchPage = () => {
   const [error, setError] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
-  // FR-08: autocomplete keyword (chỉ khi tìm theo "All" — author/journal không có gợi ý).
+  // FR-08: autocomplete cho "All" (keyword) và "Author" (tên tác giả). Journal chưa có gợi ý.
   useEffect(() => {
     const term = query.trim();
-    if (scope !== 'all' || term.length < 2) {
+    if ((scope !== 'all' && scope !== 'author') || term.length < 2) {
       setSuggestions([]);
       return;
     }
     const id = setTimeout(() => {
-      suggestKeywords(term, 8)
-        .then(setSuggestions)
-        .catch(() => setSuggestions([]));
+      const req = scope === 'author' ? suggestAuthors(term, 8) : suggestKeywords(term, 8);
+      req.then(setSuggestions).catch(() => setSuggestions([]));
     }, 250);
     return () => clearTimeout(id);
   }, [query, scope]);
@@ -101,10 +100,10 @@ const StandardSearchPage = () => {
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Standard Search</h1>
-        <p className="text-sm text-gray-500">
-          Search by keyword or by exact DOI / OpenAlex ID.
+        <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
+          Search by keyword or by exact DOI / OpenAlex ID
         </p>
+        <h1 className="text-2xl font-bold text-gray-900">Standard Search</h1>
       </div>
 
       <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -154,8 +153,8 @@ const StandardSearchPage = () => {
           </button>
         </form>
 
-        {/* FR-08: autocomplete dropdown (du lieu that, sap xep nhieu bai -> it) */}
-        {scope === 'all' && showSuggestions && suggestions.length > 0 && (
+        {/* FR-08: autocomplete dropdown (keyword cho All, tên tác giả cho Author) */}
+        {(scope === 'all' || scope === 'author') && showSuggestions && suggestions.length > 0 && (
           <ul className="mt-2 divide-y divide-gray-100 rounded-md border border-gray-200">
             {suggestions.map((s) => (
               <li key={s}>

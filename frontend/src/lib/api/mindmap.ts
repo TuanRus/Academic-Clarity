@@ -8,6 +8,11 @@ export function suggestKeywords(q: string, limit = 10): Promise<string[]> {
   return apiGet<string[]>('/mindmap/keywords/suggest', { q, limit });
 }
 
+/** GET /api/mindmap/authors/suggest — autocomplete tên tác giả có trong DB. */
+export function suggestAuthors(q: string, limit = 10): Promise<string[]> {
+  return apiGet<string[]>('/mindmap/authors/suggest', { q, limit });
+}
+
 /** GET /api/mindmap/search — tìm bài báo theo từ khóa (tiêu đề/DOI). */
 export function searchPapers(
   q: string,
