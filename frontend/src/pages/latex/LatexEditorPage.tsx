@@ -27,6 +27,8 @@ const LatexEditorPage = () => {
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'error'>('saved');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [tab, setTab] = useState<RightTab>('pdf');
+  // Tăng số này = yêu cầu PdfPreview compile (dùng cho Ctrl+S).
+  const [compileSignal, setCompileSignal] = useState(0);
 
   const viewRef = useRef<EditorView | null>(null);
   const saveTimer = useRef<number | undefined>(undefined);
@@ -97,6 +99,19 @@ const LatexEditorPage = () => {
     view.dispatch({ changes }); // onChange của CodeMirror sẽ sync state + autosave
     view.focus();
   };
+
+  // Ctrl+S / Cmd+S = compile PDF (thay vì dialog save của browser) — thói quen Overleaf.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        setTab('pdf');
+        setCompileSignal((s) => s + 1);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   if (!initialDoc) {
     return (
@@ -178,7 +193,7 @@ const LatexEditorPage = () => {
             </div>
             <div className="h-[64vh] min-h-[300px]">
               {tab === 'pdf' ? (
-                <PdfPreview getSource={() => latest.current.content} />
+                <PdfPreview getSource={() => latest.current.content} compileSignal={compileSignal} />
               ) : (
                 <OverlapPanel
                   getDraft={() => {
