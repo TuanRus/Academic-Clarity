@@ -1,9 +1,22 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useBookmark } from '../../hooks/useBookmark';
+import { getMyFollows, toggleFollow, type FollowedItem } from '../../lib/api/follow';
 
 // LS-05 · Saved Papers Library (Bookmark Manager) - FR-24
+// + Danh sách Followed Topics & Journals (chuyển từ Notification Center sang đây).
 const SavedLibraryPage = () => {
   const { bookmarkedPapers, toggleBookmark } = useBookmark();
+
+  const [follows, setFollows] = useState<FollowedItem[]>([]);
+  useEffect(() => {
+    getMyFollows().then(setFollows).catch(() => setFollows([]));
+  }, []);
+
+  const onUnfollow = async (f: FollowedItem) => {
+    await toggleFollow(f.targetType as 'topic' | 'journal', f.targetId).catch(() => {});
+    setFollows((prev) => prev.filter((x) => x.followId !== f.followId));
+  };
 
   return (
     <div className="space-y-4">
@@ -54,6 +67,34 @@ const SavedLibraryPage = () => {
           </div>
         </div>
       ))}
+
+      {/* Followed Topics & Journals (chuyển từ Notification Center) */}
+      <div className="pt-2">
+        <h2 className="text-lg font-bold text-gray-900">
+          Followed Topics &amp; Journals ({follows.length})
+        </h2>
+        <p className="text-xs text-gray-500">Topics, journals and authors you follow for new-paper alerts.</p>
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {follows.map((f) => (
+            <div key={f.followId} className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-3">
+              <div className="min-w-0">
+                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] uppercase text-gray-500">{f.targetType}</span>
+                <p className="mt-1 truncate text-sm text-gray-800">{f.name}</p>
+              </div>
+              <button
+                onClick={() => onUnfollow(f)}
+                className="shrink-0 rounded-md border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+              >
+                Unfollow
+              </button>
+            </div>
+          ))}
+          {follows.length === 0 && (
+            <p className="text-xs text-gray-400">Not following anything yet.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 };

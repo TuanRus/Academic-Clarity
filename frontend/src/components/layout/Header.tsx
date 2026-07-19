@@ -48,7 +48,7 @@ const Header = () => {
             Research Landscape
           </NavLink>
           <NavLink to="/dashboard" className={navLinkClass}>
-            Journal & Keywords
+            Trend Dashboard
           </NavLink>
           <NavLink to="/overlap" className={navLinkClass}>
             Overlap Checker

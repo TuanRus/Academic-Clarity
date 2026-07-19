@@ -72,6 +72,15 @@ namespace ScientificTrendTracker.Controllers
             return Ok(ApiResponse<List<string>>.Ok(items, $"{items.Count} suggestion(s)."));
         }
 
+        /// <summary>Autocomplete: gợi ý tên tác giả có trong DB, sắp theo số bài giảm dần.</summary>
+        [HttpGet("authors/suggest")]
+        public async Task<IActionResult> SuggestAuthors([FromQuery] string q, [FromQuery] int limit = 10)
+        {
+            if (limit < 1 || limit > 25) limit = 10;
+            var items = await _graphBuilderService.SuggestAuthorsAsync(q, limit);
+            return Ok(ApiResponse<List<string>>.Ok(items, $"{items.Count} suggestion(s)."));
+        }
+
         /// <summary>Tìm bài báo theo tên tác giả (gần đúng), phân trang.</summary>
         [HttpGet("search/author")]
         public async Task<IActionResult> SearchByAuthor(

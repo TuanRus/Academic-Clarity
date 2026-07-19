@@ -399,6 +399,21 @@ namespace ScientificTrendTracker.Services
                 .ToListAsync();
         }
 
+        /// <summary>Autocomplete tên tác giả (distinct) khớp prefix, sắp theo số bài giảm dần.</summary>
+        public async Task<List<string>> SuggestAuthorsAsync(string q, int limit)
+        {
+            var term = (q ?? string.Empty).Trim();
+            if (term.Length == 0) return new List<string>();
+
+            return await _dbContext.Authors
+                .Where(a => a.FullName.Contains(term))
+                .OrderByDescending(a => a.PaperAuthors.Count)
+                .ThenBy(a => a.FullName)
+                .Take(limit)
+                .Select(a => a.FullName)
+                .ToListAsync();
+        }
+
         /// <summary>Tìm keyword: ưu tiên exact, fallback contains theo paperCount cao nhất.</summary>
         private async Task<Models.Entities.Keyword> FindKeywordAsync(string keyword)
         {

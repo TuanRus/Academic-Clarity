@@ -58,6 +58,16 @@ async function buildUser(token: string): Promise<User | null> {
   const claims = decodeJwt(token);
   if (!claims) return null;
 
+  // GET /Auth/me là CHÂN LÝ xác thực: http.ts sẽ tự refresh nếu access token hết hạn
+  // (dùng refresh token). Nếu vẫn thất bại (refresh cũng hết hạn / token không hợp lệ)
+  // → phiên đã chết → trả null để buộc đăng nhập lại (không dựng phiên giả từ token cũ).
+  let me: Awaited<ReturnType<typeof authApi.getMe>>;
+  try {
+    me = await authApi.getMe();
+  } catch {
+    return null;
+  }
+
   let tier: AccessTier = AccessTier.BASIC;
   let validUntil: string | undefined;
   try {
@@ -67,28 +77,14 @@ async function buildUser(token: string): Promise<User | null> {
       validUntil = sub.endsAt ?? undefined;
     }
   } catch {
-    // token hết hạn / lỗi → coi như chưa premium
-  }
-
-  // Nguồn chuẩn là DB (GET /Auth/me): đảm bảo Full Name & Role luôn khớp DB,
-  // không phụ thuộc token cũ. Nếu lỗi thì fallback về claim trong token.
-  let fullName = claims.fullName || claims.email.split('@')[0] || claims.email;
-  let roleId = claims.roleId;
-  let email = claims.email;
-  try {
-    const me = await authApi.getMe();
-    fullName = me.fullname || fullName;
-    roleId = String(me.roleId);
-    email = me.email || email;
-  } catch {
-    // dùng dữ liệu từ token
+    // lỗi lấy tier → coi như chưa premium (không ảnh hưởng trạng thái đăng nhập)
   }
 
   return {
     id: claims.userId,
-    fullName,
-    email,
-    role: mapRoleId(roleId),
+    fullName: me.fullname || claims.fullName || claims.email.split('@')[0] || claims.email,
+    email: me.email || claims.email,
+    role: mapRoleId(String(me.roleId ?? claims.roleId)),
     accessTier: tier,
     subscriptionValidUntil: validUntil,
   };
@@ -98,12 +94,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Khôi phục phiên từ token đã lưu (nếu còn hạn).
+  // Khôi phục phiên từ token đã lưu — CHỈ khi /Auth/me xác thực OK (kể cả sau auto-refresh).
+  // Phiên đã chết (token hết hạn + refresh hết hạn) → xóa sạch token, không auto-login giả.
   useEffect(() => {
     const token = getAuthToken();
     if (!token) { setLoading(false); return; }
     buildUser(token)
-      .then((u) => { if (u) setUser(u); else setAuthToken(null); })
+      .then((u) => {
+        if (u) {
+          setUser(u);
+        } else {
+          setAuthToken(null);
+          localStorage.removeItem(REFRESH_KEY);
+        }
+      })
       .finally(() => setLoading(false));
   }, []);
 
