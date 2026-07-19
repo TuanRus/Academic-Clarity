@@ -26,7 +26,13 @@ function readAll(): LatexDoc[] {
 }
 
 function writeAll(docs: LatexDoc[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(docs));
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(docs));
+  } catch (e) {
+    // localStorage đầy (QuotaExceededError) → nếu nuốt lỗi êm thì autosave "Saved" sẽ nói dối
+    // và user mất bài. Ném tiếp để UI (autosave indicator) báo lỗi + khuyên Export .tex.
+    throw new Error('Browser storage is full — export your documents as .tex and delete old ones to free space.');
+  }
 }
 
 /** Danh sách metadata (không kèm content), mới sửa gần nhất lên đầu. */
