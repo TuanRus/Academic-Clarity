@@ -212,6 +212,23 @@ namespace ScientificTrendTracker
                         db.Database.ExecuteSqlRaw("ALTER TABLE UserSubscriptions ADD COLUMN PaidAmount DECIMAL(18,2) NULL");
                 }
                 catch { /* không chặn khởi động */ }
+
+                // Bảo đảm bảng SearchHistories tồn tại (nằm ở migration muộn, DB cũ có thể thiếu → lịch sử
+                // tìm kiếm không lưu được). Idempotent: CREATE IF NOT EXISTS, no-op nếu đã có.
+                try
+                {
+                    var db = startupScope.ServiceProvider.GetRequiredService<ScientificTrendTracker.Data.AppDbContext>();
+                    db.Database.ExecuteSqlRaw(@"
+                        CREATE TABLE IF NOT EXISTS SearchHistories (
+                            SearchHistoryId INT NOT NULL AUTO_INCREMENT,
+                            UserId INT NOT NULL,
+                            SearchText VARCHAR(500) CHARACTER SET utf8mb4 NOT NULL,
+                            SearchType VARCHAR(50) CHARACTER SET utf8mb4 NOT NULL,
+                            SearchedAt DATETIME(6) NOT NULL,
+                            PRIMARY KEY (SearchHistoryId)
+                        ) CHARACTER SET utf8mb4;");
+                }
+                catch { /* không chặn khởi động */ }
             }
 
             // ====================================================================
