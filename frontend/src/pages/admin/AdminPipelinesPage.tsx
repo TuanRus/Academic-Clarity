@@ -5,7 +5,7 @@ import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
 import AdminToast from '../../components/admin/AdminToast';
 import {
-  getSyncLogs, startLiveSync, getSyncProgress, getSyncedPapers, deleteEmptySyncLogs,
+  getSyncLogs, startLiveSync, getSyncProgress, getSyncedPapers,
   getSystemConfig,
   type PipelineEvent, type SyncedPaper, type SyncProgress, type IntegrationStatus,
 } from '../../lib/api/admin';
@@ -162,17 +162,6 @@ const AdminPipelinesPage = () => {
     } catch {
       setIsSyncing(false);
       setToast(`${title} could not start (a sync may already be running).`);
-    }
-  };
-
-  const clearEmptyLogs = async () => {
-    try {
-      const { deleted } = await deleteEmptySyncLogs();
-      const logs = await getSyncLogs();
-      setHistory(logs);
-      setToast(deleted > 0 ? `Removed ${deleted} sync log(s) with 0 papers.` : 'No empty sync logs to remove.');
-    } catch {
-      setToast('Failed to clear empty sync logs.');
     }
   };
 
@@ -375,17 +364,7 @@ const AdminPipelinesPage = () => {
       </AdminSectionCard>
 
       <div className="grid gap-5 lg:grid-cols-[1.25fr_0.85fr]">
-        <AdminSectionCard
-          title="Ingestion History"
-          action={
-            <button
-              onClick={clearEmptyLogs}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
-            >
-              Clear 0-paper logs
-            </button>
-          }
-        >
+        <AdminSectionCard title="Ingestion History">
           <div className="divide-y divide-slate-100 px-5">
             {history.map((event, index) => (
               <div
