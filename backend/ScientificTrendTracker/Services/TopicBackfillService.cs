@@ -101,6 +101,38 @@ namespace ScientificTrendTracker.Services
                                         .ExecuteUpdateAsync(s => s
                                             .SetProperty(x => x.Topic, trimmed)
                                             .SetProperty(x => x.UpdatedAt, DateTime.UtcNow));
+
+                                    // Đồng bộ luôn bảng nối PaperTopics/ResearchTopics để không lệch với cột Topic string.
+                                    var topicEntity = await dbContext.ResearchTopics
+                                        .FirstOrDefaultAsync(t => t.TopicName == trimmed);
+                                    if (topicEntity == null)
+                                    {
+                                        topicEntity = new Models.Entities.ResearchTopic
+                                        {
+                                            TopicId = Guid.NewGuid().ToString("N")[..20],
+                                            TopicName = trimmed,
+                                            CreatedAt = DateTime.UtcNow
+                                        };
+                                        dbContext.ResearchTopics.Add(topicEntity);
+                                        await dbContext.SaveChangesAsync();
+                                    }
+
+                                    await dbContext.PaperTopics
+                                        .Where(pt => pt.PaperId == p.PaperId && pt.TopicId != topicEntity.TopicId)
+                                        .ExecuteDeleteAsync();
+
+                                    var linkExists = await dbContext.PaperTopics
+                                        .AnyAsync(pt => pt.PaperId == p.PaperId && pt.TopicId == topicEntity.TopicId);
+                                    if (!linkExists)
+                                    {
+                                        dbContext.PaperTopics.Add(new Models.Entities.PaperTopic
+                                        {
+                                            PaperId = p.PaperId,
+                                            TopicId = topicEntity.TopicId
+                                        });
+                                        await dbContext.SaveChangesAsync();
+                                    }
+
                                     lock (_lock) { _state.Updated++; }
                                 }
                             }
