@@ -45,6 +45,13 @@ namespace ScientificTrendTracker.Services
                 return null;
             }
 
+            // Topic: ưu tiên đọc từ bảng nối chuẩn PaperTopics/ResearchTopics; fallback cột Topic string
+            // cho bài cũ chưa có link (trước khi có PaperTopics), rồi mới tới OpenAlex live.
+            var topicFromLink = await _dbContext.PaperTopics
+                .Where(pt => pt.PaperId == paperId)
+                .Select(pt => pt.Topic.TopicName)
+                .FirstOrDefaultAsync();
+
             // OpenAlex: 1 request lấy abstract + topic/subfield/field/domain + OA status + institutions.
             // (Topic đã lưu DB lúc sync; subfield/field/domain/OA/institutions lấy on-demand.)
             OpenAlexWorkDetail oaDetail = null;
@@ -83,8 +90,10 @@ namespace ScientificTrendTracker.Services
                     .Select(pk => pk.Keyword.KeywordName)
                     .Where(n => !string.IsNullOrWhiteSpace(n))
                     .ToList(),
-                // Topic ưu tiên DB; fallback OpenAlex live cho bài cũ chưa sync lại cột Topic.
-                Topic = !string.IsNullOrWhiteSpace(paper.Topic) ? paper.Topic : oaDetail?.Topic,
+                // Topic ưu tiên PaperTopics/ResearchTopics -> fallback cột Topic string -> fallback OpenAlex live.
+                Topic = !string.IsNullOrWhiteSpace(topicFromLink) ? topicFromLink
+                    : !string.IsNullOrWhiteSpace(paper.Topic) ? paper.Topic
+                    : oaDetail?.Topic,
                 Subfield = oaDetail?.Subfield,
                 Field = oaDetail?.Field,
                 Domain = oaDetail?.Domain,

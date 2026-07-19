@@ -34,6 +34,7 @@ namespace ScientificTrendTracker.Data
         public DbSet<FollowedItem> FollowedItems { get; set; }
         public DbSet<Notification> Notifications { get; set; }
         public DbSet<ResearchTopic> ResearchTopics { get; set; }
+        public DbSet<PaperTopic> PaperTopics { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -65,6 +66,19 @@ namespace ScientificTrendTracker.Data
                 .WithMany(k => k.PaperKeywords)
                 .HasForeignKey(pk => pk.KeywordId);
 
+            modelBuilder.Entity<PaperTopic>()
+                .HasKey(pt => new { pt.PaperId, pt.TopicId });
+
+            modelBuilder.Entity<PaperTopic>()
+                .HasOne(pt => pt.Paper)
+                .WithMany()
+                .HasForeignKey(pt => pt.PaperId);
+
+            modelBuilder.Entity<PaperTopic>()
+                .HasOne(pt => pt.Topic)
+                .WithMany()
+                .HasForeignKey(pt => pt.TopicId);
+
             modelBuilder.Entity<PaperCitation>()
                 .HasKey(pc => new { pc.CitingPaperId, pc.CitedPaperId });
 
@@ -94,6 +108,44 @@ namespace ScientificTrendTracker.Data
                 .WithMany()
                 .HasForeignKey(t => t.UserId)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Bổ sung khóa ngoại UserId/AdminId còn thiếu (các bảng này chỉ có cột int trơn,
+            // chưa từng được khai báo navigation/FK nên trước đây không liên kết vật lý tới Users).
+            modelBuilder.Entity<Bookmark>()
+                .HasOne<User>()
+                .WithMany()
+                .HasForeignKey(b => b.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<SearchHistory>()
+                .HasOne<User>()
+                .WithMany()
+                .HasForeignKey(s => s.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Notification>()
+                .HasOne<User>()
+                .WithMany()
+                .HasForeignKey(n => n.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<AdminActivityLog>()
+                .HasOne<User>()
+                .WithMany()
+                .HasForeignKey(a => a.AdminId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<User>()
+                .HasOne<Role>()
+                .WithMany()
+                .HasForeignKey(u => u.RoleId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<FollowedItem>()
+                .HasOne(f => f.User)
+                .WithMany()
+                .HasForeignKey(f => f.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
 
             modelBuilder.Entity<UserSubscription>(entity =>
             {
