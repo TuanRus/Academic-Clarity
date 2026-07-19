@@ -78,7 +78,7 @@ namespace ScientificTrendTracker.Services
         }
 
         /// <summary>Key = HọTácGiảĐầu + Năm (bỏ dấu, chỉ giữ chữ/số). Không có tác giả → từ đầu của title.</summary>
-        private static string BuildKey(string firstAuthor, string title, int? year)
+        internal static string BuildKey(string firstAuthor, string title, int? year)
         {
             var baseWord = !string.IsNullOrWhiteSpace(firstAuthor)
                 ? firstAuthor.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries).LastOrDefault()
@@ -91,7 +91,7 @@ namespace ScientificTrendTracker.Services
         }
 
         /// <summary>"A B C" nhiều tác giả → "A B C, D E and F G" (tối đa 3, còn lại "et al.").</summary>
-        private static string FormatAuthorsForBibitem(List<string> authors)
+        internal static string FormatAuthorsForBibitem(List<string> authors)
         {
             if (authors.Count == 1) return authors[0];
             if (authors.Count <= 3)
@@ -99,7 +99,7 @@ namespace ScientificTrendTracker.Services
             return string.Join(", ", authors.Take(3)) + " et al";
         }
 
-        private static string RemoveDiacritics(string text)
+        internal static string RemoveDiacritics(string text)
         {
             var normalized = text.Normalize(NormalizationForm.FormD);
             var sb = new StringBuilder();
@@ -111,7 +111,7 @@ namespace ScientificTrendTracker.Services
         }
 
         /// <summary>Escape các ký tự đặc biệt LaTeX hay gặp trong title/tên journal.</summary>
-        private static string EscapeLatex(string s)
+        internal static string EscapeLatex(string s)
         {
             if (string.IsNullOrEmpty(s)) return s;
             // Backslash gốc đổi sang placeholder trước, vì chuỗi thay thế của nó chứa {} —
