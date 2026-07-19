@@ -11,7 +11,10 @@ export interface LatexDoc {
   updatedAt: string; // ISO
 }
 
-export type LatexDocMeta = Omit<LatexDoc, 'content'>;
+export type LatexDocMeta = Omit<LatexDoc, 'content'> & {
+  /** Kích thước nội dung (byte, UTF-8) — cho user thấy tài liệu chiếm bao nhiêu localStorage. */
+  sizeBytes: number;
+};
 
 const STORAGE_KEY = 'stt_latex_docs';
 
@@ -38,8 +41,27 @@ function writeAll(docs: LatexDoc[]): void {
 /** Danh sách metadata (không kèm content), mới sửa gần nhất lên đầu. */
 export function listDocs(): LatexDocMeta[] {
   return readAll()
-    .map(({ id, title, createdAt, updatedAt }) => ({ id, title, createdAt, updatedAt }))
+    .map(({ id, title, createdAt, updatedAt, content }) => ({
+      id,
+      title,
+      createdAt,
+      updatedAt,
+      sizeBytes: new Blob([content]).size,
+    }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
+/** Tổng dung lượng key lưu trữ đang chiếm (byte) — cảnh báo sớm trước khi localStorage đầy (~5MB). */
+export function storageUsageBytes(): number {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  return raw ? new Blob([raw]).size : 0;
+}
+
+/** "12.4 KB" / "1.2 MB" — hiển thị thân thiện. */
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function getDoc(id: string): LatexDoc | null {
