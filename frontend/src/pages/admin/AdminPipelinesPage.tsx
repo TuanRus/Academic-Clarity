@@ -300,22 +300,6 @@ const AdminPipelinesPage = () => {
           )}
         </div>
 
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowAddSourceModal(true)}
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-          >
-            + Add API Source
-          </button>
-
-          <button
-            onClick={() => runSync('Manual Ingest')}
-            disabled={isSyncing}
-            className="rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white hover:bg-[#3730a3] disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSyncing ? 'Syncing...' : '↥ Ingest Now'}
-          </button>
-        </div>
       </div>
 
       <AdminSectionCard
