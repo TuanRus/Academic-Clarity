@@ -119,6 +119,18 @@ export async function apiPut<T>(path: string, payload?: unknown): Promise<T> {
   return apiSend<T>('PUT', path, payload);
 }
 
+/**
+ * Upload file (multipart/form-data) tới backend và bóc tách ApiResponse<T> -> T.
+ * KHÔNG set Content-Type để trình duyệt tự thêm boundary cho multipart.
+ */
+export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
+  return execute<T>(path, () => ({
+    method: 'POST',
+    headers: { Accept: 'application/json', ...authHeaders() },
+    body: formData,
+  }));
+}
+
 /** Gọi PATCH (JSON body) tới backend và bóc tách ApiResponse<T> -> T. */
 export async function apiPatch<T>(path: string, payload?: unknown): Promise<T> {
   return apiSend<T>('PATCH', path, payload);

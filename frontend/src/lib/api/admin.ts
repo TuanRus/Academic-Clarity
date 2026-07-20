@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut, apiPatch, apiDelete } from '../http';
+import { apiGet, apiPost, apiPut, apiPatch, apiDelete, apiUpload } from '../http';
 
 // Tầng service cho khu admin — nối các trang admin vào BE thật (bỏ mock).
 
@@ -162,6 +162,33 @@ export async function startLiveSync(maxPages = 2): Promise<{ started: boolean; m
 }
 export async function getSyncProgress(): Promise<SyncProgress> {
   return apiGet<SyncProgress>('/admin/sync/progress');
+}
+
+// ---- Data sources (GET /admin/data-sources) — nguồn đồng bộ THẬT từ DB ----
+interface BeDataSource { dataSourceId: number; sourceName: string; baseUrl: string; syncFrequency: string; isActive: boolean; lastSyncAt?: string }
+export interface DataSource { id: number; engine: string; endpoint: string; interval: string; status: 'ACTIVE' | 'SUSPENDED'; lastSyncAt?: string }
+export async function getDataSources(): Promise<DataSource[]> {
+  const res = await apiGet<BeDataSource[]>('/admin/data-sources');
+  return res.map((s) => ({
+    id: s.dataSourceId,
+    engine: s.sourceName,
+    // Bỏ scheme cho gọn: "https://api.openalex.org/works" -> "api.openalex.org/works"
+    endpoint: s.baseUrl.replace(/^https?:\/\//, ''),
+    // Chuẩn hoá hiển thị tần suất: "weekly" -> "Weekly"
+    interval: s.syncFrequency ? s.syncFrequency.charAt(0).toUpperCase() + s.syncFrequency.slice(1) : '—',
+    status: s.isActive ? 'ACTIVE' : 'SUSPENDED',
+    lastSyncAt: s.lastSyncAt,
+  }));
+}
+
+// ---- SCImago journal ranking import ----
+export interface ScimagoImportResult { totalRowsRead: number; updatedCount: number; skippedCount: number }
+
+/** Upload trực tiếp file CSV SCImago (kéo-thả/chọn file) — POST multipart /admin/import-scimago-upload. */
+export async function importScimagoUpload(file: File): Promise<ScimagoImportResult> {
+  const form = new FormData();
+  form.append('file', file);
+  return apiUpload('/admin/import-scimago-upload', form);
 }
 
 // ---- Papers (GET /admin/papers) ----

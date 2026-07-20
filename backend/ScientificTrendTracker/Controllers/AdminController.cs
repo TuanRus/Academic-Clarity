@@ -631,6 +631,36 @@ namespace ScientificTrendTracker.Controllers
         }
 
         /// <summary>
+        /// [Admin] Cập nhật Q-rank tạp chí từ file CSV SCImago do admin UPLOAD trực tiếp (kéo-thả/chọn file).
+        /// Không cần copy file lên server trước như import-scimago-path.
+        /// </summary>
+        [HttpPost("import-scimago-upload")]
+        public async Task<IActionResult> ImportScimagoUploadAsync(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(ApiResponse<object>.Fail(400, "No file uploaded or file is empty."));
+
+            if (!file.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(ApiResponse<object>.Fail(400, "Only .csv files are accepted."));
+
+            _logger.LogInformation("Admin upload SCImago file: {Name} ({Size} bytes).", file.FileName, file.Length);
+
+            using var stream = file.OpenReadStream();
+            var result = await _scimagoImportService.ImportFromCsvAsync(stream);
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "IMPORT_SCIMAGO",
+                $"Imported SCImago from uploaded file '{file.FileName}'. Read {result.TotalRowsRead} rows, updated {result.UpdatedCount} journals.", ip);
+
+            return Ok(ApiResponse<object>.Ok(new
+            {
+                result.TotalRowsRead,
+                result.UpdatedCount,
+                result.SkippedCount
+            }, $"Import complete: {result.UpdatedCount} journals updated."));
+        }
+
+        /// <summary>
         /// Lấy toàn bộ danh sách gói cước hiện có trong hệ thống (bao gồm cả các gói đã khóa) để quản trị.
         /// </summary>
         /// <param name="ct">CancellationToken - NGUỒN: ASP.NET Core runtime tự động cung cấp.</param>
@@ -776,6 +806,29 @@ namespace ScientificTrendTracker.Controllers
             ).Take(100).ToListAsync(ct);
 
             return Ok(ApiResponse<List<TransactionRowDto>>.Ok(rows, $"Found {rows.Count} transaction(s)."));
+        }
+
+        /// <summary>
+        /// Lấy danh sách nguồn dữ liệu đồng bộ (ApiDataSources) để trang Data Pipeline hiển thị THẬT
+        /// thay vì hardcode. Trả về tên nguồn, URL, tần suất, trạng thái bật/tắt và lần sync gần nhất.
+        /// </summary>
+        [HttpGet("data-sources")]
+        public async Task<IActionResult> GetDataSourcesAsync(CancellationToken ct)
+        {
+            var sources = await _dbContext.ApiDataSources
+                .OrderBy(s => s.DataSourceId)
+                .Select(s => new
+                {
+                    s.DataSourceId,
+                    s.SourceName,
+                    s.BaseUrl,
+                    s.SyncFrequency,
+                    s.IsActive,
+                    s.LastSyncAt
+                })
+                .ToListAsync(ct);
+
+            return Ok(ApiResponse<object>.Ok(sources, $"Found {sources.Count} data source(s)."));
         }
 
         /// <summary>
