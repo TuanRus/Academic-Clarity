@@ -32,6 +32,11 @@ const OverlapResultList = ({ result, matchAction }: OverlapResultListProps) => {
                 {verdict.toUpperCase()}
               </span>
             </div>
+            {verdict === 'high' && (
+              <p className="mt-1.5 text-sm font-semibold">
+                ⚠ Your idea overlaps heavily with existing published research — consider refining your angle or citing these works.
+              </p>
+            )}
             {result.aiAssessment ? (
               <p className="mt-1.5 text-sm">{result.aiAssessment}</p>
             ) : (

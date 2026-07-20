@@ -36,6 +36,9 @@ namespace ScientificTrendTracker.Services.Interfaces
         /// <returns>List&lt;string&gt; tên keyword, ưu tiên keyword nhiều bài nhất.</returns>
         Task<List<string>> SuggestKeywordsAsync(string q, int limit);
 
+        /// <summary>Autocomplete tên tác giả (distinct) khớp prefix, sắp theo số bài giảm dần.</summary>
+        Task<List<string>> SuggestAuthorsAsync(string q, int limit);
+
         /// <summary>
         /// Dựng mind map dạng CÂY 3 tầng KEYWORD (kiểu sơ đồ tư duy):
         /// Tầng 0 = chủ đề trung tâm → Tầng 1 = chủ đề con (keyword đồng xuất hiện với gốc)

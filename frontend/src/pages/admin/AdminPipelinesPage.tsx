@@ -5,17 +5,17 @@ import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
 import AdminToast from '../../components/admin/AdminToast';
 import {
-  getSyncLogs, startLiveSync, getSyncProgress, getSyncedPapers, deleteEmptySyncLogs,
-  getSystemConfig,
+  getSyncLogs, startLiveSync, getSyncProgress, getSyncedPapers,
+  getSystemConfig, importScimagoUpload, getDataSources,
   type PipelineEvent, type SyncedPaper, type SyncProgress, type IntegrationStatus,
 } from '../../lib/api/admin';
 
 // Màu chữ trạng thái realtime của Live Monitor.
 const liveStatusColor = (s: string) =>
   s === 'Success' ? 'font-bold text-emerald-700'
-  : s === 'Error' ? 'font-bold text-red-600'
-  : s === 'Exists' ? 'text-gray-500'
-  : 'text-amber-600';
+    : s === 'Error' ? 'font-bold text-red-600'
+      : s === 'Exists' ? 'text-gray-500'
+        : 'text-amber-600';
 
 type ApiSource = {
   id: number;
@@ -26,15 +26,9 @@ type ApiSource = {
 };
 
 const AdminPipelinesPage = () => {
-  const [sources, setSources] = useState<ApiSource[]>([
-    {
-      id: 1,
-      engine: 'OpenAlex API',
-      endpoint: 'api.openalex.org/works',
-      interval: 'Daily',
-      status: 'ACTIVE',
-    },
-  ]);
+  const [sources, setSources] = useState<ApiSource[]>([]);
+  // Nạp nguồn đồng bộ THẬT từ backend (ApiDataSources) thay vì hardcode 'Daily'/'ACTIVE'.
+  useEffect(() => { getDataSources().then(setSources).catch(() => setSources([])); }, []);
 
   const [history, setHistory] = useState<PipelineEvent[]>([]);
   useEffect(() => { getSyncLogs().then(setHistory).catch(() => setHistory([])); }, []);
@@ -60,14 +54,28 @@ const AdminPipelinesPage = () => {
     return at > 0 ? `***${email.slice(at)}` : '***';
   };
   const [isSyncing, setIsSyncing] = useState(false);
-  const [showAddSourceModal, setShowAddSourceModal] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
-  const [newSource, setNewSource] = useState({
-    engine: '',
-    endpoint: '',
-    interval: 'Daily',
-  });
+  // ----- SCImago journal-ranking import (upload file CSV: kéo-thả hoặc chọn file) -----
+  const [scimagoBusy, setScimagoBusy] = useState(false);
+  const scimagoInputRef = useRef<HTMLInputElement | null>(null);
+
+  const runScimagoUpload = async (file: File) => {
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      setToast('Only .csv files are accepted.');
+      return;
+    }
+    setScimagoBusy(true);
+    try {
+      const r = await importScimagoUpload(file);
+      setToast(`SCImago import done — ${r.updatedCount} journals updated (${r.totalRowsRead} rows read, ${r.skippedCount} skipped).`);
+    } catch {
+      setToast('SCImago import failed — please check the CSV format.');
+    } finally {
+      setScimagoBusy(false);
+      if (scimagoInputRef.current) scimagoInputRef.current.value = ''; // cho phép chọn lại cùng file
+    }
+  };
 
   const hasActiveEndpoint = sources.some((source) => source.status === 'ACTIVE');
 
@@ -128,7 +136,7 @@ const AdminPipelinesPage = () => {
           } else {
             setToast('Sync finished — no new papers.');
           }
-        }).catch(() => {});
+        }).catch(() => { });
       } catch { /* bỏ qua 1 nhịp lỗi */ }
     };
     tick();
@@ -141,7 +149,7 @@ const AdminPipelinesPage = () => {
   // Tự động theo dõi 1 lần nếu có log đang RUNNING (kể cả khi tải lại trang giữa lúc sync).
   useEffect(() => {
     if (!autoPolledRef.current && pollRef.current == null &&
-        history.some((h) => h.status === 'RUNNING' || h.status === 'PENDING')) {
+      history.some((h) => h.status === 'RUNNING' || h.status === 'PENDING')) {
       autoPolledRef.current = true;
       startPolling();
     }
@@ -157,32 +165,12 @@ const AdminPipelinesPage = () => {
     try {
       await startLiveSync(2); // chạy nền → theo dõi realtime
       setToast(`${title} started — watching live…`);
-      getSyncLogs().then(setHistory).catch(() => {});
+      getSyncLogs().then(setHistory).catch(() => { });
       openLive();
     } catch {
       setIsSyncing(false);
       setToast(`${title} could not start (a sync may already be running).`);
     }
-  };
-
-  const clearEmptyLogs = async () => {
-    try {
-      const { deleted } = await deleteEmptySyncLogs();
-      const logs = await getSyncLogs();
-      setHistory(logs);
-      setToast(deleted > 0 ? `Removed ${deleted} sync log(s) with 0 papers.` : 'No empty sync logs to remove.');
-    } catch {
-      setToast('Failed to clear empty sync logs.');
-    }
-  };
-
-  const runSourceSync = (source: ApiSource) => {
-    if (source.status !== 'ACTIVE') {
-      setToast(`${source.engine} is suspended. Please activate it before syncing.`);
-      return;
-    }
-
-    runSync(`${source.engine} Sync`);
   };
 
   const retryFailed = (eventTitle: string) => {
@@ -209,69 +197,6 @@ const AdminPipelinesPage = () => {
     }, 1200);
   };
 
-  const toggleSourceStatus = (sourceId: number) => {
-    setSources((current) =>
-      current.map((source) =>
-        source.id === sourceId
-          ? {
-              ...source,
-              status: source.status === 'ACTIVE' ? 'SUSPENDED' : 'ACTIVE',
-            }
-          : source,
-      ),
-    );
-
-    const selectedSource = sources.find((source) => source.id === sourceId);
-
-    if (selectedSource) {
-      setToast(
-        selectedSource.status === 'ACTIVE'
-          ? `${selectedSource.engine} endpoint paused.`
-          : `${selectedSource.engine} endpoint activated.`,
-      );
-    }
-  };
-
-  const addSource = () => {
-    if (!newSource.engine.trim()) {
-      setToast('Please enter API engine name.');
-      return;
-    }
-
-    if (!newSource.endpoint.trim()) {
-      setToast('Please enter endpoint base URL.');
-      return;
-    }
-
-    const source: ApiSource = {
-      id: Date.now(),
-      engine: newSource.engine.trim(),
-      endpoint: newSource.endpoint.trim(),
-      interval: newSource.interval,
-      status: 'ACTIVE',
-    };
-
-    setSources((current) => [...current, source]);
-    setNewSource({
-      engine: '',
-      endpoint: '',
-      interval: 'Daily',
-    });
-
-    setShowAddSourceModal(false);
-    setToast(`${source.engine} source added successfully.`);
-  };
-
-  const removeSource = (sourceId: number) => {
-    const selectedSource = sources.find((source) => source.id === sourceId);
-
-    setSources((current) => current.filter((source) => source.id !== sourceId));
-
-    if (selectedSource) {
-      setToast(`${selectedSource.engine} source removed.`);
-    }
-  };
-
   return (
     <div className="space-y-5">
       <AdminToast message={toast} onClose={() => setToast(null)} />
@@ -289,9 +214,8 @@ const AdminPipelinesPage = () => {
               {pipelineIntegrations.map((it) => (
                 <span
                   key={it.name}
-                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                    it.configured ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
-                  }`}
+                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${it.configured ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
+                    }`}
                 >
                   {it.configured ? '✓' : '✗'} {it.name}
                 </span>
@@ -300,38 +224,30 @@ const AdminPipelinesPage = () => {
           )}
         </div>
 
-        <div className="flex gap-3">
-          <button
-            onClick={() => setShowAddSourceModal(true)}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
-          >
-            + Add API Source
-          </button>
-
-          <button
-            onClick={() => runSync('Manual Ingest')}
-            disabled={isSyncing}
-            className="rounded-md bg-indigo-700 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSyncing ? 'Syncing...' : '↥ Ingest Now'}
-          </button>
-        </div>
       </div>
 
       <AdminSectionCard
         title="Data Sources"
         action={
-          <span
-            className={`text-[11px] font-bold ${
-              hasActiveEndpoint ? 'text-emerald-700' : 'text-red-700'
-            }`}
-          >
-            ● {hasActiveEndpoint ? 'Endpoint Active' : 'All Endpoints Paused'}
-          </span>
+          <div className="flex items-center gap-3">
+            <span
+              className={`text-[11px] font-bold ${hasActiveEndpoint ? 'text-emerald-700' : 'text-red-700'
+                }`}
+            >
+              ● {hasActiveEndpoint ? 'Endpoint Active' : 'All Endpoints Paused'}
+            </span>
+            <button
+              onClick={() => runSync('Manual Trigger')}
+              disabled={isSyncing}
+              className="rounded-md bg-[#0b6fb8] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+            >
+              {isSyncing ? 'Syncing…' : '↻ Sync Now'}
+            </button>
+          </div>
         }
       >
         <AdminTable
-          headers={['Engine', 'Endpoint Base URL', 'Interval', 'Status', 'Actions']}
+          headers={['Engine', 'Endpoint Base URL', 'Interval', 'Status']}
         >
           {sources.map((source) => (
             <tr key={source.id}>
@@ -351,58 +267,43 @@ const AdminPipelinesPage = () => {
                 <AdminBadge status={source.status} />
               </td>
 
-              <td className="px-5 py-4">
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={() => runSourceSync(source)}
-                    disabled={isSyncing}
-                    className="font-bold text-indigo-700 disabled:text-gray-400"
-                  >
-                    ↻ Sync Now
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => toggleSourceStatus(source.id)}
-                    className={`h-5 w-10 rounded-full p-0.5 transition ${
-                      source.status === 'ACTIVE' ? 'bg-emerald-200' : 'bg-gray-200'
-                    }`}
-                  >
-                    <span
-                      className={`block h-4 w-4 rounded-full bg-white shadow transition ${
-                        source.status === 'ACTIVE' ? 'trangray-x-5' : ''
-                      }`}
-                    />
-                  </button>
-
-                  {sources.length > 1 && (
-                    <button
-                      onClick={() => removeSource(source.id)}
-                      className="text-xs font-bold text-red-600 hover:underline"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-              </td>
             </tr>
           ))}
         </AdminTable>
       </AdminSectionCard>
 
+      <AdminSectionCard
+        title="SCImago Journal Ranking Import"
+        subtitle="Upload a SCImago CSV to update journal quartile / impact factor / H-index (matched by ISSN)"
+      >
+        <div className="flex flex-col gap-2 p-5">
+          <input
+            ref={scimagoInputRef}
+            type="file"
+            accept=".csv"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) runScimagoUpload(f); }}
+          />
+          <button
+            type="button"
+            onClick={() => scimagoInputRef.current?.click()}
+            disabled={scimagoBusy}
+            className="w-fit rounded-md bg-[#062b4f] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+          >
+            {scimagoBusy ? 'Importing…' : 'Choose CSV file to import'}
+          </button>
+          <p className="text-[11px] text-slate-400">
+            Only .csv files (SCImago format). Matching journals (by ISSN) get their quartile,
+            impact factor and H-index updated.
+          </p>
+        </div>
+      </AdminSectionCard>
+
       <div className="grid gap-5 lg:grid-cols-[1.25fr_0.85fr]">
-        <AdminSectionCard
-          title="Ingestion History"
-          action={
-            <button
-              onClick={clearEmptyLogs}
-              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50"
-            >
-              Clear 0-paper logs
-            </button>
-          }
-        >
-          <div className="divide-y divide-gray-100 px-5">
+
+        <AdminSectionCard title="Ingestion History">
+          <div className="divide-y divide-slate-100 px-5">
+
             {history.map((event, index) => (
               <div
                 key={`${event.title}-${event.time}-${index}`}
@@ -491,86 +392,7 @@ const AdminPipelinesPage = () => {
       </div>
 
       <AdminModal
-        open={showAddSourceModal}
-        title="Add API Source"
-        subtitle="Register a new external academic API endpoint for ingestion."
-        onClose={() => setShowAddSourceModal(false)}
-        footer={
-          <>
-            <button
-              onClick={() => setShowAddSourceModal(false)}
-              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700"
-            >
-              Cancel
-            </button>
 
-            <button
-              onClick={addSource}
-              className="rounded-md bg-indigo-700 px-4 py-2 text-xs font-bold text-white"
-            >
-              Add Source
-            </button>
-          </>
-        }
-      >
-        <div className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs font-bold text-gray-700">
-              Engine Name
-            </label>
-            <input
-              value={newSource.engine}
-              onChange={(event) =>
-                setNewSource((current) => ({
-                  ...current,
-                  engine: event.target.value,
-                }))
-              }
-              placeholder="Example: Semantic Scholar API"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-bold text-gray-700">
-              Endpoint Base URL
-            </label>
-            <input
-              value={newSource.endpoint}
-              onChange={(event) =>
-                setNewSource((current) => ({
-                  ...current,
-                  endpoint: event.target.value,
-                }))
-              }
-              placeholder="Example: api.semanticscholar.org/graph/v1/paper/search"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700"
-            />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-xs font-bold text-gray-700">
-              Sync Interval
-            </label>
-            <select
-              value={newSource.interval}
-              onChange={(event) =>
-                setNewSource((current) => ({
-                  ...current,
-                  interval: event.target.value,
-                }))
-              }
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700"
-            >
-              <option value="Every 6h">Every 6h</option>
-              <option value="Daily">Daily</option>
-              <option value="Weekly">Weekly</option>
-            </select>
-          </div>
-        </div>
-      </AdminModal>
-
-      <AdminModal
         open={detailOpen}
         title={`Bài báo đã sync — ${detailTitle}`}
         subtitle="Các bài được thêm trong khung thời gian của lần sync này."

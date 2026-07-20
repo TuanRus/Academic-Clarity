@@ -96,7 +96,15 @@ const TrendDashboardPage = () => {
 
   useEffect(() => {
     getTrendTop('keyword', { topN: 10, sortBy: 'share' })
-      .then((items) => setTopKeywords(items))
+      .then((items) => {
+        setTopKeywords(items);
+        // Tự chọn keyword top #1 khi vào trang → hiện ngay chart + insights (top papers/authors/journals),
+        // thay vì để trống cho tới khi user tự gõ. Chỉ set nếu chưa chọn gì.
+        if (items.length > 0) {
+          setSeriesKeyword((prev) => prev || items[0].name);
+          setSeriesInput((prev) => prev || items[0].name);
+        }
+      })
       .catch((e) => setError(e instanceof ApiError ? e.message : 'Could not load trend data.'))
       .finally(() => setLoading(false));
   }, []);
@@ -267,9 +275,9 @@ const TrendDashboardPage = () => {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-            Journal & Keywords · Trend Analytics Dashboard
+            Trend Analytics Dashboard
           </p>
-          <h1 className="text-2xl font-bold text-gray-900">Basic Trend Dashboard</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Trend Dashboard</h1>
         </div>
 
         {/* FR-22: nút Export chỉ enable khi có EXPORT_CSV (PREMIUM hoặc ADMIN) */}

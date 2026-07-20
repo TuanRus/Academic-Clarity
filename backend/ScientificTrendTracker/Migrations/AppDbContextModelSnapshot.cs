@@ -160,7 +160,7 @@ namespace ScientificTrendTracker.Migrations
 
                     b.HasKey("AuthorId");
 
-                    b.ToTable("Authors");
+                    b.ToTable("Authors", (string)null);
                 });
 
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.Bookmark", b =>
@@ -252,7 +252,7 @@ namespace ScientificTrendTracker.Migrations
 
                     b.HasKey("JournalId");
 
-                    b.ToTable("Journals");
+                    b.ToTable("Journals", (string)null);
                 });
 
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.Keyword", b =>
@@ -271,7 +271,7 @@ namespace ScientificTrendTracker.Migrations
 
                     b.HasKey("KeywordId");
 
-                    b.ToTable("Keywords");
+                    b.ToTable("Keywords", (string)null);
                 });
 
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.PaperAuthor", b =>
@@ -290,7 +290,7 @@ namespace ScientificTrendTracker.Migrations
 
                     b.HasIndex("AuthorId");
 
-                    b.ToTable("PaperAuthors");
+                    b.ToTable("PaperAuthors", (string)null);
                 });
 
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.PaperCitation", b =>
@@ -307,7 +307,7 @@ namespace ScientificTrendTracker.Migrations
 
                     b.HasIndex("CitedPaperId");
 
-                    b.ToTable("PaperCitations");
+                    b.ToTable("PaperCitations", (string)null);
                 });
 
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.PaperKeyword", b =>
@@ -324,7 +324,7 @@ namespace ScientificTrendTracker.Migrations
 
                     b.HasIndex("KeywordId");
 
-                    b.ToTable("PaperKeywords");
+                    b.ToTable("PaperKeywords", (string)null);
                 });
 
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.ResearchPaper", b =>
@@ -369,10 +369,6 @@ namespace ScientificTrendTracker.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)");
 
-                    b.Property<string>("Topic")
-                        .HasMaxLength(255)
-                        .HasColumnType("varchar(255)");
-
                     b.Property<DateTime?>("UpdatedAt")
                         .HasColumnType("datetime(6)");
 
@@ -380,7 +376,7 @@ namespace ScientificTrendTracker.Migrations
 
                     b.HasIndex("JournalId");
 
-                    b.ToTable("ResearchPapers");
+                    b.ToTable("ResearchPapers", (string)null);
                 });
 
             modelBuilder.Entity("ScientificTrendTracker.Models.Entities.SearchHistory", b =>

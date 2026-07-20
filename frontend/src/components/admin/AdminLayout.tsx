@@ -306,7 +306,7 @@ const AdminLayout = () => {
               to="/"
               className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50"
             >
-              ← Back to app
+              Back to app
             </Link>
 
             {/* Notification Bell */}

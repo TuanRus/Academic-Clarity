@@ -19,7 +19,7 @@ const mobileNavLinkClass = ({ isActive }: { isActive: boolean }) =>
 const NAV_ITEMS = [
   { to: '/search', label: 'Search' },
   { to: '/landscape', label: 'Research Landscape' },
-  { to: '/dashboard', label: 'Journal & Keywords' },
+  { to: '/dashboard', label: 'Trend Dashboard' },
   { to: '/overlap', label: 'Overlap Checker' },
   { to: '/latex', label: 'LaTeX Writer' },
   { to: '/library', label: 'Saved Library' },
@@ -34,7 +34,7 @@ const Header = () => {
   useEffect(() => {
     if (!user) return;
     let alive = true;
-    const tick = () => getUnreadCount().then((r) => { if (alive) setUnread(r.count); }).catch(() => {});
+    const tick = () => getUnreadCount().then((r) => { if (alive) setUnread(r.count); }).catch(() => { });
     tick();
     const id = window.setInterval(tick, 30000);
     const onFocus = () => tick();

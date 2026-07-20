@@ -82,9 +82,9 @@ const ResearchLandscapePage = () => {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
-            Research Landscape · Topic Network Graph
+            Keyword Network Graph
           </p>
-          <h1 className="text-2xl font-bold text-gray-900">Research Topic Landscape</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Research Keyword Landscape</h1>
         </div>
         <form
           onSubmit={(e) => {
@@ -133,7 +133,7 @@ const ResearchLandscapePage = () => {
       </div>
 
       {/* FR-11..14: GRAPH_BASIC - luôn hiển thị */}
-      <RequireFeature feature={FeaturePermission.GRAPH_BASIC} featureLabel="Topic Network Graph">
+      <RequireFeature feature={FeaturePermission.GRAPH_BASIC} featureLabel="Keyword Network Graph">
         <div className="grid gap-4 lg:grid-cols-[1fr_22rem]">
           <div>
             {loading && (
@@ -148,7 +148,7 @@ const ResearchLandscapePage = () => {
             )}
             {!loading && !error && !graph && (
               <div className="flex h-[72vh] min-h-[520px] items-center justify-center rounded-xl border border-dashed border-gray-300 bg-white px-6 text-center text-sm text-gray-400">
-                Type a keyword above and pick a suggestion to build the topic mind map.
+                Type a keyword above and pick a suggestion to build the keyword mind map.
               </div>
             )}
             {!loading && !error && graph && (
@@ -156,7 +156,7 @@ const ResearchLandscapePage = () => {
             )}
             {graph && (
               <p className="mt-2 text-xs text-gray-500">
-                {graph.totalNodes} topics · {graph.totalEdges} branches. Scroll to zoom, drag to pan.
+                {graph.totalNodes} keywords · {graph.totalEdges} branches. Scroll to zoom, drag to pan.
                 {canSeeDetails ? ' Click a node to see representative papers.' : ' Upgrade to Premium to see details on click.'}
               </p>
             )}
@@ -166,18 +166,18 @@ const ResearchLandscapePage = () => {
           <div className="h-[72vh] min-h-[520px] overflow-y-auto rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             {!canSeeDetails ? (
               <p className="text-sm text-gray-400">
-                The detail panel (top papers of a topic) is available for Premium/Admin only.
+                The detail panel (top papers of a keyword) is available for Premium/Admin only.
               </p>
             ) : !selected ? (
               <p className="text-sm text-gray-400">Select a node on the mind map to see representative papers.</p>
             ) : (
               <>
-                <p className="text-xs uppercase tracking-wide text-gray-400">Topic</p>
+                <p className="text-xs uppercase tracking-wide text-gray-400">Keyword</p>
                 <h2 className="mb-3 text-base font-semibold text-gray-900">{selected.label}</h2>
                 {papersLoading ? (
                   <p className="text-sm text-gray-400">Loading papers…</p>
                 ) : papers.length === 0 ? (
-                  <p className="text-sm text-gray-400">No papers for this topic.</p>
+                  <p className="text-sm text-gray-400">No papers for this keyword.</p>
                 ) : (
                   <ul className="divide-y divide-gray-100">
                     {papers.map((p) => (

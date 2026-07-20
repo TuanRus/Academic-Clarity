@@ -411,11 +411,28 @@ namespace ScientificTrendTracker.Services
                 var topicIds = new List<string>();
                 if (!string.IsNullOrWhiteSpace(newPaper.Topic))
                 {
-                    var tid = await _dbContext.ResearchTopics
-                        .Where(t => t.TopicName == newPaper.Topic)
-                        .Select(t => t.TopicId)
-                        .FirstOrDefaultAsync();
-                    if (!string.IsNullOrEmpty(tid)) topicIds.Add(tid);
+                    var topicName = newPaper.Topic.Trim();
+                    var topic = await _dbContext.ResearchTopics
+                        .FirstOrDefaultAsync(t => t.TopicName == topicName);
+                    if (topic == null)
+                    {
+                        topic = new Models.Entities.ResearchTopic
+                        {
+                            TopicId = Guid.NewGuid().ToString("N")[..20],
+                            TopicName = topicName,
+                            CreatedAt = DateTime.UtcNow
+                        };
+                        _dbContext.ResearchTopics.Add(topic);
+                        await _dbContext.SaveChangesAsync();
+                    }
+                    // Ghi liên kết Paper <-> Topic qua bảng nối chuẩn (song song với cột Topic string hiện có).
+                    _dbContext.PaperTopics.Add(new Models.Entities.PaperTopic
+                    {
+                        PaperId = newPaper.PaperId,
+                        TopicId = topic.TopicId
+                    });
+                    await _dbContext.SaveChangesAsync();
+                    topicIds.Add(topic.TopicId);
                 }
 
                 await _notificationService.CheckAndPushAsync(new Models.DTOs.NotificationTriggerDto

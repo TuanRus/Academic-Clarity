@@ -265,6 +265,13 @@ namespace ScientificTrendTracker.Services
                         _dbContext.ResearchTopics.Add(existingTopic);
                         await _dbContext.SaveChangesAsync(ct);
                     }
+                    // Ghi liên kết Paper <-> Topic qua bảng nối chuẩn (song song với cột Topic string hiện có).
+                    _dbContext.PaperTopics.Add(new PaperTopic
+                    {
+                        PaperId = paperId,
+                        TopicId = existingTopic.TopicId
+                    });
+                    await _dbContext.SaveChangesAsync(ct);
                     topicIds.Add(existingTopic.TopicId);
                 }
 

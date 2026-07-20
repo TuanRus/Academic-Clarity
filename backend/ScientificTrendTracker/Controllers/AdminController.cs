@@ -64,6 +64,16 @@ namespace ScientificTrendTracker.Controllers
         }
 
         /// <summary>
+        /// Lấy UserId của admin đang đăng nhập từ JWT claim (ClaimTypes.NameIdentifier) để ghi AdminActivityLogs.
+        /// KHÔNG hardcode AdminId vì cột này có khóa ngoại thật tới Users — hardcode ID không tồn tại sẽ vỡ FK.
+        /// </summary>
+        private int GetCurrentAdminId()
+        {
+            var claim = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            return int.TryParse(claim, out var id) ? id : 0;
+        }
+
+        /// <summary>
         /// [Admin] Trả về cấu hình vận hành hệ thống ở dạng READ-ONLY.
         /// Chỉ whitelist các trường KHÔNG bí mật; tuyệt đối không trả secret
         /// (connection string, API key, JWT secret, mật khẩu email...).
@@ -228,7 +238,7 @@ namespace ScientificTrendTracker.Controllers
             await _dbContext.SaveChangesAsync(ct);
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "UPDATE_USER_ROLE",
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "UPDATE_USER_ROLE",
                 $"Changed role of user {userId} ({user.Email}) to RoleId {dto.RoleId}.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "User role changed successfully."));
@@ -247,7 +257,7 @@ namespace ScientificTrendTracker.Controllers
             await _dbContext.SaveChangesAsync(ct);
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "UPDATE_USER_STATUS",
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "UPDATE_USER_STATUS",
                 $"{(isActive ? "Activated" : "Suspended")} user {userId} ({user.Email}).", ip);
 
             return Ok(ApiResponse<object>.Ok(null, $"Updated user status to {(isActive ? "ACTIVE" : "SUSPENDED")}."));
@@ -348,7 +358,7 @@ namespace ScientificTrendTracker.Controllers
                 linksDeleted, keywordsDeleted, papersReset);
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "RESET_KEYWORDS", 
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "RESET_KEYWORDS", 
                 $"Reset system keywords: deleted {linksDeleted} links, {keywordsDeleted} keywords, reset {papersReset} papers.", ip);
 
             return Ok(ApiResponse<object>.Ok(
@@ -395,7 +405,7 @@ namespace ScientificTrendTracker.Controllers
                 return Conflict(ApiResponse<object>.Fail(409, "A reprocessing job is already running. Check status at /api/admin/reprocess-status."));
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "REPROCESS_KEYWORDS",
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "REPROCESS_KEYWORDS",
                 "Started background keyword extraction process (local AI).", ip);
 
             return Accepted(ApiResponse<object>.Ok(_reprocessService.GetState(),
@@ -459,7 +469,7 @@ namespace ScientificTrendTracker.Controllers
             var started = _reprocessService.StartBackground();
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "RUN_WEEKLY_SYNC", 
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "RUN_WEEKLY_SYNC", 
                 $"Manually ran weekly sync process: fetched {result.Added} new papers, {result.AlreadyExists} duplicates.", ip);
 
             return Ok(ApiResponse<object>.Ok(new
@@ -526,20 +536,15 @@ namespace ScientificTrendTracker.Controllers
         }
 
         /// <summary>
-        /// Xoá sạch corpus (papers/keywords/authors/links/citations) theo đúng thứ tự FK.
-        /// GIỮ Journals + Q-rank SCImago + accounts/users. Dọn cả bảng legacy PublicationTrends
-        /// (FK tới Keywords, không có trong EF model) bằng raw SQL trước khi xoá Keywords/Authors.
+        /// Xoá sạch corpus (papers/keywords/authors/links/citations/topics) theo đúng thứ tự FK.
+        /// GIỮ Journals + Q-rank SCImago + accounts/users + catalog ResearchTopics.
         /// </summary>
         private async Task PurgeCorpusAsync()
         {
-            // Bảng legacy chỉ tồn tại trong DB (không có trong DbContext) — xoá rows trước để khỏi vướng FK.
-            // Bọc try/catch: DB nào không có bảng này thì bỏ qua.
-            try { await _dbContext.Database.ExecuteSqlRawAsync("DELETE FROM PublicationTrends"); }
-            catch (Exception ex) { _logger.LogWarning("Skipping PublicationTrends cleanup: {Msg}", ex.Message); }
-
             await _dbContext.PaperCitations.ExecuteDeleteAsync();
             await _dbContext.PaperKeywords.ExecuteDeleteAsync();
             await _dbContext.PaperAuthors.ExecuteDeleteAsync();
+            await _dbContext.PaperTopics.ExecuteDeleteAsync();
             await _dbContext.ResearchPapers.ExecuteDeleteAsync();
             await _dbContext.Keywords.ExecuteDeleteAsync();
             await _dbContext.Authors.ExecuteDeleteAsync();
@@ -580,7 +585,7 @@ namespace ScientificTrendTracker.Controllers
 
             // Ghi nhật ký hoạt động admin (theo convention của team).
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "REBUILD_CORPUS",
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "REBUILD_CORPUS",
                 $"Ran corpus rebuild for years {fromYear}-{toYear} (up to {perYear} papers/year): added {result.Added} new papers, {result.AlreadyExists} duplicates.", ip);
 
             return Ok(ApiResponse<object>.Ok(new
@@ -614,8 +619,38 @@ namespace ScientificTrendTracker.Controllers
             var result = await _scimagoImportService.ImportFromCsvAsync(stream);
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "IMPORT_SCIMAGO", 
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "IMPORT_SCIMAGO", 
                 $"Imported SCImago list from file path: {path}. Read {result.TotalRowsRead} rows, updated {result.UpdatedCount} journals.", ip);
+
+            return Ok(ApiResponse<object>.Ok(new
+            {
+                result.TotalRowsRead,
+                result.UpdatedCount,
+                result.SkippedCount
+            }, $"Import complete: {result.UpdatedCount} journals updated."));
+        }
+
+        /// <summary>
+        /// [Admin] Cập nhật Q-rank tạp chí từ file CSV SCImago do admin UPLOAD trực tiếp (kéo-thả/chọn file).
+        /// Không cần copy file lên server trước như import-scimago-path.
+        /// </summary>
+        [HttpPost("import-scimago-upload")]
+        public async Task<IActionResult> ImportScimagoUploadAsync(IFormFile file)
+        {
+            if (file == null || file.Length == 0)
+                return BadRequest(ApiResponse<object>.Fail(400, "No file uploaded or file is empty."));
+
+            if (!file.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                return BadRequest(ApiResponse<object>.Fail(400, "Only .csv files are accepted."));
+
+            _logger.LogInformation("Admin upload SCImago file: {Name} ({Size} bytes).", file.FileName, file.Length);
+
+            using var stream = file.OpenReadStream();
+            var result = await _scimagoImportService.ImportFromCsvAsync(stream);
+
+            var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "IMPORT_SCIMAGO",
+                $"Imported SCImago from uploaded file '{file.FileName}'. Read {result.TotalRowsRead} rows, updated {result.UpdatedCount} journals.", ip);
 
             return Ok(ApiResponse<object>.Ok(new
             {
@@ -662,7 +697,7 @@ namespace ScientificTrendTracker.Controllers
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "CREATE_SUBSCRIPTION_PLAN", 
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "CREATE_SUBSCRIPTION_PLAN", 
                 $"Created new subscription plan: '{dto.PlanName}' priced at {dto.PriceAmount} VND, duration {dto.DurationDays} days.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "Subscription plan created successfully!"));
@@ -689,7 +724,7 @@ namespace ScientificTrendTracker.Controllers
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "UPDATE_SUBSCRIPTION_PLAN", 
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "UPDATE_SUBSCRIPTION_PLAN", 
                 $"Updated subscription plan ID {planId} (New name: '{dto.PlanName}', New price: {dto.PriceAmount} VND).", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "Subscription plan updated successfully!"));
@@ -716,7 +751,7 @@ namespace ScientificTrendTracker.Controllers
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "TOGGLE_SUBSCRIPTION_PLAN", 
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "TOGGLE_SUBSCRIPTION_PLAN", 
                 $"Changed status of subscription plan ID {planId} to {(isActive ? "Active" : "Inactive")}.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, $"Changed plan status to {isActive} successfully."));
@@ -738,7 +773,7 @@ namespace ScientificTrendTracker.Controllers
                 return Conflict(ApiResponse<object>.Fail(409, "Plan has active subscribers — cannot delete. Use Disable to lock it."));
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "DELETE_SUBSCRIPTION_PLAN",
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "DELETE_SUBSCRIPTION_PLAN",
                 $"Deleted subscription plan ID {planId}.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "Subscription plan deleted successfully."));
@@ -771,6 +806,29 @@ namespace ScientificTrendTracker.Controllers
             ).Take(100).ToListAsync(ct);
 
             return Ok(ApiResponse<List<TransactionRowDto>>.Ok(rows, $"Found {rows.Count} transaction(s)."));
+        }
+
+        /// <summary>
+        /// Lấy danh sách nguồn dữ liệu đồng bộ (ApiDataSources) để trang Data Pipeline hiển thị THẬT
+        /// thay vì hardcode. Trả về tên nguồn, URL, tần suất, trạng thái bật/tắt và lần sync gần nhất.
+        /// </summary>
+        [HttpGet("data-sources")]
+        public async Task<IActionResult> GetDataSourcesAsync(CancellationToken ct)
+        {
+            var sources = await _dbContext.ApiDataSources
+                .OrderBy(s => s.DataSourceId)
+                .Select(s => new
+                {
+                    s.DataSourceId,
+                    s.SourceName,
+                    s.BaseUrl,
+                    s.SyncFrequency,
+                    s.IsActive,
+                    s.LastSyncAt
+                })
+                .ToListAsync(ct);
+
+            return Ok(ApiResponse<object>.Ok(sources, $"Found {sources.Count} data source(s)."));
         }
 
         /// <summary>
@@ -807,7 +865,7 @@ namespace ScientificTrendTracker.Controllers
             await _dbContext.SaveChangesAsync(ct);
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "CLEANUP_SYNC_LOGS",
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "CLEANUP_SYNC_LOGS",
                 $"Deleted {emptyLogs.Count} sync log(s) with 0 imported papers.", ip);
 
             return Ok(ApiResponse<object>.Ok(new { deleted = emptyLogs.Count },
@@ -876,6 +934,10 @@ namespace ScientificTrendTracker.Controllers
             if (maxPages > 50) maxPages = 50;
             var effFromYear = fromYear ?? (DateTime.UtcNow.Year - 1);
 
+            // Bật cờ "đang chạy" NGAY tại đây: task nền còn phải tạo scope + ghi ApiSyncLog mới gọi Begin(),
+            // nên nếu chờ nó thì FE poll ngay sau response sẽ trúng snapshot của lần sync trước (nháy FINISHED).
+            _syncProgress.BeginPending();
+
             // Chạy nền: scope của request kết thúc ngay sau response nên phải tạo scope riêng.
             _ = Task.Run(async () =>
             {
@@ -889,6 +951,12 @@ namespace ScientificTrendTracker.Controllers
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Lỗi sync nền.");
+                }
+                finally
+                {
+                    // RunSyncAsync tự End() trong finally của nó, NHƯNG nếu nó ném lỗi trước đó
+                    // (vd ghi ApiSyncLog lỗi) thì cờ running do BeginPending() bật sẽ kẹt mãi. End() idempotent.
+                    _syncProgress.End();
                 }
             });
 
@@ -977,7 +1045,7 @@ namespace ScientificTrendTracker.Controllers
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "CREATE_PAPER", 
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "CREATE_PAPER", 
                 $"Manually uploaded paper: '{dto.Title}'. Journal: '{dto.JournalName}'.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "Paper added successfully!"));
@@ -1004,7 +1072,7 @@ namespace ScientificTrendTracker.Controllers
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "CREATE_PAPER_FROM_LINK",
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "CREATE_PAPER_FROM_LINK",
                 $"Automatically added paper from link: '{dto.Link}'.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, message));
@@ -1027,7 +1095,7 @@ namespace ScientificTrendTracker.Controllers
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "UPDATE_PAPER", 
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "UPDATE_PAPER", 
                 $"Manually updated paper ID: {paperId} (New title: '{dto.Title}').", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "Paper updated successfully!"));
@@ -1049,7 +1117,7 @@ namespace ScientificTrendTracker.Controllers
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "DELETE_PAPER", 
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "DELETE_PAPER", 
                 $"Manually deleted paper ID: {paperId}.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "Paper deleted successfully!"));
@@ -1094,7 +1162,7 @@ namespace ScientificTrendTracker.Controllers
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "CREATE_KEYWORD", 
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "CREATE_KEYWORD", 
                 $"Created new system keyword: '{dto.KeywordName}'.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "Keyword created successfully!"));
@@ -1117,7 +1185,7 @@ namespace ScientificTrendTracker.Controllers
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "UPDATE_KEYWORD", 
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "UPDATE_KEYWORD", 
                 $"Updated keyword ID: {keywordId} to: '{dto.KeywordName}'.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "Keyword updated successfully!"));
@@ -1139,7 +1207,7 @@ namespace ScientificTrendTracker.Controllers
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
-            await _adminActivityLogService.LogActivityAsync(1, "DELETE_KEYWORD", 
+            await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "DELETE_KEYWORD", 
                 $"Deleted system keyword ID: {keywordId}.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "Keyword deleted successfully!"));

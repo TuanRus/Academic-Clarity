@@ -45,6 +45,13 @@ namespace ScientificTrendTracker.Services
                 return null;
             }
 
+            // Topic: ưu tiên đọc từ bảng nối chuẩn PaperTopics/ResearchTopics; fallback cột Topic string
+            // cho bài cũ chưa có link (trước khi có PaperTopics), rồi mới tới OpenAlex live.
+            var topicFromLink = await _dbContext.PaperTopics
+                .Where(pt => pt.PaperId == paperId)
+                .Select(pt => pt.Topic.TopicName)
+                .FirstOrDefaultAsync();
+
             // OpenAlex: 1 request lấy abstract + topic/subfield/field/domain + OA status + institutions.
             // (Topic đã lưu DB lúc sync; subfield/field/domain/OA/institutions lấy on-demand.)
             OpenAlexWorkDetail oaDetail = null;
@@ -83,8 +90,10 @@ namespace ScientificTrendTracker.Services
                     .Select(pk => pk.Keyword.KeywordName)
                     .Where(n => !string.IsNullOrWhiteSpace(n))
                     .ToList(),
-                // Topic ưu tiên DB; fallback OpenAlex live cho bài cũ chưa sync lại cột Topic.
-                Topic = !string.IsNullOrWhiteSpace(paper.Topic) ? paper.Topic : oaDetail?.Topic,
+                // Topic ưu tiên PaperTopics/ResearchTopics -> fallback cột Topic string -> fallback OpenAlex live.
+                Topic = !string.IsNullOrWhiteSpace(topicFromLink) ? topicFromLink
+                    : !string.IsNullOrWhiteSpace(paper.Topic) ? paper.Topic
+                    : oaDetail?.Topic,
                 Subfield = oaDetail?.Subfield,
                 Field = oaDetail?.Field,
                 Domain = oaDetail?.Domain,
@@ -396,6 +405,21 @@ namespace ScientificTrendTracker.Services
                 .OrderByDescending(k => k.PaperKeywords.Count)
                 .Take(limit)
                 .Select(k => k.KeywordName)
+                .ToListAsync();
+        }
+
+        /// <summary>Autocomplete tên tác giả (distinct) khớp prefix, sắp theo số bài giảm dần.</summary>
+        public async Task<List<string>> SuggestAuthorsAsync(string q, int limit)
+        {
+            var term = (q ?? string.Empty).Trim();
+            if (term.Length == 0) return new List<string>();
+
+            return await _dbContext.Authors
+                .Where(a => a.FullName.Contains(term))
+                .OrderByDescending(a => a.PaperAuthors.Count)
+                .ThenBy(a => a.FullName)
+                .Take(limit)
+                .Select(a => a.FullName)
                 .ToListAsync();
         }
 
