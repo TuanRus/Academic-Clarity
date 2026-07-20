@@ -17,20 +17,32 @@ namespace ScientificTrendTracker.Services;
 public class AdminActivityLogService : IAdminActivityLogService
 {
     private readonly AppDbContext _dbContext;
+    private readonly ILogger<AdminActivityLogService> _logger;
 
-    public AdminActivityLogService(AppDbContext dbContext)
+    public AdminActivityLogService(AppDbContext dbContext, ILogger<AdminActivityLogService> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     /// <summary>
-    /// Ghi nhận một hành động mới của Admin vào cơ sở dữ liệu.
+    /// Ghi nhận một hành động mới của Admin vào cơ sở dữ liệu (BEST-EFFORT).
+    /// Audit log KHÔNG được làm hỏng nghiệp vụ chính: nếu AdminId chưa tồn tại trong Users
+    /// (khóa ngoại) hoặc ghi lỗi thì chỉ cảnh báo rồi bỏ qua, không ném exception.
     /// </summary>
     public async Task LogActivityAsync(int adminId, string action, string description, string ipAddress)
     {
-        // Tạm thời gán email giả định theo ID (do bảng users chưa được cấu hình).
-        // Sau này khi có cơ chế Auth: bạn có thể lấy thẳng Email/Name từ Claims của JWT Token truyền vào.
-        string adminEmail = adminId == 1 ? "admin_test@scientifictrend.com" : $"admin_{adminId}@scientifictrend.com";
+        // Lấy email admin THẬT từ DB (đồng thời xác nhận AdminId tồn tại để không vỡ FK).
+        var adminEmail = await _dbContext.Users
+            .Where(u => u.UserId == adminId)
+            .Select(u => u.Email)
+            .FirstOrDefaultAsync();
+
+        if (adminEmail == null)
+        {
+            _logger.LogWarning("Bỏ ghi AdminActivityLog: AdminId {AdminId} không tồn tại trong Users (action={Action}).", adminId, action);
+            return;
+        }
 
         var log = new AdminActivityLog
         {
@@ -42,8 +54,16 @@ public class AdminActivityLogService : IAdminActivityLogService
             CreatedAt = DateTime.UtcNow
         };
 
-        _dbContext.AdminActivityLogs.Add(log);
-        await _dbContext.SaveChangesAsync();
+        try
+        {
+            _dbContext.AdminActivityLogs.Add(log);
+            await _dbContext.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _dbContext.Entry(log).State = EntityState.Detached; // gỡ khỏi tracker để không kẹt SaveChanges sau
+            _logger.LogWarning(ex, "Ghi AdminActivityLog thất bại (action={Action}) — bỏ qua để không ảnh hưởng nghiệp vụ.", action);
+        }
     }
 
     /// <summary>
