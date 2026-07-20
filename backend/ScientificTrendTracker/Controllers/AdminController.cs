@@ -945,8 +945,11 @@ namespace ScientificTrendTracker.Controllers
                 var orch = scope.ServiceProvider.GetRequiredService<ISyncOrchestratorService>();
                 try
                 {
+                    // Fetch bài mới (keyword nền OpenAlex), rồi kích hoạt Background Keyword Reprocessing Job
+                    // (AI local) để tách keyword cho bài mới — chạy giống luồng sync tự động/thủ công khác.
                     await orch.RunSyncAsync(maxPages, skipKeywords: true, fromYear: effFromYear,
                         minCitedExclusive: -1, recentFirst: true);
+                    _reprocessService.StartBackground();
                 }
                 catch (Exception ex)
                 {

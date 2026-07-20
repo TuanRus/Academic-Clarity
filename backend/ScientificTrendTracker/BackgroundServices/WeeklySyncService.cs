@@ -7,16 +7,19 @@ namespace ScientificTrendTracker.BackgroundServices
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly IConfiguration _configuration;
         private readonly ILogger<WeeklySyncService> _logger;
+        private readonly IKeywordReprocessService _reprocessService; // singleton — tách keyword AI sau sync
 
         private static readonly TimeSpan SyncTime = new(2, 0, 0);
         private const DayOfWeek SyncDay = DayOfWeek.Monday;
         private const int MaxPagesPerSync = 50;
 
-        public WeeklySyncService(IServiceScopeFactory scopeFactory, IConfiguration configuration, ILogger<WeeklySyncService> logger)
+        public WeeklySyncService(IServiceScopeFactory scopeFactory, IConfiguration configuration,
+            ILogger<WeeklySyncService> logger, IKeywordReprocessService reprocessService)
         {
             _scopeFactory = scopeFactory;
             _configuration = configuration;
             _logger = logger;
+            _reprocessService = reprocessService;
         }
 
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -45,14 +48,16 @@ namespace ScientificTrendTracker.BackgroundServices
 
                 // Weekly sync TỰ ĐỘNG: vét bài MỚI (sort theo ngày, bỏ lọc citation vì bài mới chưa kịp được trích dẫn),
                 // chỉ năm gần đây (year-1 → nay) để bắt xu hướng mới nổi.
-                // KEYWORD: CHỈ lấy keyword sẵn có từ OpenAlex (controlled vocabulary), KHÔNG dùng AI để tách keyword.
                 var recentFromYear = DateTime.UtcNow.Year - 1;
                 await orchestrator.RunSyncAsync(
                     MaxPagesPerSync, skipKeywords: true,
                     fromYear: recentFromYear, minCitedExclusive: -1, recentFirst: true,
                     cancellationToken: stoppingToken);
 
-                _logger.LogInformation("Weekly sync hoàn tất fetch — keyword lấy trực tiếp từ OpenAlex, không chạy AI.");
+                // Sau khi fetch bài mới → kích hoạt Background Keyword Reprocessing Job (AI local)
+                // để tách keyword cho bài mới, giống luồng sync thủ công.
+                _reprocessService.StartBackground();
+                _logger.LogInformation("Weekly sync hoàn tất fetch — đã kích hoạt tách keyword AI nền.");
             }
         }
 
