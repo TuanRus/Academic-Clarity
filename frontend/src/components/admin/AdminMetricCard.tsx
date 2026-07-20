@@ -8,8 +8,8 @@ interface AdminMetricCardProps {
 
 const accentMap = {
   blue: {
-    icon: 'bg-blue-50 text-blue-700',
-    border: 'border-blue-100',
+    icon: 'bg-indigo-50 text-indigo-700',
+    border: 'border-indigo-100',
   },
   green: {
     icon: 'bg-emerald-50 text-emerald-700',
@@ -20,8 +20,8 @@ const accentMap = {
     border: 'border-orange-100',
   },
   slate: {
-    icon: 'bg-slate-100 text-slate-700',
-    border: 'border-slate-200',
+    icon: 'bg-gray-100 text-gray-700',
+    border: 'border-gray-200',
   },
   red: {
     icon: 'bg-red-50 text-red-700',
@@ -58,21 +58,21 @@ const AdminMetricCard = ({
     <div
       className={[
         'rounded-xl border bg-white p-5 shadow-sm transition',
-        'hover:-translate-y-0.5 hover:shadow-md',
+        'hover:-trangray-y-0.5 hover:shadow-md',
         styles.border,
       ].join(' ')}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-extrabold uppercase tracking-[0.06em] text-slate-500">
+          <p className="text-xs font-bold uppercase tracking-[0.06em] text-gray-500">
             {label}
           </p>
 
-          <p className="mt-3 text-2xl font-extrabold leading-none text-slate-950">
+          <p className="mt-3 text-2xl font-bold leading-none text-gray-900">
             {value}
           </p>
 
-          <p className="mt-3 text-sm leading-5 text-slate-500">
+          <p className="mt-3 text-sm leading-5 text-gray-500">
             {helper}
           </p>
         </div>
@@ -80,7 +80,7 @@ const AdminMetricCard = ({
         <div
           className={[
             'flex h-10 w-10 shrink-0 items-center justify-center rounded-lg',
-            'text-base font-extrabold',
+            'text-base font-bold',
             styles.icon,
           ].join(' ')}
           aria-hidden="true"

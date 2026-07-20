@@ -264,7 +264,7 @@ const TrendDashboardPage = () => {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-medium uppercase tracking-wide text-gray-400">
             Journal & Keywords · Trend Analytics Dashboard
@@ -277,7 +277,7 @@ const TrendDashboardPage = () => {
           disabled={!canExportCsv || topKeywords.length === 0 || exporting}
           onClick={exportCsv}
           title={!canExportCsv ? 'Upgrade to Premium to export CSV' : undefined}
-          className={`flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium ${
+          className={`flex items-center gap-2 self-start rounded-md px-4 py-2 text-sm font-medium sm:self-auto ${
             canExportCsv && topKeywords.length > 0 && !exporting
               ? 'bg-indigo-700 text-white hover:bg-indigo-800'
               : 'cursor-not-allowed bg-gray-200 text-gray-400'

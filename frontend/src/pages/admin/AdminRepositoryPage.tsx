@@ -83,13 +83,23 @@ const AdminRepositoryPage = () => {
       .includes(keywordQuery.trim().toLowerCase()),
   );
 
-  const exportRepository = () => {
-    const content = papers
-      .map((paper) => `${paper.id} ${paper.title} ${paper.authors} ${paper.doi} ${paper.journal} ${paper.year} ${paper.citations}`)
-      .join('\n');
+  // Ô CSV phải bọc ngoặc kép khi chứa dấu phẩy/ngoặc kép/xuống dòng, nếu không cột sẽ bị vỡ
+  const csvCell = (value: string | number) => {
+    const s = String(value ?? '');
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
 
+  const exportRepository = () => {
+    const header = ['Paper ID', 'Title', 'Authors', 'Journal', 'Year', 'Citations', 'DOI'];
+    const rows = papers.map((paper) =>
+      [paper.id, paper.title, paper.authors, paper.journal, paper.year, paper.citations, paper.doi]
+        .map(csvCell)
+        .join(','),
+    );
+
+    // BOM để Excel nhận đúng UTF-8 (tên bài báo/tạp chí có ký tự ngoài ASCII)
     const blob = new Blob(
-      [`ID,Title,Journal,Year,Citations,DOI\n${content}`],
+      ['\uFEFF' + [header.join(','), ...rows].join('\r\n')],
       { type: 'text/csv;charset=utf-8;' },
     );
 
@@ -146,10 +156,10 @@ const AdminRepositoryPage = () => {
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
             Article Repository
           </h1>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-gray-500">
             Manage OpenAlex paper metadata, journals, citations and research keywords.
           </p>
         </div>
@@ -157,25 +167,25 @@ const AdminRepositoryPage = () => {
         <div className="flex gap-3">
           <button
             onClick={exportRepository}
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-[#0b6fb8]"
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-indigo-700"
           >
             ⇩ Export
           </button>
 
           <button
             onClick={() => setShowAddModal(true)}
-            className="rounded-md bg-[#4338ca] hover:bg-[#3730a3] px-4 py-2 text-xs font-bold text-white"
+            className="rounded-md bg-indigo-700 hover:bg-indigo-800 px-4 py-2 text-xs font-bold text-white"
           >
             + Add Paper
           </button>
         </div>
       </div>
 
-      <div className="border-b border-slate-200">
-        <div className="flex gap-8 text-sm font-bold text-slate-500">
+      <div className="border-b border-gray-200">
+        <div className="flex gap-8 text-sm font-bold text-gray-500">
           <button
             onClick={() => setActiveTab('papers')}
-            className={`pb-3 hover:text-[#0b6fb8] ${activeTab === 'papers' ? 'border-b-2 border-[#0b6fb8] text-[#062b4f]' : ''
+            className={`pb-3 hover:text-indigo-700 ${activeTab === 'papers' ? 'border-b-2 border-indigo-700 text-indigo-800' : ''
               }`}
           >
             Research Papers
@@ -183,7 +193,7 @@ const AdminRepositoryPage = () => {
 
           <button
             onClick={() => setActiveTab('keywords')}
-            className={`pb-3 hover:text-[#0b6fb8] ${activeTab === 'keywords' ? 'border-b-2 border-[#0b6fb8] text-[#062b4f]' : ''
+            className={`pb-3 hover:text-indigo-700 ${activeTab === 'keywords' ? 'border-b-2 border-indigo-700 text-indigo-800' : ''
               }`}
           >
             Keywords
@@ -200,36 +210,36 @@ const AdminRepositoryPage = () => {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Filter by title, journal, year, citation or DOI..."
-              className="w-72 rounded-md border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#0b6fb8]"
+              className="w-72 rounded-md border border-gray-200 px-3 py-2 text-xs outline-none focus:border-indigo-700"
             />
           }
         >
           <AdminTable headers={['Paper ID', 'Title', 'Authors', 'Journal', 'Year', 'Citations', 'DOI']}>
             {filteredPapers.map((paper) => (
-              <tr key={paper.id} className="hover:bg-slate-50">
-                <td className="px-5 py-4 font-bold text-slate-700">
+              <tr key={paper.id} className="hover:bg-gray-50">
+                <td className="px-5 py-4 font-bold text-gray-700">
                   {paper.id}
                 </td>
 
                 <td className="max-w-sm px-5 py-4">
-                  <p className="font-semibold text-slate-900">
+                  <p className="font-semibold text-gray-900">
                     {paper.title}
                   </p>
                 </td>
 
-                <td className="px-5 py-4 text-sm text-slate-600">
+                <td className="px-5 py-4 text-sm text-gray-600">
                   {paper.authors}
                 </td>
 
-                <td className="px-5 py-4 text-slate-600">
+                <td className="px-5 py-4 text-gray-600">
                   {paper.journal}
                 </td>
 
-                <td className="px-5 py-4 font-semibold text-slate-700">
+                <td className="px-5 py-4 font-semibold text-gray-700">
                   {paper.year}
                 </td>
 
-                <td className="px-5 py-4 font-bold text-slate-900">
+                <td className="px-5 py-4 font-bold text-gray-900">
                   {paper.citations}
                 </td>
 
@@ -238,7 +248,7 @@ const AdminRepositoryPage = () => {
                     href={`https://doi.org/${paper.doi}`}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-xs font-bold text-[#0b6fb8] hover:underline"
+                    className="text-xs font-bold text-indigo-700 hover:underline"
                   >
                     {paper.doi}
                   </a>
@@ -257,13 +267,13 @@ const AdminRepositoryPage = () => {
                 value={keywordQuery}
                 onChange={(event) => setKeywordQuery(event.target.value)}
                 placeholder="Filter by keyword name, ID, description or status..."
-                className="w-72 rounded-md border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#0b6fb8]"
+                className="w-72 rounded-md border border-gray-200 px-3 py-2 text-xs outline-none focus:border-indigo-700"
               />
 
               <button
                 type="button"
                 onClick={() => setShowKeywordModal(true)}
-                className="whitespace-nowrap rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white hover:bg-[#3730a3]"
+                className="whitespace-nowrap rounded-md bg-indigo-700 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-800"
               >
                 + New Keyword
               </button>
@@ -272,19 +282,19 @@ const AdminRepositoryPage = () => {
         >
           <AdminTable headers={['Keyword ID', 'Keyword Name', 'Description', 'Related Papers', 'Status', 'Actions']}>
             {filteredKeywords.map((keyword) => (
-              <tr key={keyword.id} className={`hover:bg-slate-50 ${keyword.status === 'DISMISSED' ? 'opacity-50' : ''}`} >
-                <td className="px-5 py-5 font-bold text-slate-500">{keyword.id}</td>
+              <tr key={keyword.id} className={`hover:bg-gray-50 ${keyword.status === 'DISMISSED' ? 'opacity-50' : ''}`} >
+                <td className="px-5 py-5 font-bold text-gray-500">{keyword.id}</td>
 
                 <td className="px-5 py-5">
-                  <p className="font-bold text-slate-900">{keyword.name}</p>
+                  <p className="font-bold text-gray-900">{keyword.name}</p>
                 </td>
 
                 <td className="px-5 py-5">
-                  <p className="max-w-md text-xs text-slate-500">{keyword.description}</p>
+                  <p className="max-w-md text-xs text-gray-500">{keyword.description}</p>
                 </td>
 
                 <td className="px-5 py-5">
-                  <span className="rounded bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                  <span className="rounded bg-gray-100 px-3 py-1 text-xs font-bold text-gray-600">
                     {keyword.fields} Papers
                   </span>
                 </td>
@@ -319,14 +329,14 @@ const AdminRepositoryPage = () => {
           <>
             <button
               onClick={() => setShowKeywordModal(false)}
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700"
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700"
             >
               Cancel
             </button>
 
             <button
               onClick={createKeyword}
-              className="rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white"
+              className="rounded-md bg-indigo-700 px-4 py-2 text-xs font-bold text-white"
             >
               Create Keyword
             </button>
@@ -334,7 +344,7 @@ const AdminRepositoryPage = () => {
         }
       >
         <div className="space-y-4">
-          <label className="block text-xs font-bold text-slate-700" htmlFor="keyword-name">
+          <label className="block text-xs font-bold text-gray-700" htmlFor="keyword-name">
             Keyword name
           </label>
 
@@ -342,11 +352,11 @@ const AdminRepositoryPage = () => {
             id="keyword-name"
             value={keywordName}
             onChange={(event) => setKeywordName(event.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700"
             placeholder="Example: Artificial Intelligence"
           />
 
-          <label className="block text-xs font-bold text-slate-700" htmlFor="keyword-description">
+          <label className="block text-xs font-bold text-gray-700" htmlFor="keyword-description">
             Description
           </label>
 
@@ -355,7 +365,7 @@ const AdminRepositoryPage = () => {
             value={keywordDescription}
             onChange={(event) => setKeywordDescription(event.target.value)}
             rows={3}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]"
+            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700"
             placeholder="Short keyword description..."
           />
         </div>
@@ -368,8 +378,8 @@ const AdminRepositoryPage = () => {
         onClose={() => setShowAddModal(false)}
         footer={
           <>
-            <button onClick={() => setShowAddModal(false)} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Cancel</button>
-            <button onClick={submitAdd} disabled={adding} className="rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
+            <button onClick={() => setShowAddModal(false)} className="rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700">Cancel</button>
+            <button onClick={submitAdd} disabled={adding} className="rounded-md bg-indigo-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">
               {adding ? 'Adding…' : 'Add Paper'}
             </button>
           </>
@@ -377,31 +387,31 @@ const AdminRepositoryPage = () => {
       >
         <div className="space-y-3">
           <div className="flex gap-2">
-            <button onClick={() => setAddMode('link')} className={`rounded-md px-3 py-1.5 text-xs font-bold ${addMode === 'link' ? 'bg-[#4338ca] text-white' : 'bg-slate-100 text-slate-600'}`}>From link (OpenAlex/DOI)</button>
-            <button onClick={() => setAddMode('manual')} className={`rounded-md px-3 py-1.5 text-xs font-bold ${addMode === 'manual' ? 'bg-[#4338ca] text-white' : 'bg-slate-100 text-slate-600'}`}>Manual</button>
+            <button onClick={() => setAddMode('link')} className={`rounded-md px-3 py-1.5 text-xs font-bold ${addMode === 'link' ? 'bg-indigo-700 text-white' : 'bg-gray-100 text-gray-600'}`}>From link (OpenAlex/DOI)</button>
+            <button onClick={() => setAddMode('manual')} className={`rounded-md px-3 py-1.5 text-xs font-bold ${addMode === 'manual' ? 'bg-indigo-700 text-white' : 'bg-gray-100 text-gray-600'}`}>Manual</button>
           </div>
 
           {addMode === 'link' ? (
             <div>
-              <label className="mb-1 block text-xs font-bold text-slate-700">Paper link</label>
+              <label className="mb-1 block text-xs font-bold text-gray-700">Paper link</label>
               <input
                 value={addLink}
                 onChange={(e) => setAddLink(e.target.value)}
                 placeholder="https://openalex.org/W… or https://doi.org/10.… or a DOI"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700"
               />
-              <p className="mt-1 text-xs text-slate-400">The backend auto-fetches title, authors, journal, year and keywords from OpenAlex.</p>
+              <p className="mt-1 text-xs text-gray-400">The backend auto-fetches title, authors, journal, year and keywords from OpenAlex.</p>
             </div>
           ) : (
             <div className="space-y-2">
-              <input value={mTitle} onChange={(e) => setMTitle(e.target.value)} placeholder="Paper title (required)" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
+              <input value={mTitle} onChange={(e) => setMTitle(e.target.value)} placeholder="Paper title (required)" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700" />
               <div className="grid grid-cols-2 gap-2">
-                <input value={mJournal} onChange={(e) => setMJournal(e.target.value)} placeholder="Journal" className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
-                <input value={mYear} onChange={(e) => setMYear(e.target.value)} placeholder="Year (e.g. 2025)" inputMode="numeric" className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
+                <input value={mJournal} onChange={(e) => setMJournal(e.target.value)} placeholder="Journal" className="rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700" />
+                <input value={mYear} onChange={(e) => setMYear(e.target.value)} placeholder="Year (e.g. 2025)" inputMode="numeric" className="rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700" />
               </div>
-              <input value={mTopic} onChange={(e) => setMTopic(e.target.value)} placeholder="Topic (chủ đề — dùng cho thông báo follower)" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
-              <input value={mAuthors} onChange={(e) => setMAuthors(e.target.value)} placeholder="Authors (comma-separated)" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
-              <input value={mKeywords} onChange={(e) => setMKeywords(e.target.value)} placeholder="Keywords (comma-separated)" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
+              <input value={mTopic} onChange={(e) => setMTopic(e.target.value)} placeholder="Topic (chủ đề — dùng cho thông báo follower)" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700" />
+              <input value={mAuthors} onChange={(e) => setMAuthors(e.target.value)} placeholder="Authors (comma-separated)" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700" />
+              <input value={mKeywords} onChange={(e) => setMKeywords(e.target.value)} placeholder="Keywords (comma-separated)" className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700" />
             </div>
           )}
         </div>

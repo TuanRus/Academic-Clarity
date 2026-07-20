@@ -214,7 +214,7 @@ const PaperDetailPage = () => {
 
       <hr className="my-4 border-gray-200" />
 
-      <div className="flex items-center justify-between gap-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-xs text-gray-500">
           {/* BR-32: 1 nút duy nhất - vừa Bookmark, vừa đăng ký nhận NEW_CITATION */}
           Bookmarking this paper also subscribes you to "New Citation" notifications.
@@ -223,8 +223,8 @@ const PaperDetailPage = () => {
           onClick={() => toggleBookmark(bookmark)}
           className={
             bookmarked
-              ? 'shrink-0 rounded-md border border-red-600 px-4 py-2 text-sm text-red-600 hover:bg-red-50'
-              : 'shrink-0 rounded-md bg-indigo-700 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-800'
+              ? 'self-start shrink-0 rounded-md border border-red-600 px-4 py-2 text-sm text-red-600 hover:bg-red-50'
+              : 'self-start shrink-0 rounded-md bg-indigo-700 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-800'
           }
         >
           {bookmarked ? 'Remove Bookmark' : 'Bookmark Paper'}

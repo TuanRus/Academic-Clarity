@@ -43,7 +43,7 @@ const AdminPaymentPage = () => {
   ).size;
 
   // Subscription Distribution (chuyển từ Dashboard sang đây) — gom theo tên gói từ giao dịch thật.
-  const planColors = ['#4338ca', '#10b981', '#fb923c', '#0ea5e9', '#e11d48'];
+  const planColors = ['#3730a3', '#10b981', '#fb923c', '#0ea5e9', '#e11d48'];
   const planDistribution = (() => {
     const map = new Map<string, number>();
     rows.forEach((r) => map.set(r.plan, (map.get(r.plan) ?? 0) + 1));
@@ -129,16 +129,16 @@ const AdminPaymentPage = () => {
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
             Subscription & Payment Dashboard
           </h1>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-gray-500">
             Monitor subscription revenue, payment transactions and premium plan performance.
           </p>
           {payosConfigured !== null && (
             <span
               className={`mt-2 inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                payosConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                payosConfigured ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
               }`}
             >
               {payosConfigured ? '✓' : '✗'} PayOS gateway {payosConfigured ? 'configured' : 'not configured'}
@@ -149,14 +149,14 @@ const AdminPaymentPage = () => {
         <div className="flex gap-3">
           <button
             onClick={exportFinanceReport}
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
           >
             ⇩ Export Finance Report
           </button>
 
           <button
             onClick={refreshPayments}
-            className="rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white hover:bg-[#3730a3]"
+            className="rounded-md bg-indigo-700 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-800"
           >
             Refresh Payments
           </button>
@@ -185,7 +185,7 @@ const AdminPaymentPage = () => {
         <div className="grid gap-6 p-6 lg:grid-cols-[1fr_260px]">
           <div className="space-y-5">
             {planDistribution.length === 0 ? (
-              <p className="text-sm text-slate-500">No subscription data available.</p>
+              <p className="text-sm text-gray-500">No subscription data available.</p>
             ) : (
               planDistribution.map((plan) => (
                 <div key={plan.name}>
@@ -193,7 +193,7 @@ const AdminPaymentPage = () => {
                     <span>{plan.name}</span>
                     <span>{plan.count} · {plan.percent}%</span>
                   </div>
-                  <div className="h-3 rounded-full bg-slate-100">
+                  <div className="h-3 rounded-full bg-gray-100">
                     <div className="h-3 rounded-full" style={{ width: `${plan.percent}%`, backgroundColor: plan.color }} />
                   </div>
                 </div>
@@ -202,18 +202,18 @@ const AdminPaymentPage = () => {
           </div>
 
           <div className="space-y-3">
-            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">By billing cycle</p>
-            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-              <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
-                <span className="h-3 w-3 rounded-full bg-[#4338ca]" /> Monthly plans
+            <p className="text-xs font-bold uppercase tracking-wide text-gray-400">By billing cycle</p>
+            <div className="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+                <span className="h-3 w-3 rounded-full bg-indigo-700" /> Monthly plans
               </span>
-              <span className="text-lg font-extrabold text-slate-950">{monthlyCount}</span>
+              <span className="text-lg font-bold text-gray-900">{monthlyCount}</span>
             </div>
-            <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-              <span className="flex items-center gap-2 text-sm font-semibold text-slate-700">
+            <div className="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
+              <span className="flex items-center gap-2 text-sm font-semibold text-gray-700">
                 <span className="h-3 w-3 rounded-full bg-emerald-500" /> Yearly plans
               </span>
-              <span className="text-lg font-extrabold text-slate-950">{yearlyCount}</span>
+              <span className="text-lg font-bold text-gray-900">{yearlyCount}</span>
             </div>
           </div>
         </div>
@@ -229,7 +229,7 @@ const AdminPaymentPage = () => {
               onChange={(event) =>
                 setStatusFilter(event.target.value as 'ALL' | RevenueRow['status'])
               }
-              className="rounded-md border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600"
+              className="rounded-md border border-gray-200 px-3 py-2 text-xs font-bold text-gray-600"
             >
               <option value="ALL">All Status</option>
               <option value="SUCCESS">Success</option>
@@ -252,14 +252,14 @@ const AdminPaymentPage = () => {
             ]}
           >
             {filteredRows.map((row) => (
-              <tr key={row.invoiceId} className="hover:bg-slate-50">
-                <td className="px-5 py-4 font-bold text-slate-700">{row.invoiceId}</td>
-                <td className="px-5 py-4 font-semibold text-slate-700">
+              <tr key={row.invoiceId} className="hover:bg-gray-50">
+                <td className="px-5 py-4 font-bold text-gray-700">{row.invoiceId}</td>
+                <td className="px-5 py-4 font-semibold text-gray-700">
                   {row.transactionId}
                 </td>
                 <td className="px-5 py-4">{row.customer}</td>
-                <td className="px-5 py-4 font-semibold text-slate-800">{row.plan}</td>
-                <td className="px-5 py-4 font-bold text-slate-950">{row.amount}</td>
+                <td className="px-5 py-4 font-semibold text-gray-800">{row.plan}</td>
+                <td className="px-5 py-4 font-bold text-gray-900">{row.amount}</td>
                 <td className="px-5 py-4">{row.method}</td>
                 <td className="px-5 py-4">{row.paidAt}</td>
                 <td className="px-5 py-4">
@@ -268,7 +268,7 @@ const AdminPaymentPage = () => {
                 <td className="px-5 py-4">
                   <button
                     onClick={() => setSelectedRow(row)}
-                    className="text-xs font-bold text-[#0b6fb8] hover:underline"
+                    className="text-xs font-bold text-indigo-700 hover:underline"
                   >
                     Detail
                   </button>
@@ -281,11 +281,11 @@ const AdminPaymentPage = () => {
         <AdminSectionCard title="Plan Management" subtitle="Manage subscription plan pricing">
           <div className="space-y-3 p-5">
             {plans.map((plan) => (
-              <div key={plan.id} className="rounded-md border border-slate-200 p-3">
+              <div key={plan.id} className="rounded-md border border-gray-200 p-3">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-sm font-extrabold text-slate-900">{plan.name}</p>
-                    <p className="mt-1 text-xs text-slate-500">
+                    <p className="text-sm font-bold text-gray-900">{plan.name}</p>
+                    <p className="mt-1 text-xs text-gray-500">
                       {plan.price} · {plan.duration}
                     </p>
                   </div>
@@ -297,14 +297,14 @@ const AdminPaymentPage = () => {
                   {plan.id === 'PLAN-FREE' ? (
                     <button
                       onClick={() => setToast('Free plan is always enabled.')}
-                      className="rounded border border-slate-200 px-3 py-1 text-xs font-bold text-slate-700"
+                      className="rounded border border-gray-200 px-3 py-1 text-xs font-bold text-gray-700"
                     >
                       View
                     </button>
                   ) : (
                     <button
                       onClick={() => openEditPlan(plan)}
-                      className="rounded border border-slate-200 px-3 py-1 text-xs font-bold text-slate-700"
+                      className="rounded border border-gray-200 px-3 py-1 text-xs font-bold text-gray-700"
                     >
                       Edit Price
                     </button>
@@ -327,7 +327,7 @@ const AdminPaymentPage = () => {
         onClose={() => setSelectedRow(null)}
       >
         {selectedRow && (
-          <div className="grid gap-3 text-sm text-slate-700 sm:grid-cols-2">
+          <div className="grid gap-3 text-sm text-gray-700 sm:grid-cols-2">
             <p>
               <span className="font-bold">Invoice:</span> {selectedRow.invoiceId}
             </p>
@@ -367,7 +367,7 @@ const AdminPaymentPage = () => {
           <>
             <button
               onClick={() => setEditingPlan(null)}
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700"
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700"
             >
               Cancel
             </button>
@@ -375,7 +375,7 @@ const AdminPaymentPage = () => {
             <button
               onClick={savePlan}
               disabled={savingPlan}
-              className="rounded-md bg-[#062b4f] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+              className="rounded-md bg-indigo-800 px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
             >
               {savingPlan ? 'Saving…' : 'Save Plan'}
             </button>
@@ -384,19 +384,19 @@ const AdminPaymentPage = () => {
       >
         {editingPlan && (
           <div className="space-y-4">
-            <p className="text-sm font-bold text-slate-800">{editingPlan.name}</p>
+            <p className="text-sm font-bold text-gray-800">{editingPlan.name}</p>
 
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-slate-500">Price (VND)</span>
+              <span className="mb-1 block text-xs font-semibold text-gray-500">Price (VND)</span>
               <input
                 value={planPrice}
                 onChange={(event) => setPlanPrice(event.target.value)}
                 inputMode="numeric"
                 placeholder="e.g. 50000"
-                className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]"
+                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700"
               />
             </label>
-            <p className="text-xs text-slate-400">Duration: {editingPlan.duration} · Status: {editingPlan.status}</p>
+            <p className="text-xs text-gray-400">Duration: {editingPlan.duration} · Status: {editingPlan.status}</p>
           </div>
         )}
       </AdminModal>

@@ -22,7 +22,7 @@ const growthTextClass = (growth: string) => {
   const value = parseInt(growth, 10);
 
   if (Number.isNaN(value) || value === 0) {
-    return 'text-slate-900';
+    return 'text-gray-900';
   }
 
   return value > 0
@@ -88,8 +88,8 @@ const AdminDashboardPage = () => {
   const freePct = pct(userOverview.freeUsers, totalUsers);
   const donutGradient =
     totalUsers > 0
-      ? `conic-gradient(#4338ca 0 ${premiumPct}%, #10b981 ${premiumPct}% ${premiumPct + freePct}%, #fb923c ${premiumPct + freePct}% 100%)`
-      : '#e2e8f0';
+      ? `conic-gradient(#3730a3 0 ${premiumPct}%, #10b981 ${premiumPct}% ${premiumPct + freePct}%, #fb923c ${premiumPct + freePct}% 100%)`
+      : '#e5e7eb';
 
   const [showRevenueDetail, setShowRevenueDetail] = useState(false);
   const [showPublicationDetail, setShowPublicationDetail] = useState(false);
@@ -112,7 +112,7 @@ const AdminDashboardPage = () => {
     <button
       type="button"
       onClick={() => toggleSection(section)}
-      className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-[#4338ca] hover:text-white"
+      className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 text-gray-500 transition hover:bg-indigo-700 hover:text-white"
     >
       {collapsedSections[section] ? (
         <ChevronDown size={18} strokeWidth={2.5} />
@@ -134,10 +134,10 @@ const AdminDashboardPage = () => {
       <AdminToast message={toast} onClose={() => setToast(null)} />
 
       <div>
-        <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900">
           Admin Dashboard Overview
         </h1>
-        <p className="mt-1 text-xs text-slate-500">
+        <p className="mt-1 text-xs text-gray-500">
           Overview of the system's articles, authors, revenue and subscription metrics.
         </p>
       </div>
@@ -190,10 +190,10 @@ const AdminDashboardPage = () => {
             <div className="p-6">
               <div className="mb-5">
                 <div>
-                  <p className="text-2xl font-extrabold text-slate-950">
+                  <p className="text-2xl font-bold text-gray-900">
                     {formatArticles(totalPublications)}
                   </p>
-                  <p className="text-xs font-semibold text-slate-500">
+                  <p className="text-xs font-semibold text-gray-500">
                     Publications in last 6 months
                   </p>
                 </div>
@@ -202,7 +202,7 @@ const AdminDashboardPage = () => {
               <button
                 type="button"
                 onClick={() => setShowPublicationDetail(true)}
-                className="flex h-64 w-full cursor-pointer items-end gap-4 overflow-hidden rounded-xl bg-slate-50 px-5 pb-4 pt-5 text-left transition hover:bg-slate-100"
+                className="flex h-64 w-full cursor-pointer items-end gap-4 overflow-hidden rounded-xl bg-gray-50 px-5 pb-4 pt-5 text-left transition hover:bg-gray-100"
               >
                 {publicationTrend.map((item) => (
                   <div
@@ -210,11 +210,11 @@ const AdminDashboardPage = () => {
                     className="group relative flex h-full flex-1 flex-col items-center justify-end gap-3"
                   >
                     <div
-                      className="w-full max-w-[76px] rounded-t-xl bg-[#4338ca] transition hover:opacity-80"
+                      className="w-full max-w-[76px] rounded-t-xl bg-indigo-700 transition hover:opacity-80"
                       style={{ height: `${publicationBarHeight(item.value)}px` }}
                     />
 
-                    <div className="pointer-events-none absolute bottom-16 z-10 hidden rounded-lg bg-slate-950 px-3 py-2 text-xs text-white shadow-lg group-hover:block">
+                    <div className="pointer-events-none absolute bottom-16 z-10 hidden rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-lg group-hover:block">
                       <p className="font-bold">{item.month}</p>
                       <p>{formatArticles(item.value)} publications</p>
                       <p className={growthTooltipClass(item.growth)}>
@@ -222,7 +222,7 @@ const AdminDashboardPage = () => {
                       </p>
                     </div>
 
-                    <span className="text-xs font-semibold text-slate-500">
+                    <span className="text-xs font-semibold text-gray-500">
                       {item.month}
                     </span>
                   </div>
@@ -241,10 +241,10 @@ const AdminDashboardPage = () => {
             <div className="p-6">
               <div className="mb-5">
                 <div>
-                  <p className="text-2xl font-extrabold text-slate-950">
+                  <p className="text-2xl font-bold text-gray-900">
                     {formatRevenue(totalRevenue)}
                   </p>
-                  <p className="text-xs font-semibold text-slate-500">
+                  <p className="text-xs font-semibold text-gray-500">
                     Revenue in last 6 months
                   </p>
                 </div>
@@ -253,7 +253,7 @@ const AdminDashboardPage = () => {
               <button
                 type="button"
                 onClick={() => setShowRevenueDetail(true)}
-                className="flex h-64 w-full cursor-pointer items-end gap-4 overflow-hidden rounded-xl bg-slate-50 px-5 pb-4 pt-5 text-left transition hover:bg-slate-100"
+                className="flex h-64 w-full cursor-pointer items-end gap-4 overflow-hidden rounded-xl bg-gray-50 px-5 pb-4 pt-5 text-left transition hover:bg-gray-100"
               >
                 {revenueTrend.map((item) => (
                   <div
@@ -267,7 +267,7 @@ const AdminDashboardPage = () => {
                       }}
                     />
 
-                    <div className="pointer-events-none absolute bottom-16 z-10 hidden rounded-lg bg-slate-950 px-3 py-2 text-xs text-white shadow-lg group-hover:block">
+                    <div className="pointer-events-none absolute bottom-16 z-10 hidden rounded-lg bg-gray-900 px-3 py-2 text-xs text-white shadow-lg group-hover:block">
                       <p className="font-bold">{item.month}</p>
                       <p>{formatRevenue(item.value)} revenue</p>
 
@@ -276,7 +276,7 @@ const AdminDashboardPage = () => {
                       </p>
                     </div>
 
-                    <span className="text-xs font-semibold text-slate-500">
+                    <span className="text-xs font-semibold text-gray-500">
                       {item.month}
                     </span>
                   </div>
@@ -296,49 +296,49 @@ const AdminDashboardPage = () => {
           <div className="grid gap-6 p-6 md:grid-cols-[220px_1fr]">
             <div className="relative mx-auto flex h-44 w-44 items-center justify-center rounded-full" style={{ background: donutGradient }}>
               <div className="flex h-28 w-28 flex-col items-center justify-center rounded-full bg-white shadow-inner">
-                <span className="text-2xl font-extrabold text-slate-950">
+                <span className="text-2xl font-bold text-gray-900">
                   {userOverview.totalUsers.toLocaleString()}
                 </span>
-                <span className="text-xs font-semibold text-slate-500">
+                <span className="text-xs font-semibold text-gray-500">
                   Total Users
                 </span>
               </div>
             </div>
 
             <div className="space-y-4">
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-                <span className="font-semibold text-slate-700">Total Users</span>
-                <span className="font-extrabold text-slate-950">
+              <div className="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
+                <span className="font-semibold text-gray-700">Total Users</span>
+                <span className="font-bold text-gray-900">
                   {userOverview.totalUsers.toLocaleString()}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-                <span className="flex items-center gap-2 font-semibold text-slate-700">
-                  <span className="h-3 w-3 rounded-full bg-[#4338ca]" />
+              <div className="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
+                <span className="flex items-center gap-2 font-semibold text-gray-700">
+                  <span className="h-3 w-3 rounded-full bg-indigo-700" />
                   Premium
                 </span>
-                <span className="font-extrabold text-slate-950">
+                <span className="font-bold text-gray-900">
                   {userOverview.premiumUsers.toLocaleString()}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-                <span className="flex items-center gap-2 font-semibold text-slate-700">
+              <div className="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
+                <span className="flex items-center gap-2 font-semibold text-gray-700">
                   <span className="h-3 w-3 rounded-full bg-emerald-500" />
                   Free
                 </span>
-                <span className="font-extrabold text-slate-950">
+                <span className="font-bold text-gray-900">
                   {userOverview.freeUsers.toLocaleString()}
                 </span>
               </div>
 
-              <div className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3">
-                <span className="flex items-center gap-2 font-semibold text-slate-700">
+              <div className="flex items-center justify-between rounded-xl bg-gray-50 px-4 py-3">
+                <span className="flex items-center gap-2 font-semibold text-gray-700">
                   <span className="h-3 w-3 rounded-full bg-orange-400" />
                   Admin
                 </span>
-                <span className="font-extrabold text-slate-950">
+                <span className="font-bold text-gray-900">
                   {userOverview.adminUsers}
                 </span>
               </div>
@@ -356,46 +356,46 @@ const AdminDashboardPage = () => {
       >
         <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-slate-500">Total Publications</p>
-              <p className="mt-1 text-2xl font-extrabold text-slate-950">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-bold text-gray-500">Total Publications</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900">
                 {formatArticles(totalPublications)}
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-slate-500">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-bold text-gray-500">
                 Monthly Publications
               </p>
-              <p className="mt-1 text-2xl font-extrabold text-slate-950">
+              <p className="mt-1 text-2xl font-bold text-gray-900">
                 {formatArticles(monthlyPublications)}
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-slate-500">Peak Growth</p>
-              <p className={['mt-1 text-2xl font-extrabold', growthTextClass(peakPublicationGrowth),].join(' ')}>
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-bold text-gray-500">Peak Growth</p>
+              <p className={['mt-1 text-2xl font-bold', growthTextClass(peakPublicationGrowth),].join(' ')}>
                 {peakPublicationGrowth}
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-slate-500">Latest Month</p>
-              <p className="mt-1 text-2xl font-extrabold ">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-bold text-gray-500">Latest Month</p>
+              <p className="mt-1 text-2xl font-bold ">
                 {latestPublicationMonth}
               </p>
             </div>
           </div>
 
-          <div className="rounded-xl bg-slate-50 p-4">
-            <p className="mb-3 text-sm font-bold text-slate-900">
+          <div className="rounded-xl bg-gray-50 p-4">
+            <p className="mb-3 text-sm font-bold text-gray-900">
               Monthly Publication Breakdown
             </p>
 
             <div className="space-y-3">
               {publicationTrend.map((item) => (
                 <div key={item.month}>
-                  <div className="mb-1 flex justify-between text-xs font-semibold text-slate-600">
+                  <div className="mb-1 flex justify-between text-xs font-semibold text-gray-600">
                     <span>{item.month}</span>
                     <span>
                       {formatArticles(item.value)} publications ·{' '}
@@ -405,9 +405,9 @@ const AdminDashboardPage = () => {
                     </span>
                   </div>
 
-                  <div className="h-2 rounded-full bg-slate-200">
+                  <div className="h-2 rounded-full bg-gray-200">
                     <div
-                      className="h-2 rounded-full bg-[#4338ca]"
+                      className="h-2 rounded-full bg-indigo-700"
                       style={{
                         width: `${Math.round(
                           (item.value / maxPublication) * 100,
@@ -430,44 +430,44 @@ const AdminDashboardPage = () => {
       >
         <div className="space-y-5">
           <div className="grid gap-3 sm:grid-cols-2">
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-slate-500">Total Revenue</p>
-              <p className="mt-1 text-2xl font-extrabold text-slate-950">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-bold text-gray-500">Total Revenue</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900">
                 {formatRevenue(totalRevenue)}
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-slate-500">Monthly Revenue</p>
-              <p className="mt-1 text-2xl font-extrabold text-slate-950">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-bold text-gray-500">Monthly Revenue</p>
+              <p className="mt-1 text-2xl font-bold text-gray-900">
                 {formatRevenue(monthlyRevenue)}
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-slate-500">Active Premium</p>
-              <p className="mt-1 text-2xl font-extrabold text-emerald-700">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-bold text-gray-500">Active Premium</p>
+              <p className="mt-1 text-2xl font-bold text-emerald-700">
                 {activePremium}
               </p>
             </div>
 
-            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-              <p className="text-xs font-bold text-slate-500">Renewal Rate</p>
-              <p className="mt-1 text-2xl font-extrabold text-emerald-700">
+            <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+              <p className="text-xs font-bold text-gray-500">Renewal Rate</p>
+              <p className="mt-1 text-2xl font-bold text-emerald-700">
                 {renewalRate}%
               </p>
             </div>
           </div>
 
-          <div className="rounded-xl bg-slate-50 p-4">
-            <p className="mb-3 text-sm font-bold text-slate-900">
+          <div className="rounded-xl bg-gray-50 p-4">
+            <p className="mb-3 text-sm font-bold text-gray-900">
               Monthly Revenue Breakdown
             </p>
 
             <div className="space-y-3">
               {revenueTrend.map((item) => (
                 <div key={item.month}>
-                  <div className="mb-1 flex justify-between text-xs font-semibold text-slate-600">
+                  <div className="mb-1 flex justify-between text-xs font-semibold text-gray-600">
                     <span>{item.month}</span>
 
                     <span>
@@ -478,9 +478,9 @@ const AdminDashboardPage = () => {
                     </span>
                   </div>
 
-                  <div className="h-2 rounded-full bg-slate-200">
+                  <div className="h-2 rounded-full bg-gray-200">
                     <div
-                      className="h-2 rounded-full bg-[#4338ca]"
+                      className="h-2 rounded-full bg-indigo-700"
                       style={{
                         width: `${Math.round(
                           (item.value / maxRevenue) * 100,

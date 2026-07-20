@@ -14,7 +14,7 @@ import {
 const liveStatusColor = (s: string) =>
   s === 'Success' ? 'font-bold text-emerald-700'
   : s === 'Error' ? 'font-bold text-red-600'
-  : s === 'Exists' ? 'text-slate-500'
+  : s === 'Exists' ? 'text-gray-500'
   : 'text-amber-600';
 
 type ApiSource = {
@@ -278,10 +278,10 @@ const AdminPipelinesPage = () => {
 
       <div className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">
+          <h1 className="text-2xl font-bold tracking-tight text-gray-900">
             Research Data Pipeline
           </h1>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-gray-500">
             Configure academic data providers and monitor ingestion pipelines.
           </p>
           {pipelineIntegrations.length > 0 && (
@@ -290,7 +290,7 @@ const AdminPipelinesPage = () => {
                 <span
                   key={it.name}
                   className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                    it.configured ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500'
+                    it.configured ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'
                   }`}
                 >
                   {it.configured ? '✓' : '✗'} {it.name}
@@ -303,7 +303,7 @@ const AdminPipelinesPage = () => {
         <div className="flex gap-3">
           <button
             onClick={() => setShowAddSourceModal(true)}
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700 hover:bg-gray-50"
           >
             + Add API Source
           </button>
@@ -311,7 +311,7 @@ const AdminPipelinesPage = () => {
           <button
             onClick={() => runSync('Manual Ingest')}
             disabled={isSyncing}
-            className="rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white hover:bg-[#3730a3] disabled:cursor-not-allowed disabled:opacity-60"
+            className="rounded-md bg-indigo-700 px-4 py-2 text-xs font-bold text-white hover:bg-indigo-800 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {isSyncing ? 'Syncing...' : '↥ Ingest Now'}
           </button>
@@ -335,14 +335,14 @@ const AdminPipelinesPage = () => {
         >
           {sources.map((source) => (
             <tr key={source.id}>
-              <td className="px-5 py-4 font-bold text-slate-800">
+              <td className="px-5 py-4 font-bold text-gray-800">
                 {source.engine}
               </td>
 
               <td className="px-5 py-4">{source.endpoint}</td>
 
               <td className="px-5 py-4">
-                <span className="rounded bg-slate-100 px-2 py-1 text-[10px] font-bold">
+                <span className="rounded bg-gray-100 px-2 py-1 text-[10px] font-bold">
                   {source.interval}
                 </span>
               </td>
@@ -356,7 +356,7 @@ const AdminPipelinesPage = () => {
                   <button
                     onClick={() => runSourceSync(source)}
                     disabled={isSyncing}
-                    className="font-bold text-[#0b6fb8] disabled:text-slate-400"
+                    className="font-bold text-indigo-700 disabled:text-gray-400"
                   >
                     ↻ Sync Now
                   </button>
@@ -365,12 +365,12 @@ const AdminPipelinesPage = () => {
                     type="button"
                     onClick={() => toggleSourceStatus(source.id)}
                     className={`h-5 w-10 rounded-full p-0.5 transition ${
-                      source.status === 'ACTIVE' ? 'bg-emerald-200' : 'bg-slate-200'
+                      source.status === 'ACTIVE' ? 'bg-emerald-200' : 'bg-gray-200'
                     }`}
                   >
                     <span
                       className={`block h-4 w-4 rounded-full bg-white shadow transition ${
-                        source.status === 'ACTIVE' ? 'translate-x-5' : ''
+                        source.status === 'ACTIVE' ? 'trangray-x-5' : ''
                       }`}
                     />
                   </button>
@@ -396,21 +396,21 @@ const AdminPipelinesPage = () => {
           action={
             <button
               onClick={clearEmptyLogs}
-              className="rounded-md border border-slate-300 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 hover:bg-slate-50"
+              className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-xs font-bold text-gray-600 hover:bg-gray-50"
             >
               Clear 0-paper logs
             </button>
           }
         >
-          <div className="divide-y divide-slate-100 px-5">
+          <div className="divide-y divide-gray-100 px-5">
             {history.map((event, index) => (
               <div
                 key={`${event.title}-${event.time}-${index}`}
                 className="flex items-center justify-between py-4"
               >
                 <div>
-                  <p className="text-sm font-bold text-slate-800">{event.title}</p>
-                  <p className="text-xs text-slate-500">{event.time}</p>
+                  <p className="text-sm font-bold text-gray-800">{event.title}</p>
+                  <p className="text-xs text-gray-500">{event.time}</p>
                 </div>
 
                 <div className="flex items-center gap-2">
@@ -436,7 +436,7 @@ const AdminPipelinesPage = () => {
                   {event.id != null && event.status !== 'RUNNING' && (
                     <button
                       onClick={() => openDetail(event)}
-                      className="rounded border border-slate-300 px-3 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                      className="rounded border border-gray-300 px-3 py-1 text-xs font-bold text-gray-700 hover:bg-gray-50"
                     >
                       Detail
                     </button>
@@ -459,31 +459,31 @@ const AdminPipelinesPage = () => {
         <AdminSectionCard
           title="OpenAlex Access"
           action={
-            <span className="shrink-0 rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+            <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide text-gray-500">
               Read-only
             </span>
           }
         >
           <div className="space-y-2 p-5">
-            <div className="flex items-center justify-between border-b border-slate-100 py-2">
-              <span className="text-sm text-slate-500">Access mode</span>
-              <span className="text-sm font-semibold text-slate-800">Polite pool (via contact email)</span>
+            <div className="flex items-center justify-between border-b border-gray-100 py-2">
+              <span className="text-sm text-gray-500">Access mode</span>
+              <span className="text-sm font-semibold text-gray-800">Polite pool (via contact email)</span>
             </div>
-            <div className="flex items-center justify-between border-b border-slate-100 py-2">
-              <span className="text-sm text-slate-500">Base URL</span>
-              <span className="text-sm font-semibold text-slate-800 break-all">{openAlexBaseUrl || '—'}</span>
+            <div className="flex items-center justify-between border-b border-gray-100 py-2">
+              <span className="text-sm text-gray-500">Base URL</span>
+              <span className="text-sm font-semibold text-gray-800 break-all">{openAlexBaseUrl || '—'}</span>
             </div>
-            <div className="flex items-center justify-between border-b border-slate-100 py-2">
-              <span className="text-sm text-slate-500">Contact email</span>
-              <span className="text-sm font-semibold text-slate-800 break-all">{maskEmail(openAlexEmail)}</span>
+            <div className="flex items-center justify-between border-b border-gray-100 py-2">
+              <span className="text-sm text-gray-500">Contact email</span>
+              <span className="text-sm font-semibold text-gray-800 break-all">{maskEmail(openAlexEmail)}</span>
             </div>
             <div className="flex items-center justify-between py-2">
-              <span className="text-sm text-slate-500">Status</span>
-              <span className={`text-sm font-semibold ${openAlexConfigured ? 'text-emerald-600' : 'text-slate-400'}`}>
+              <span className="text-sm text-gray-500">Status</span>
+              <span className={`text-sm font-semibold ${openAlexConfigured ? 'text-emerald-600' : 'text-gray-400'}`}>
                 {openAlexConfigured ? '✓ Configured' : '✗ Not configured'}
               </span>
             </div>
-            <p className="pt-1 text-xs text-slate-400">
+            <p className="pt-1 text-xs text-gray-400">
               OpenAlex requires no API key — requests use the polite pool via a contact email.
             </p>
           </div>
@@ -499,14 +499,14 @@ const AdminPipelinesPage = () => {
           <>
             <button
               onClick={() => setShowAddSourceModal(false)}
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700"
+              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700"
             >
               Cancel
             </button>
 
             <button
               onClick={addSource}
-              className="rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white"
+              className="rounded-md bg-indigo-700 px-4 py-2 text-xs font-bold text-white"
             >
               Add Source
             </button>
@@ -515,7 +515,7 @@ const AdminPipelinesPage = () => {
       >
         <div className="space-y-4">
           <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">
+            <label className="mb-1 block text-xs font-bold text-gray-700">
               Engine Name
             </label>
             <input
@@ -527,12 +527,12 @@ const AdminPipelinesPage = () => {
                 }))
               }
               placeholder="Example: Semantic Scholar API"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">
+            <label className="mb-1 block text-xs font-bold text-gray-700">
               Endpoint Base URL
             </label>
             <input
@@ -544,12 +544,12 @@ const AdminPipelinesPage = () => {
                 }))
               }
               placeholder="Example: api.semanticscholar.org/graph/v1/paper/search"
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-bold text-slate-700">
+            <label className="mb-1 block text-xs font-bold text-gray-700">
               Sync Interval
             </label>
             <select
@@ -560,7 +560,7 @@ const AdminPipelinesPage = () => {
                   interval: event.target.value,
                 }))
               }
-              className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-indigo-700"
             >
               <option value="Every 6h">Every 6h</option>
               <option value="Daily">Daily</option>
@@ -575,22 +575,22 @@ const AdminPipelinesPage = () => {
         title={`Bài báo đã sync — ${detailTitle}`}
         subtitle="Các bài được thêm trong khung thời gian của lần sync này."
         onClose={() => setDetailOpen(false)}
-        footer={<button onClick={() => setDetailOpen(false)} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Close</button>}
+        footer={<button onClick={() => setDetailOpen(false)} className="rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700">Close</button>}
       >
         {detailLoading ? (
-          <p className="text-sm text-slate-500">Đang tải…</p>
+          <p className="text-sm text-gray-500">Đang tải…</p>
         ) : detailPapers.length === 0 ? (
-          <p className="text-sm text-slate-500">Không có bài nào được thêm trong lần sync này.</p>
+          <p className="text-sm text-gray-500">Không có bài nào được thêm trong lần sync này.</p>
         ) : (
           <div className="max-h-[60vh] overflow-auto">
-            <p className="mb-2 text-xs font-semibold text-slate-500">{detailPapers.length} bài</p>
+            <p className="mb-2 text-xs font-semibold text-gray-500">{detailPapers.length} bài</p>
             <ul className="space-y-2">
               {detailPapers.map((p) => (
-                <li key={p.paperId} className="rounded border border-slate-100 p-2">
-                  <p className="text-sm font-medium text-slate-800">{p.title}</p>
-                  <p className="text-xs text-slate-500">
+                <li key={p.paperId} className="rounded border border-gray-100 p-2">
+                  <p className="text-sm font-medium text-gray-800">{p.title}</p>
+                  <p className="text-xs text-gray-500">
                     {p.publicationYear ?? '—'} · {p.openAlexId ?? p.paperId}
-                    {p.sourceUrl && (<> · <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="text-[#0b6fb8] underline">OpenAlex</a></>)}
+                    {p.sourceUrl && (<> · <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="text-indigo-700 underline">OpenAlex</a></>)}
                   </p>
                 </li>
               ))}
@@ -604,36 +604,36 @@ const AdminPipelinesPage = () => {
         title="Live Sync Monitor"
         subtitle="Realtime — only NEWLY synced papers (matches Detail): time · paper · status."
         onClose={closeLive}
-        footer={<button onClick={closeLive} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Close</button>}
+        footer={<button onClick={closeLive} className="rounded-md border border-gray-300 bg-white px-4 py-2 text-xs font-bold text-gray-700">Close</button>}
       >
         {!live ? (
-          <p className="text-sm text-slate-500">Connecting…</p>
+          <p className="text-sm text-gray-500">Connecting…</p>
         ) : (
           <div>
             <div className="mb-3 flex flex-wrap items-center gap-4 text-xs font-semibold">
               <span className={live.isRunning ? 'text-sky-700' : 'text-emerald-700'}>{live.isRunning ? '● RUNNING' : '✓ FINISHED'}</span>
-              <span className="text-slate-600">Total: {live.total}</span>
+              <span className="text-gray-600">Total: {live.total}</span>
               <span className="text-emerald-700">Added: {live.added}</span>
-              <span className="text-slate-500">Exists: {live.exists}</span>
+              <span className="text-gray-500">Exists: {live.exists}</span>
               <span className="text-red-600">Errors: {live.errors}</span>
             </div>
-            <div className="max-h-[55vh] overflow-auto rounded border border-slate-100">
+            <div className="max-h-[55vh] overflow-auto rounded border border-gray-100">
               <table className="w-full text-left text-xs">
-                <thead className="sticky top-0 bg-slate-50 text-slate-500">
+                <thead className="sticky top-0 bg-gray-50 text-gray-500">
                   <tr><th className="px-2 py-1">Time</th><th className="px-2 py-1">Paper</th><th className="px-2 py-1">Status</th></tr>
                 </thead>
                 <tbody>
                   {[...live.entries].reverse().map((e, i) => (
-                    <tr key={i} className="border-t border-slate-100">
-                      <td className="whitespace-nowrap px-2 py-1 text-slate-500">{new Date(e.time).toLocaleTimeString()}</td>
-                      <td className="px-2 py-1 text-slate-800">{e.title}</td>
+                    <tr key={i} className="border-t border-gray-100">
+                      <td className="whitespace-nowrap px-2 py-1 text-gray-500">{new Date(e.time).toLocaleTimeString()}</td>
+                      <td className="px-2 py-1 text-gray-800">{e.title}</td>
                       <td className="px-2 py-1"><span className={liveStatusColor(e.status)}>{e.status}</span></td>
                     </tr>
                   ))}
                 </tbody>
               </table>
               {live.entries.length === 0 && (
-                <p className="p-2 text-sm text-slate-500">{live.isRunning ? 'Waiting for the first newly synced paper…' : 'No new papers were added in this run.'}</p>
+                <p className="p-2 text-sm text-gray-500">{live.isRunning ? 'Waiting for the first newly synced paper…' : 'No new papers were added in this run.'}</p>
               )}
             </div>
           </div>
