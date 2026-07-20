@@ -58,7 +58,6 @@ const AdminPipelinesPage = () => {
 
   // ----- SCImago journal-ranking import (upload file CSV: kéo-thả hoặc chọn file) -----
   const [scimagoBusy, setScimagoBusy] = useState(false);
-  const [scimagoDrag, setScimagoDrag] = useState(false);
   const scimagoInputRef = useRef<HTMLInputElement | null>(null);
 
   const runScimagoUpload = async (file: File) => {
@@ -278,7 +277,7 @@ const AdminPipelinesPage = () => {
         title="SCImago Journal Ranking Import"
         subtitle="Upload a SCImago CSV to update journal quartile / impact factor / H-index (matched by ISSN)"
       >
-        <div className="p-5">
+        <div className="flex flex-col gap-2 p-5">
           <input
             ref={scimagoInputRef}
             type="file"
@@ -286,40 +285,18 @@ const AdminPipelinesPage = () => {
             className="hidden"
             onChange={(e) => { const f = e.target.files?.[0]; if (f) runScimagoUpload(f); }}
           />
-          <div
-            onClick={() => !scimagoBusy && scimagoInputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setScimagoDrag(true); }}
-            onDragLeave={() => setScimagoDrag(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setScimagoDrag(false);
-              const f = e.dataTransfer.files?.[0];
-              if (f && !scimagoBusy) runScimagoUpload(f);
-            }}
-            className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed px-6 py-10 text-center transition ${
-              scimagoDrag ? 'border-[#0b6fb8] bg-sky-50' : 'border-slate-300 bg-slate-50 hover:bg-slate-100'
-            } ${scimagoBusy ? 'pointer-events-none opacity-60' : ''}`}
+          <button
+            type="button"
+            onClick={() => scimagoInputRef.current?.click()}
+            disabled={scimagoBusy}
+            className="w-fit rounded-md bg-[#062b4f] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
           >
-            <svg className="h-8 w-8 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5m-13.5-9L12 3m0 0 4.5 4.5M12 3v13.5" />
-            </svg>
-            {scimagoBusy ? (
-              <p className="text-sm font-bold text-slate-600">Importing…</p>
-            ) : (
-              <>
-                <p className="text-sm font-bold text-slate-700">Drag &amp; drop a CSV file here</p>
-                <p className="text-xs text-slate-400">or</p>
-                <button
-                  type="button"
-                  onClick={(e) => { e.stopPropagation(); scimagoInputRef.current?.click(); }}
-                  className="rounded-md bg-[#062b4f] px-4 py-2 text-xs font-bold text-white"
-                >
-                  Browse files
-                </button>
-                <p className="mt-1 text-[11px] text-slate-400">Only .csv files are accepted (SCImago format)</p>
-              </>
-            )}
-          </div>
+            {scimagoBusy ? 'Importing…' : 'Choose CSV file to import'}
+          </button>
+          <p className="text-[11px] text-slate-400">
+            Only .csv files (SCImago format). Matching journals (by ISSN) get their quartile,
+            impact factor and H-index updated.
+          </p>
         </div>
       </AdminSectionCard>
 
