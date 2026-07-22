@@ -9,21 +9,54 @@ import {
   getKeywords,
   createPaperFromLink,
   createPaper,
+  deletePaperApi,
+  createKeywordApi,
+  deleteKeywordApi,
   type RepositoryCategory,
   type RepositoryPaper,
 } from '../../lib/api/admin';
+import { suggestKeywords } from '../../lib/api/mindmap';
 import { ApiError } from '../../lib/http';
 
 const AdminRepositoryPage = () => {
   const [activeTab, setActiveTab] = useState<'papers' | 'keywords'>('papers');
   const [keywords, setKeywords] = useState<RepositoryCategory[]>([]);
   const [papers, setPapers] = useState<RepositoryPaper[]>([]);
-  useEffect(() => {
-    getPapers().then(setPapers).catch(() => setPapers([]));
-    getKeywords().then(setKeywords).catch(() => setKeywords([]));
-  }, []);
   const [query, setQuery] = useState('');
   const [keywordQuery, setKeywordQuery] = useState('');
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+
+  // Debounced server-side paper search across ENTIRE database
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      getPapers(1, 200, query).then(setPapers).catch(() => setPapers([]));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Debounced server-side keyword search across ENTIRE database
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      getKeywords(1, 100, keywordQuery).then(setKeywords).catch(() => setKeywords([]));
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [keywordQuery]);
+
+  // Autocomplete keyword suggestions API call (reusing suggestKeywords)
+  useEffect(() => {
+    const term = query.trim();
+    if (term.length < 2) {
+      setSuggestions([]);
+      return;
+    }
+    const id = setTimeout(() => {
+      suggestKeywords(term, 8)
+        .then(setSuggestions)
+        .catch(() => setSuggestions([]));
+    }, 200);
+    return () => clearTimeout(id);
+  }, [query]);
   const [showKeywordModal, setShowKeywordModal] = useState(false);
   const [keywordName, setKeywordName] = useState('');
   const [keywordDescription, setKeywordDescription] = useState('');
@@ -34,38 +67,67 @@ const AdminRepositoryPage = () => {
   const [addMode, setAddMode] = useState<'link' | 'manual'>('link');
   const [addLink, setAddLink] = useState('');
   const [mTitle, setMTitle] = useState('');
+  const [mDoi, setMDoi] = useState('');
+  const [mOpenAlexId, setMOpenAlexId] = useState('');
+  const [mSourceUrl, setMSourceUrl] = useState('');
   const [mJournal, setMJournal] = useState('');
   const [mYear, setMYear] = useState('');
+  const [mPubDate, setMPubDate] = useState('');
+  const [mCitations, setMCitations] = useState('');
   const [mAuthors, setMAuthors] = useState('');
   const [mKeywords, setMKeywords] = useState('');
   const [mTopic, setMTopic] = useState('');
   const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState<string | null>(null);
 
   const reloadPapers = () => getPapers().then(setPapers).catch(() => { });
 
   const submitAdd = async () => {
     setAdding(true);
+    setAddError(null);
     try {
       if (addMode === 'link') {
-        if (!addLink.trim()) { setToast('Enter an OpenAlex or DOI link.'); setAdding(false); return; }
+        if (!addLink.trim()) {
+          setAddError('Please enter an OpenAlex or DOI link.');
+          setAdding(false);
+          return;
+        }
         await createPaperFromLink(addLink.trim());
       } else {
-        if (!mTitle.trim()) { setToast('Paper title is required.'); setAdding(false); return; }
+        if (!mTitle.trim()) {
+          setAddError('Paper title is required.');
+          setAdding(false);
+          return;
+        }
         await createPaper({
           title: mTitle.trim(),
+          doi: mDoi.trim() || undefined,
+          openAlexId: mOpenAlexId.trim() || undefined,
+          sourceUrl: mSourceUrl.trim() || undefined,
+          publicationDate: mPubDate.trim() || undefined,
+          publicationYear: mPubDate.trim() ? new Date(mPubDate).getFullYear() : (mYear.trim() ? Number(mYear) : undefined),
+          citationCount: mCitations.trim() ? Number(mCitations) : 0,
           journalName: mJournal.trim() || undefined,
-          publicationYear: mYear.trim() ? Number(mYear) : undefined,
           topic: mTopic.trim() || undefined,
-          authors: mAuthors.split(',').map((s) => s.trim()).filter(Boolean),
-          keywords: mKeywords.split(',').map((s) => s.trim()).filter(Boolean),
+          authors: mAuthors.split(/[,;]/).map((s) => s.trim()).filter(Boolean),
+          keywords: mKeywords.split(/[,;]/).map((s) => s.trim()).filter(Boolean),
         });
       }
       setToast('Paper added successfully.');
       setShowAddModal(false);
       setAddLink(''); setMTitle(''); setMJournal(''); setMYear(''); setMAuthors(''); setMKeywords(''); setMTopic('');
+      setMDoi(''); setMOpenAlexId(''); setMSourceUrl(''); setMPubDate(''); setMCitations('');
+      setAddError(null);
       reloadPapers();
+      setTimeout(() => {
+        window.location.reload();
+      }, 500);
     } catch (e) {
-      setToast(e instanceof ApiError ? e.message : 'Failed to add paper (invalid link or duplicate).');
+      const errorMsg = e instanceof ApiError
+        ? e.message
+        : 'Warning: Failed to add paper. This paper may already exist in the system (duplicate title, DOI, or OpenAlex ID).';
+      setAddError(errorMsg);
+      setToast(errorMsg);
     } finally {
       setAdding(false);
     }
@@ -83,61 +145,44 @@ const AdminRepositoryPage = () => {
       .includes(keywordQuery.trim().toLowerCase()),
   );
 
-  const exportRepository = () => {
-    const content = papers
-      .map((paper) => `${paper.id} ${paper.title} ${paper.authors} ${paper.doi} ${paper.journal} ${paper.year} ${paper.citations}`)
-      .join('\n');
 
-    const blob = new Blob(
-      [`ID,Title,Journal,Year,Citations,DOI\n${content}`],
-      { type: 'text/csv;charset=utf-8;' },
-    );
-
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-
-    anchor.href = url;
-    anchor.download = 'article-repository.csv';
-    anchor.click();
-
-    URL.revokeObjectURL(url);
-    setToast('Article repository exported.');
+  const handleDeletePaper = async (paperId: string, title: string) => {
+    if (!window.confirm(`Are you sure you want to delete paper:\n"${title}"?`)) return;
+    try {
+      await deletePaperApi(paperId);
+      setToast(`Paper deleted successfully: "${title}"`);
+      reloadPapers();
+    } catch (e) {
+      setToast(`Failed to delete paper: "${title}"`);
+    }
   };
 
-  const createKeyword = () => {
+  const createKeyword = async () => {
     if (!keywordName.trim()) {
       setToast('Keyword name is required.');
       return;
     }
-
-    const nextKeyword: RepositoryCategory = {
-      id: `KEY-${String(keywords.length + 1).padStart(3, '0')}`,
-      name: keywordName.trim(),
-      description: keywordDescription.trim() || 'New keyword used for trend tracking',
-      fields: 0,
-      status: 'DRAFT',
-    };
-
-    setKeywords((current) => [...current, nextKeyword]);
-    setKeywordName('');
-    setKeywordDescription('');
-    setShowKeywordModal(false);
-    setToast('New keyword created.');
+    try {
+      await createKeywordApi(keywordName.trim());
+      setKeywordName('');
+      setKeywordDescription('');
+      setShowKeywordModal(false);
+      setToast('New keyword created successfully.');
+      getKeywords().then(setKeywords).catch(() => { });
+    } catch (e) {
+      setToast(e instanceof ApiError ? e.message : 'Failed to create keyword (may already exist).');
+    }
   };
 
-  const toggleKeywordStatus = (keywordId: string) => {
-    setKeywords((current) =>
-      current.map((keyword) =>
-        keyword.id === keywordId
-          ? {
-            ...keyword,
-            status: keyword.status === 'DISMISSED' ? 'ACTIVE' : 'DISMISSED',
-          }
-          : keyword,
-      ),
-    );
-
-    setToast('Keyword status updated.');
+  const handleDeleteKeyword = async (keywordId: string, name: string) => {
+    if (!window.confirm(`Are you sure you want to delete keyword:\n"${name}"?`)) return;
+    try {
+      await deleteKeywordApi(keywordId);
+      setToast('Keyword deleted successfully.');
+      getKeywords().then(setKeywords).catch(() => { });
+    } catch (e) {
+      setToast('Failed to delete keyword.');
+    }
   };
 
   return (
@@ -156,14 +201,7 @@ const AdminRepositoryPage = () => {
 
         <div className="flex gap-3">
           <button
-            onClick={exportRepository}
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-[#0b6fb8]"
-          >
-            ⇩ Export
-          </button>
-
-          <button
-            onClick={() => setShowAddModal(true)}
+            onClick={() => { setShowAddModal(true); setAddError(null); }}
             className="rounded-md bg-[#4338ca] hover:bg-[#3730a3] px-4 py-2 text-xs font-bold text-white"
           >
             + Add Paper
@@ -199,13 +237,13 @@ const AdminRepositoryPage = () => {
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Filter by title, journal, year, citation or DOI..."
-              className="w-72 rounded-md border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#0b6fb8]"
+              placeholder="Search database by title, author, journal, DOI..."
+              className="w-80 rounded-md border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#0b6fb8]"
             />
           }
         >
-          <AdminTable headers={['Paper ID', 'Title', 'Authors', 'Journal', 'Year', 'Citations', 'DOI']}>
-            {filteredPapers.map((paper) => (
+          <AdminTable headers={['Paper ID', 'Title', 'Authors', 'Journal', 'Year', 'Citations', 'DOI', 'Actions']}>
+            {papers.map((paper) => (
               <tr key={paper.id} className="hover:bg-slate-50">
                 <td className="px-5 py-4 font-bold text-slate-700">
                   {paper.id}
@@ -243,6 +281,15 @@ const AdminRepositoryPage = () => {
                     {paper.doi}
                   </a>
                 </td>
+
+                <td className="px-5 py-4">
+                  <button
+                    onClick={() => handleDeletePaper(paper.id, paper.title)}
+                    className="text-xs font-bold text-rose-600 hover:text-rose-800 hover:underline"
+                  >
+                    Delete
+                  </button>
+                </td>
               </tr>
             ))}
           </AdminTable>
@@ -256,7 +303,7 @@ const AdminRepositoryPage = () => {
               <input
                 value={keywordQuery}
                 onChange={(event) => setKeywordQuery(event.target.value)}
-                placeholder="Filter by keyword name, ID, description or status..."
+                placeholder="Search keywords in database..."
                 className="w-72 rounded-md border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#0b6fb8]"
               />
 
@@ -271,7 +318,7 @@ const AdminRepositoryPage = () => {
           }
         >
           <AdminTable headers={['Keyword ID', 'Keyword Name', 'Description', 'Related Papers', 'Status', 'Actions']}>
-            {filteredKeywords.map((keyword) => (
+            {keywords.map((keyword) => (
               <tr key={keyword.id} className={`hover:bg-slate-50 ${keyword.status === 'DISMISSED' ? 'opacity-50' : ''}`} >
                 <td className="px-5 py-5 font-bold text-slate-500">{keyword.id}</td>
 
@@ -294,14 +341,10 @@ const AdminRepositoryPage = () => {
 
                 <td className="px-5 py-5">
                   <button
-                    onClick={() => toggleKeywordStatus(keyword.id)}
-                    className={
-                      keyword.status === 'DISMISSED'
-                        ? 'text-xs font-bold text-emerald-700 hover:underline'
-                        : 'text-xs font-bold text-orange-700 hover:underline'
-                    }
+                    onClick={() => handleDeleteKeyword(keyword.id, keyword.name)}
+                    className="text-xs font-bold text-rose-600 hover:text-rose-800 hover:underline"
                   >
-                    {keyword.status === 'DISMISSED' ? 'Restore' : 'Disable'}
+                    Delete
                   </button>
                 </td>
               </tr>
@@ -376,9 +419,17 @@ const AdminRepositoryPage = () => {
         }
       >
         <div className="space-y-3">
+          {addError && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-300 bg-amber-50 p-3 text-xs font-semibold text-amber-900">
+              <span className="text-base leading-none text-amber-600">⚠️</span>
+              <div className="flex-1">{addError}</div>
+              <button type="button" onClick={() => setAddError(null)} className="font-bold text-amber-500 hover:text-amber-800">×</button>
+            </div>
+          )}
+
           <div className="flex gap-2">
-            <button onClick={() => setAddMode('link')} className={`rounded-md px-3 py-1.5 text-xs font-bold ${addMode === 'link' ? 'bg-[#4338ca] text-white' : 'bg-slate-100 text-slate-600'}`}>From link (OpenAlex/DOI)</button>
-            <button onClick={() => setAddMode('manual')} className={`rounded-md px-3 py-1.5 text-xs font-bold ${addMode === 'manual' ? 'bg-[#4338ca] text-white' : 'bg-slate-100 text-slate-600'}`}>Manual</button>
+            <button onClick={() => { setAddMode('link'); setAddError(null); }} className={`rounded-md px-3 py-1.5 text-xs font-bold ${addMode === 'link' ? 'bg-[#4338ca] text-white' : 'bg-slate-100 text-slate-600'}`}>From link (OpenAlex/DOI)</button>
+            <button onClick={() => { setAddMode('manual'); setAddError(null); }} className={`rounded-md px-3 py-1.5 text-xs font-bold ${addMode === 'manual' ? 'bg-[#4338ca] text-white' : 'bg-slate-100 text-slate-600'}`}>Manual</button>
           </div>
 
           {addMode === 'link' ? (
@@ -395,11 +446,22 @@ const AdminRepositoryPage = () => {
           ) : (
             <div className="space-y-2">
               <input value={mTitle} onChange={(e) => setMTitle(e.target.value)} placeholder="Paper title (required)" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
+
               <div className="grid grid-cols-2 gap-2">
-                <input value={mJournal} onChange={(e) => setMJournal(e.target.value)} placeholder="Journal" className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
-                <input value={mYear} onChange={(e) => setMYear(e.target.value)} placeholder="Year (e.g. 2025)" inputMode="numeric" className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
+                <input value={mDoi} onChange={(e) => setMDoi(e.target.value)} placeholder="DOI (e.g. 10.1016/j.artint...)" className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
+                <input value={mOpenAlexId} onChange={(e) => setMOpenAlexId(e.target.value)} placeholder="OpenAlex ID (e.g. W3123456789)" className="rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
               </div>
-              <input value={mTopic} onChange={(e) => setMTopic(e.target.value)} placeholder="Topic (chủ đề — dùng cho thông báo follower)" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
+
+              <input value={mSourceUrl} onChange={(e) => setMSourceUrl(e.target.value)} placeholder="Source URL (Original paper link)" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
+
+              <div className="grid grid-cols-4 gap-2">
+                <input value={mJournal} onChange={(e) => setMJournal(e.target.value)} placeholder="Journal" className="col-span-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
+                <input value={mYear} onChange={(e) => setMYear(e.target.value)} placeholder="Year (e.g. 2025)" inputMode="numeric" className="col-span-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
+                <input type="date" value={mPubDate} onChange={(e) => setMPubDate(e.target.value)} placeholder="Exact Date" className="col-span-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
+                <input value={mCitations} onChange={(e) => setMCitations(e.target.value)} placeholder="Citations (e.g. 25520)" inputMode="numeric" className="col-span-1 rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
+              </div>
+
+              <input value={mTopic} onChange={(e) => setMTopic(e.target.value)} placeholder="Topic (used for follower notifications)" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
               <input value={mAuthors} onChange={(e) => setMAuthors(e.target.value)} placeholder="Authors (comma-separated)" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
               <input value={mKeywords} onChange={(e) => setMKeywords(e.target.value)} placeholder="Keywords (comma-separated)" className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#4338ca]" />
             </div>

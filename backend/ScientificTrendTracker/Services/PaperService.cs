@@ -37,7 +37,15 @@ namespace ScientificTrendTracker.Services
 
             if (!string.IsNullOrWhiteSpace(search))
             {
-                query = query.Where(p => p.Title.Contains(search.Trim()));
+                var s = search.Trim();
+                query = query.Where(p =>
+                    p.Title.Contains(s) ||
+                    (p.Doi != null && p.Doi.Contains(s)) ||
+                    (p.OpenAlexId != null && p.OpenAlexId.Contains(s)) ||
+                    p.PaperId.Contains(s) ||
+                    (p.Journal != null && p.Journal.JournalName.Contains(s)) ||
+                    p.PaperAuthors.Any(pa => pa.Author.FullName.Contains(s))
+                );
             }
 
             if (year.HasValue)
@@ -60,6 +68,8 @@ namespace ScientificTrendTracker.Services
                 {
                     PaperId = p.PaperId,
                     Title = p.Title,
+                    Doi = p.Doi ?? "",
+                    Authors = string.Join(", ", p.PaperAuthors.OrderBy(pa => pa.AuthorOrder).Select(pa => pa.Author.FullName)),
                     PublicationYear = p.PublicationYear,
                     CitationCount = p.CitationCount,
                     JournalName = p.Journal != null ? p.Journal.JournalName : "Unknown",
@@ -109,13 +119,19 @@ namespace ScientificTrendTracker.Services
 
         public async Task<bool> CreatePaperAsync(CreatePaperDto dto, CancellationToken ct)
         {
-            // Kiểm tra trùng tiêu đề bài báo
-            bool isDuplicate = await _dbContext.ResearchPapers
-                .AnyAsync(p => p.Title.ToLower() == dto.Title.Trim().ToLower(), ct);
+            var trimmedTitle = dto.Title.Trim().ToLower();
+            var trimmedDoi = dto.Doi?.Trim();
+            var trimmedOpenAlexId = string.IsNullOrWhiteSpace(dto.OpenAlexId) ? null : dto.OpenAlexId.Trim();
+
+            // Kiểm tra trùng bài báo đa lớp: Tiêu đề OR Mã DOI OR OpenAlex ID
+            bool isDuplicate = await _dbContext.ResearchPapers.AnyAsync(p =>
+                p.Title.ToLower() == trimmedTitle ||
+                (!string.IsNullOrEmpty(trimmedDoi) && p.Doi == trimmedDoi) ||
+                (!string.IsNullOrEmpty(trimmedOpenAlexId) && p.OpenAlexId == trimmedOpenAlexId), ct);
 
             if (isDuplicate)
             {
-                _logger.LogWarning("Tạo bài báo thất bại: Tiêu đề '{Title}' đã tồn tại.", dto.Title);
+                _logger.LogWarning("Tạo bài báo thất bại: Bài báo đã tồn tại trong hệ thống (Tiêu đề '{Title}', DOI '{Doi}', hoặc OpenAlexId '{OpenAlexId}').", dto.Title, dto.Doi, dto.OpenAlexId);
                 return false;
             }
 
@@ -129,6 +145,7 @@ namespace ScientificTrendTracker.Services
                 Doi = dto.Doi?.Trim(),
                 PublicationYear = dto.PublicationYear,
                 PublicationDate = dto.PublicationDate,
+                CitationCount = dto.CitationCount,
                 SourceUrl = dto.SourceUrl?.Trim(),
                 OpenAlexId = string.IsNullOrWhiteSpace(dto.OpenAlexId) ? null : dto.OpenAlexId.Trim(),
                 Topic = string.IsNullOrWhiteSpace(dto.Topic) ? null : dto.Topic.Trim(),
@@ -310,6 +327,7 @@ namespace ScientificTrendTracker.Services
                 Doi = string.IsNullOrWhiteSpace(work.Doi) ? null : work.Doi,
                 PublicationYear = work.PublicationYear,
                 PublicationDate = pubDate,
+                CitationCount = work.CitedByCount,
                 SourceUrl = work.Id, // URL OpenAlex của bài báo
                 // Lưu OpenAlexId (bỏ prefix URL) để Paper Detail enrich abstract/topic/institutions/OA on-demand
                 // — GIỐNG bài sync; nếu không có, màn chi tiết sẽ báo thiếu dữ liệu.
