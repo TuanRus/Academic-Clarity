@@ -20,6 +20,16 @@ namespace ScientificTrendTracker.Models.DTOs.Paper
         public string Title { get; set; }
 
         /// <summary>
+        /// Mã định danh tài liệu số (DOI).
+        /// </summary>
+        public string Doi { get; set; }
+
+        /// <summary>
+        /// Danh sách tên các tác giả bài báo (phân tách dấu phẩy).
+        /// </summary>
+        public string Authors { get; set; }
+
+        /// <summary>
         /// Năm xuất bản bài báo.
         /// </summary>
         public int? PublicationYear { get; set; }
@@ -148,6 +158,11 @@ namespace ScientificTrendTracker.Models.DTOs.Paper
         /// Ngày xuất bản chính xác.
         /// </summary>
         public DateTime? PublicationDate { get; set; }
+
+        /// <summary>
+        /// Số lượng trích dẫn hiện tại của bài báo (mặc định = 0).
+        /// </summary>
+        public int CitationCount { get; set; } = 0;
 
         /// <summary>
         /// Đường dẫn nguồn bài báo.

@@ -192,18 +192,18 @@ export async function importScimagoUpload(file: File): Promise<ScimagoImportResu
 }
 
 // ---- Papers (GET /admin/papers) ----
-interface BePaper { paperId: string; title: string; publicationYear: number; citationCount: number; journalName: string; }
-export async function getPapers(): Promise<RepositoryPaper[]> {
-  const res = await apiGet<Paged<BePaper>>('/admin/papers', { page: 1, pageSize: 50 });
+interface BePaper { paperId: string; title: string; doi?: string; authors?: string; publicationYear: number; citationCount: number; journalName: string; }
+export async function getPapers(page = 1, pageSize = 200, search = ''): Promise<RepositoryPaper[]> {
+  const res = await apiGet<Paged<BePaper>>('/admin/papers', { page, pageSize, search: search.trim() || undefined });
   return res.items.map((p) => ({
     id: p.paperId,
     title: p.title,
-    doi: '',
+    doi: p.doi || '',
     journal: p.journalName,
     year: p.publicationYear,
     citations: p.citationCount,
     status: 'ACTIVE',
-    authors: '', // BE /admin/papers chưa trả tác giả (leftover) → để trống
+    authors: p.authors || '',
   }));
 }
 
@@ -318,8 +318,8 @@ export function getSystemConfig(): Promise<SystemConfig> {
 
 // ---- Keywords (GET /admin/keywords) — cho tab Ontology của Article Repository ----
 interface BeKeyword { keywordId: string; keywordName: string; associatedPapersCount: number; createdAt: string; }
-export async function getKeywords(): Promise<RepositoryCategory[]> {
-  const res = await apiGet<Paged<BeKeyword>>('/admin/keywords', { page: 1, pageSize: 100 });
+export async function getKeywords(page = 1, pageSize = 100, search = ''): Promise<RepositoryCategory[]> {
+  const res = await apiGet<Paged<BeKeyword>>('/admin/keywords', { page, pageSize, search: search.trim() || undefined });
   return res.items.map((k) => ({
     id: k.keywordId,
     name: k.keywordName,
@@ -335,12 +335,36 @@ export function createPaperFromLink(link: string): Promise<unknown> {
   return apiPost('/admin/papers/from-link', { link });
 }
 export interface CreatePaperInput {
-  title: string; doi?: string; publicationYear?: number;
-  journalName?: string; authors?: string[]; keywords?: string[]; topic?: string;
+  title: string;
+  doi?: string;
+  openAlexId?: string;
+  sourceUrl?: string;
+  publicationYear?: number;
+  publicationDate?: string;
+  citationCount?: number;
+  journalName?: string;
+  authors?: string[];
+  keywords?: string[];
+  topic?: string;
 }
 /** POST /admin/papers — thêm bài báo tự nhập tay (title bắt buộc). */
 export function createPaper(input: CreatePaperInput): Promise<unknown> {
   return apiPost('/admin/papers', input);
+}
+
+/** DELETE /admin/papers/{id} — xoá bài báo khỏi CSDL. */
+export function deletePaperApi(paperId: string): Promise<unknown> {
+  return apiDelete(`/admin/papers/${paperId}`);
+}
+
+/** POST /admin/keywords — tạo từ khóa mới lưu vào CSDL. */
+export function createKeywordApi(keywordName: string): Promise<unknown> {
+  return apiPost('/admin/keywords', { keywordName });
+}
+
+/** DELETE /admin/keywords/{id} — xoá từ khóa khỏi CSDL. */
+export function deleteKeywordApi(keywordId: string): Promise<unknown> {
+  return apiDelete(`/admin/keywords/${keywordId}`);
 }
 
 // ---- Chạy sync OpenAlex thủ công (POST /admin/run-weekly-now) ----

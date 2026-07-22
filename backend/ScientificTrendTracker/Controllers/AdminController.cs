@@ -1041,7 +1041,7 @@ namespace ScientificTrendTracker.Controllers
             var success = await _paperService.CreatePaperAsync(dto, ct);
             if (!success)
             {
-                return BadRequest(ApiResponse<object>.Fail(400, "Failed to create paper. The paper title may already exist."));
+                return BadRequest(ApiResponse<object>.Fail(400, "Failed to create paper. The paper title, DOI, or OpenAlex ID already exists."));
             }
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
@@ -1110,6 +1110,9 @@ namespace ScientificTrendTracker.Controllers
         [HttpDelete("papers/{paperId}")]
         public async Task<IActionResult> DeletePaperAsync(string paperId, CancellationToken ct)
         {
+            var paper = await _dbContext.ResearchPapers.FirstOrDefaultAsync(p => p.PaperId == paperId, ct);
+            var paperTitle = paper?.Title ?? paperId;
+
             var success = await _paperService.DeletePaperAsync(paperId, ct);
             if (!success)
             {
@@ -1118,9 +1121,9 @@ namespace ScientificTrendTracker.Controllers
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "DELETE_PAPER", 
-                $"Manually deleted paper ID: {paperId}.", ip);
+                $"Manually deleted paper: '{paperTitle}'", ip);
 
-            return Ok(ApiResponse<object>.Ok(null, "Paper deleted successfully!"));
+            return Ok(ApiResponse<object>.Ok(null, $"Paper deleted successfully: '{paperTitle}'"));
         }
 
         #endregion
