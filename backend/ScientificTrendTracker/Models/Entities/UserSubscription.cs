@@ -33,6 +33,11 @@ public class UserSubscription
     public DateTime? EndsAt { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? UpdatedAt { get; set; }
+
+    /// <summary>
+    /// Mã đơn hàng duy nhất tương ứng từ PayOS để đối chiếu trạng thái giao dịch.
+    /// </summary>
+    public long? OrderCode { get; set; }
 }
 
 

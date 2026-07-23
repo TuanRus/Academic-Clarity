@@ -204,6 +204,10 @@ namespace ScientificTrendTracker.Services
                 if (link == null || link.Status != PaymentLinkStatus.Paid)
                 {
                     _logger.LogInformation("OrderCode {OrderCode} chưa PAID (status={Status}).", orderCode, link?.Status);
+                    if (link?.Status == PaymentLinkStatus.Cancelled)
+                    {
+                        await CancelPaymentByOrderCodeAsync(orderCode, currentUserId);
+                    }
                     return false;
                 }
 
@@ -214,6 +218,60 @@ namespace ScientificTrendTracker.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Lỗi xác nhận thanh toán theo orderCode {OrderCode}.", orderCode);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Cập nhật trạng thái giao dịch thành CANCELLED khi người dùng bấm Hủy hoặc hủy giao dịch trên PayOS.
+        /// </summary>
+        /// <param name="orderCode">Mã đơn PayOS cần hủy.</param>
+        /// <param name="currentUserId">ID của người dùng đang đăng nhập.</param>
+        /// <returns>True nếu đã ghi nhận trạng thái CANCELLED thành công.</returns>
+        public async Task<bool> CancelPaymentByOrderCodeAsync(long orderCode, int currentUserId)
+        {
+            try
+            {
+                var sub = await _context.UserSubscriptions
+                    .FirstOrDefaultAsync(s => s.OrderCode == orderCode && s.UserId == currentUserId);
+
+                if (sub != null)
+                {
+                    if (sub.Status != "ACTIVE")
+                    {
+                        sub.Status = "CANCELLED";
+                        sub.UpdatedAt = DateTime.UtcNow;
+                        await _context.SaveChangesAsync();
+                        _logger.LogInformation("Giao dịch đơn {OrderCode} của UserId {UserId} đã chuyển sang CANCELLED.", orderCode, currentUserId);
+                    }
+                    return true;
+                }
+
+                decimal paidAmount = 0;
+                if (_cache.TryGetValue(OrderCacheKey(orderCode), out (int userId, decimal amount) info) && info.userId == currentUserId)
+                {
+                    paidAmount = info.amount;
+                }
+
+                var cancelledSub = new UserSubscription
+                {
+                    UserId = currentUserId,
+                    PlanId = 1,
+                    PaidAmount = paidAmount,
+                    Status = "CANCELLED",
+                    OrderCode = orderCode,
+                    StartedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow
+                };
+                await _context.UserSubscriptions.AddAsync(cancelledSub);
+                await _context.SaveChangesAsync();
+
+                _logger.LogInformation("Đã ghi nhận giao dịch CANCELLED mới cho orderCode {OrderCode} của UserId {UserId}.", orderCode, currentUserId);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Lỗi xảy ra khi hủy giao dịch cho orderCode {OrderCode}.", orderCode);
                 return false;
             }
         }
@@ -249,21 +307,36 @@ namespace ScientificTrendTracker.Services
                 .MaxAsync(s => (DateTime?)s.EndsAt);
             var baseDate = currentEndsAt.HasValue && currentEndsAt.Value > now ? currentEndsAt.Value : now;
 
-            var newSubscription = new UserSubscription
+            var existingSub = await _context.UserSubscriptions
+                .FirstOrDefaultAsync(s => s.OrderCode == orderCode);
+
+            if (existingSub != null)
             {
-                UserId = userId,
-                PlanId = matchedPlan.PlanId,
-                PaidAmount = amountPaid, // số tiền THỰC TRẢ (đã áp ưu đãi edu), để log/doanh thu không lấy giá gốc
-                Status = "ACTIVE",
-                StartedAt = now,
-                EndsAt = baseDate.AddDays(matchedPlan.DurationDays),
-                CreatedAt = now
-            };
+                existingSub.Status = "ACTIVE";
+                existingSub.PaidAmount = amountPaid;
+                existingSub.StartedAt = now;
+                existingSub.EndsAt = baseDate.AddDays(matchedPlan.DurationDays);
+                existingSub.UpdatedAt = now;
+            }
+            else
+            {
+                var newSubscription = new UserSubscription
+                {
+                    UserId = userId,
+                    PlanId = matchedPlan.PlanId,
+                    PaidAmount = amountPaid,
+                    Status = "ACTIVE",
+                    OrderCode = orderCode,
+                    StartedAt = now,
+                    EndsAt = baseDate.AddDays(matchedPlan.DurationDays),
+                    CreatedAt = now
+                };
+                await _context.UserSubscriptions.AddAsync(newSubscription);
+            }
 
             user.RoleId = 2;
             user.UpdatedAt = DateTime.UtcNow;
 
-            await _context.UserSubscriptions.AddAsync(newSubscription);
             await _context.SaveChangesAsync();
 
             // Đánh dấu đơn đã xử lý (idempotent) — chặn webhook + return xử lý lại CÙNG đơn.
