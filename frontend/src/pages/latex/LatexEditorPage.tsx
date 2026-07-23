@@ -158,7 +158,7 @@ const LatexEditorPage = () => {
       <RequireFeature
         feature={FeaturePermission.LATEX_WRITER}
         featureLabel="LaTeX Writer"
-        description="Soạn bài nghiên cứu bằng LaTeX với PDF preview, check trùng ý tưởng và chèn citation tự động — dành cho tài khoản Premium."
+        description="Write research papers in LaTeX with PDF preview, check idea overlap, and insert citations automatically — available for Premium accounts."
       >
         <div className="grid gap-4 lg:grid-cols-2">
           {/* LEFT: LaTeX source editor */}

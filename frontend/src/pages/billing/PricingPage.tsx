@@ -69,7 +69,7 @@ const PricingPage = () => {
           <p className="mt-1 text-2xl font-bold text-gray-900">
             {premiumPrice}
             <span className="text-sm font-normal text-gray-500">
-              {cheapest ? ` / ${cheapest.durationDays} ngày` : ' / month'}
+              {cheapest ? ` / ${cheapest.durationDays} days` : ' / month'}
             </span>
           </p>
           {plans.length > 1 && (
