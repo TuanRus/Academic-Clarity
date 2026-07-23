@@ -10,6 +10,7 @@ import {
   getPlans,
   getSystemConfig,
   updatePlan,
+  togglePlan,
   type RevenueRow,
   type SubscriptionPlan,
 } from '../../lib/api/admin';
@@ -30,7 +31,10 @@ const AdminPaymentPage = () => {
   const [statusFilter, setStatusFilter] = useState<'ALL' | RevenueRow['status']>('ALL');
   const [selectedRow, setSelectedRow] = useState<RevenueRow | null>(null);
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
+  const [planName, setPlanName] = useState('');
   const [planPrice, setPlanPrice] = useState('');
+  const [planDuration, setPlanDuration] = useState('');
+  const [planIsActive, setPlanIsActive] = useState(true);
   const [toast, setToast] = useState<string | null>(null);
 
   const filteredRows =
@@ -84,7 +88,6 @@ const AdminPaymentPage = () => {
   };
 
   const refreshPayments = async () => {
-    // Tải lại dữ liệu giao dịch THẬT từ backend (trước đây bịa 1 giao dịch giả).
     try {
       setRows(await getTransactions());
       setToast('Payments refreshed.');
@@ -95,31 +98,48 @@ const AdminPaymentPage = () => {
 
   const openEditPlan = (plan: SubscriptionPlan) => {
     setEditingPlan(plan);
-    // Sửa trên số tiền thô (VND) để lưu backend chính xác, không phải chuỗi đã format.
+    setPlanName(plan.name);
     setPlanPrice(String(plan.priceAmount));
+    setPlanDuration(String(plan.durationDays));
+    setPlanIsActive(plan.status === 'ACTIVE');
   };
 
   const [savingPlan, setSavingPlan] = useState(false);
   const savePlan = async () => {
     if (!editingPlan) return;
     const amount = Number(planPrice);
+    const days = Number(planDuration);
+
+    if (!planName.trim()) { setToast('Plan name is required.'); return; }
     if (!Number.isFinite(amount) || amount < 0) { setToast('Enter a valid price (number in VND).'); return; }
+    if (!Number.isInteger(days) || days <= 0) { setToast('Enter valid duration days (positive integer).'); return; }
+
     setSavingPlan(true);
     try {
-      // Lưu THẬT xuống DB (PUT /admin/subscriptions/plans/{id}), rồi tải lại từ server.
       await updatePlan(editingPlan.id, {
-        planName: editingPlan.name,
+        planName: planName.trim(),
         priceAmount: amount,
-        durationDays: editingPlan.durationDays,
-        isActive: editingPlan.status === 'ACTIVE',
+        durationDays: days,
+        isActive: planIsActive,
       });
       setPlans(await getPlans());
       setEditingPlan(null);
-      setToast(`${editingPlan.name} price updated.`);
+      setToast(`Plan "${planName.trim()}" updated successfully.`);
     } catch (e) {
       setToast(e instanceof ApiError ? e.message : 'Failed to update plan.');
     } finally {
       setSavingPlan(false);
+    }
+  };
+
+  const handleTogglePlan = async (plan: SubscriptionPlan) => {
+    const nextStatus = plan.status !== 'ACTIVE';
+    try {
+      await togglePlan(plan.id, nextStatus);
+      setPlans(await getPlans());
+      setToast(`Plan "${plan.name}" status changed to ${nextStatus ? 'Active' : 'Inactive'}.`);
+    } catch (e) {
+      setToast(e instanceof ApiError ? e.message : 'Failed to change plan status.');
     }
   };
 
@@ -293,22 +313,24 @@ const AdminPaymentPage = () => {
                   <AdminBadge status={plan.status} />
                 </div>
 
-                <div className="mt-3 flex gap-2">
-                  {plan.id === 'PLAN-FREE' ? (
-                    <button
-                      onClick={() => setToast('Free plan is always enabled.')}
-                      className="rounded border border-slate-200 px-3 py-1 text-xs font-bold text-slate-700"
-                    >
-                      View
-                    </button>
-                  ) : (
-                    <button
-                      onClick={() => openEditPlan(plan)}
-                      className="rounded border border-slate-200 px-3 py-1 text-xs font-bold text-slate-700"
-                    >
-                      Edit Price
-                    </button>
-                  )}
+                <div className="mt-3 flex items-center gap-2">
+                  <button
+                    onClick={() => openEditPlan(plan)}
+                    className="rounded border border-slate-300 px-2.5 py-1 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                  >
+                    Edit Plan
+                  </button>
+
+                  <button
+                    onClick={() => handleTogglePlan(plan)}
+                    className={`rounded border px-2.5 py-1 text-xs font-bold ${
+                      plan.status === 'ACTIVE'
+                        ? 'border-amber-300 text-amber-700 hover:bg-amber-50'
+                        : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                    }`}
+                  >
+                    {plan.status === 'ACTIVE' ? 'Disable' : 'Enable'}
+                  </button>
                 </div>
               </div>
             ))}
@@ -361,7 +383,7 @@ const AdminPaymentPage = () => {
       <AdminModal
         open={Boolean(editingPlan)}
         title="Edit Subscription Plan"
-        subtitle="Update subscription plan pricing for premium checkout."
+        subtitle="Update plan name, pricing, duration, and active status."
         onClose={() => setEditingPlan(null)}
         footer={
           <>
@@ -375,28 +397,58 @@ const AdminPaymentPage = () => {
             <button
               onClick={savePlan}
               disabled={savingPlan}
-              className="rounded-md bg-[#062b4f] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+              className="rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
             >
-              {savingPlan ? 'Saving…' : 'Save Plan'}
+              {savingPlan ? 'Saving…' : 'Save Changes'}
             </button>
           </>
         }
       >
         {editingPlan && (
-          <div className="space-y-4">
-            <p className="text-sm font-bold text-slate-800">{editingPlan.name}</p>
-
+          <div className="space-y-3">
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-slate-500">Price (VND)</span>
+              <span className="mb-1 block text-xs font-semibold text-slate-600">Plan Name</span>
               <input
-                value={planPrice}
-                onChange={(event) => setPlanPrice(event.target.value)}
-                inputMode="numeric"
-                placeholder="e.g. 50000"
+                value={planName}
+                onChange={(event) => setPlanName(event.target.value)}
+                placeholder="e.g. Premium Monthly"
                 className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]"
               />
             </label>
-            <p className="text-xs text-slate-400">Duration: {editingPlan.duration} · Status: {editingPlan.status}</p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-slate-600">Price (VND)</span>
+                <input
+                  value={planPrice}
+                  onChange={(event) => setPlanPrice(event.target.value)}
+                  inputMode="numeric"
+                  placeholder="e.g. 50000"
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]"
+                />
+              </label>
+
+              <label className="block">
+                <span className="mb-1 block text-xs font-semibold text-slate-600">Duration (Days)</span>
+                <input
+                  value={planDuration}
+                  onChange={(event) => setPlanDuration(event.target.value)}
+                  inputMode="numeric"
+                  placeholder="e.g. 30"
+                  className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]"
+                />
+              </label>
+            </div>
+
+            <label className="flex items-center gap-2 pt-2">
+              <input
+                type="checkbox"
+                checked={planIsActive}
+                onChange={(e) => setPlanIsActive(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-300 text-[#4338ca]"
+              />
+              <span className="text-xs font-bold text-slate-700">Active (Visible for checkout)</span>
+            </label>
           </div>
         )}
       </AdminModal>
