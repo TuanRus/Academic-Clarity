@@ -392,18 +392,18 @@ const AdminPipelinesPage = () => {
 
       <AdminModal
         open={detailOpen}
-        title={`Bài báo đã sync — ${detailTitle}`}
-        subtitle="Các bài được thêm trong khung thời gian của lần sync này."
+        title={`Synced Papers — ${detailTitle}`}
+        subtitle="Papers imported during this synchronization run."
         onClose={() => setDetailOpen(false)}
         footer={<button onClick={() => setDetailOpen(false)} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700">Close</button>}
       >
         {detailLoading ? (
-          <p className="text-sm text-slate-500">Đang tải…</p>
+          <p className="text-sm text-slate-500">Loading…</p>
         ) : detailPapers.length === 0 ? (
-          <p className="text-sm text-slate-500">Không có bài nào được thêm trong lần sync này.</p>
+          <p className="text-sm text-slate-500">No papers were added in this run.</p>
         ) : (
           <div className="max-h-[60vh] overflow-auto">
-            <p className="mb-2 text-xs font-semibold text-slate-500">{detailPapers.length} bài</p>
+            <p className="mb-2 text-xs font-semibold text-slate-500">{detailPapers.length} paper(s)</p>
             <ul className="space-y-2">
               {detailPapers.map((p) => (
                 <li key={p.paperId} className="rounded border border-slate-100 p-2">

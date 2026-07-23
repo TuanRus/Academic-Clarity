@@ -64,7 +64,7 @@ const LatexListPage = () => {
       <RequireFeature
         feature={FeaturePermission.LATEX_WRITER}
         featureLabel="LaTeX Writer"
-        description="Soạn bài nghiên cứu bằng LaTeX với PDF preview, check trùng ý tưởng và chèn citation tự động — dành cho tài khoản Premium."
+        description="Write research papers in LaTeX with PDF preview, check idea overlap, and insert citations automatically — available for Premium accounts."
       >
         {/* Tài liệu lưu localStorage — nhắc user backup bằng Export */}
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
