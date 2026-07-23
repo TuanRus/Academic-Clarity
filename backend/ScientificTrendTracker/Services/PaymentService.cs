@@ -119,6 +119,22 @@ namespace ScientificTrendTracker.Services
                 // (cho phép thanh toán hoạt động mà KHÔNG cần webhook public). TTL 20 phút.
                 _cache.Set(OrderCacheKey(orderCode), (userId, (decimal)finalAmount), TimeSpan.FromMinutes(20));
 
+                // Tạo và lưu vết bản ghi UserSubscription với trạng thái PENDING trong DB
+                var pendingSubscription = new UserSubscription
+                {
+                    UserId = userId,
+                    PlanId = plan.PlanId,
+                    PaidAmount = finalAmount,
+                    Status = "PENDING",
+                    OrderCode = orderCode,
+                    StartedAt = DateTime.UtcNow,
+                    CreatedAt = DateTime.UtcNow
+                };
+
+                await _context.UserSubscriptions.AddAsync(pendingSubscription);
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Khởi tạo giao dịch PENDING cho đơn {OrderCode} của UserId {UserId}.", orderCode, userId);
+
                 return new PaymentLinkResponseDto
                 {
                     PaymentUrl = createPaymentResult.CheckoutUrl,
