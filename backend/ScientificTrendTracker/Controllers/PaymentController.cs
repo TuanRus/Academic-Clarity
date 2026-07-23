@@ -132,5 +132,25 @@ namespace ScientificTrendTracker.Controllers
                 new { upgraded },
                 upgraded ? "Payment confirmed, account upgraded." : "Payment not confirmed (unpaid or invalid order)."));
         }
+
+        /// <summary>
+        /// Tiếp nhận yêu cầu hủy thanh toán theo orderCode khi người dùng bấm Hủy trên PayOS hoặc ReturnUrl.
+        /// FE gọi khi phát hiện query param cancel=true hoặc khi người dùng bấm nút Hủy.
+        /// </summary>
+        /// <param name="orderCode">Mã đơn PayOS cần hủy.</param>
+        /// <returns>200 kèm { cancelled: bool }.</returns>
+        [HttpPost("cancel/{orderCode:long}")]
+        [Authorize]
+        public async Task<IActionResult> CancelAsync(long orderCode)
+        {
+            var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+            if (userIdClaim == null || !int.TryParse(userIdClaim.Value, out int userId))
+                return Unauthorized(ApiResponse<object>.Fail(401, "Invalid user identity."));
+
+            bool cancelled = await _paymentService.CancelPaymentByOrderCodeAsync(orderCode, userId);
+            return Ok(ApiResponse<object>.Ok(
+                new { cancelled },
+                cancelled ? "Payment marked as cancelled." : "Could not mark payment as cancelled."));
+        }
     }
 }

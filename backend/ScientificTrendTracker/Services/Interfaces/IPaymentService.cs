@@ -30,5 +30,10 @@ namespace ScientificTrendTracker.Services.Interfaces
         /// Gọi PayOS kiểm tra PAID rồi thăng cấp. currentUserId để chống xác nhận hộ đơn người khác.
         /// </summary>
         Task<bool> VerifyAndUpgradeByOrderCodeAsync(long orderCode, int currentUserId);
+
+        /// <summary>
+        /// Cập nhật trạng thái giao dịch thành CANCELLED khi người dùng bấm Hủy hoặc hủy giao dịch trên PayOS.
+        /// </summary>
+        Task<bool> CancelPaymentByOrderCodeAsync(long orderCode, int currentUserId);
     }
 }
