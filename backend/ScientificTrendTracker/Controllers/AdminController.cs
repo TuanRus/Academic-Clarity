@@ -717,6 +717,9 @@ namespace ScientificTrendTracker.Controllers
         [HttpPut("subscriptions/plans/{planId:int}")]
         public async Task<IActionResult> UpdatePlanAsync(int planId, [FromBody] UpdateSubscriptionPlanDto dto, CancellationToken ct)
         {
+            var plan = await _dbContext.SubscriptionPlans.AsNoTracking().FirstOrDefaultAsync(p => p.PlanId == planId, ct);
+            var oldName = plan?.PlanName ?? $"ID {planId}";
+
             var success = await _subscriptionService.UpdatePlanAsync(planId, dto, ct);
             if (!success)
             {
@@ -725,7 +728,7 @@ namespace ScientificTrendTracker.Controllers
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "UPDATE_SUBSCRIPTION_PLAN", 
-                $"Updated subscription plan ID {planId} (New name: '{dto.PlanName}', New price: {dto.PriceAmount} VND).", ip);
+                $"Updated subscription plan '{oldName}' (New name: '{dto.PlanName}', New price: {dto.PriceAmount} VND).", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "Subscription plan updated successfully!"));
         }
@@ -744,6 +747,9 @@ namespace ScientificTrendTracker.Controllers
         [HttpPatch("subscriptions/plans/{planId:int}/toggle")]
         public async Task<IActionResult> TogglePlanStatusAsync(int planId, [FromQuery] bool isActive, CancellationToken ct)
         {
+            var plan = await _dbContext.SubscriptionPlans.AsNoTracking().FirstOrDefaultAsync(p => p.PlanId == planId, ct);
+            var planName = plan?.PlanName ?? $"ID {planId}";
+
             var success = await _subscriptionService.TogglePlanStatusAsync(planId, isActive, ct);
             if (!success)
             {
@@ -752,7 +758,7 @@ namespace ScientificTrendTracker.Controllers
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "TOGGLE_SUBSCRIPTION_PLAN", 
-                $"Changed status of subscription plan ID {planId} to {(isActive ? "Active" : "Inactive")}.", ip);
+                $"Changed status of subscription plan '{planName}' to {(isActive ? "Active" : "Inactive")}.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, $"Changed plan status to {isActive} successfully."));
         }
@@ -766,6 +772,9 @@ namespace ScientificTrendTracker.Controllers
         [HttpDelete("subscriptions/plans/{planId:int}")]
         public async Task<IActionResult> DeletePlanAsync(int planId, CancellationToken ct)
         {
+            var plan = await _dbContext.SubscriptionPlans.AsNoTracking().FirstOrDefaultAsync(p => p.PlanId == planId, ct);
+            var planName = plan?.PlanName ?? $"ID {planId}";
+
             var result = await _subscriptionService.DeletePlanAsync(planId, ct);
             if (result == "NOT_FOUND")
                 return NotFound(ApiResponse<object>.Fail(404, "Plan not found."));
@@ -774,7 +783,7 @@ namespace ScientificTrendTracker.Controllers
 
             var ip = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "127.0.0.1";
             await _adminActivityLogService.LogActivityAsync(GetCurrentAdminId(), "DELETE_SUBSCRIPTION_PLAN",
-                $"Deleted subscription plan ID {planId}.", ip);
+                $"Deleted subscription plan '{planName}'.", ip);
 
             return Ok(ApiResponse<object>.Ok(null, "Subscription plan deleted successfully."));
         }
