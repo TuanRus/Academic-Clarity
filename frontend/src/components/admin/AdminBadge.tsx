@@ -7,7 +7,7 @@ const toneMap: Record<AdminStatus, string> = {
   READY: 'bg-emerald-100 text-emerald-700',
   FAILED: 'bg-red-100 text-red-700',
   SUCCESS: 'bg-emerald-100 text-emerald-700',
-  PENDING: 'bg-sky-100 text-sky-700',
+  PENDING: 'bg-amber-100 text-amber-700',
   SUSPENDED: 'bg-orange-100 text-orange-700',
   DRAFT: 'bg-orange-100 text-orange-700',
   VERIFIED: 'bg-emerald-100 text-emerald-700',
@@ -16,7 +16,7 @@ const toneMap: Record<AdminStatus, string> = {
   DISMISSED: 'bg-slate-100 text-slate-600',
   REVIEWING: 'bg-purple-100 text-purple-700',
   RUNNING: 'bg-sky-100 text-sky-700',
-  CANCELLED: 'bg-gray-100 text-gray-600',
+  CANCELLED: 'bg-slate-100 text-slate-600',
 };
 
 interface AdminBadgeProps {
