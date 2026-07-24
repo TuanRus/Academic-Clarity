@@ -295,12 +295,14 @@ const AdminPaymentPage = () => {
               onChange={(event) =>
                 setStatusFilter(event.target.value as 'ALL' | RevenueRow['status'])
               }
-              className="rounded-md border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600"
+              className="rounded-md border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 outline-none focus:border-[#4338ca]"
             >
               <option value="ALL">All Status</option>
               <option value="SUCCESS">Success</option>
               <option value="PENDING">Pending</option>
+              <option value="CANCELLED">Cancelled</option>
               <option value="FAILED">Failed</option>
+              <option value="EXPIRED">Expired</option>
             </select>
           }
         >

@@ -115,9 +115,23 @@ namespace ScientificTrendTracker.Services
                 // Gọi SDK của PayOS để khởi tạo phiên giao dịch và lấy mã QR ngân hàng thật.
                 CreatePaymentLinkResponse createPaymentResult = await _payOS.PaymentRequests.CreateAsync(paymentRequest);
 
-                // Lưu tạm map orderCode -> (userId, amount) để xác nhận khi user quay về ReturnUrl
-                // (cho phép thanh toán hoạt động mà KHÔNG cần webhook public). TTL 20 phút.
-                _cache.Set(OrderCacheKey(orderCode), (userId, (decimal)finalAmount), TimeSpan.FromMinutes(20));
+                // Lưu bản ghi PENDING vào DB ngay khi tạo link để Admin và hệ thống luôn theo dõi được
+                var now = DateTime.UtcNow;
+                var pendingSub = new UserSubscription
+                {
+                    UserId = userId,
+                    PlanId = plan.PlanId,
+                    PaidAmount = finalAmount,
+                    Status = "PENDING",
+                    OrderCode = orderCode,
+                    StartedAt = now,
+                    CreatedAt = now
+                };
+                await _context.UserSubscriptions.AddAsync(pendingSub);
+                await _context.SaveChangesAsync();
+
+                // Lưu tạm map orderCode -> (userId, amount) vào cache dự phòng
+                _cache.Set(OrderCacheKey(orderCode), (userId, finalAmount), TimeSpan.FromMinutes(20));
 
                 return new PaymentLinkResponseDto
                 {
