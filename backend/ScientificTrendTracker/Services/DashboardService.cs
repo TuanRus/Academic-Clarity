@@ -30,12 +30,13 @@ namespace ScientificTrendTracker.Services
             var totalPapers = await _dbContext.ResearchPapers.CountAsync(ct);
             var totalAuthors = await _dbContext.Authors.CountAsync(ct);
 
-            // Tính tổng doanh thu từ việc đăng ký gói dịch vụ
+            // Tính tổng doanh thu từ các giao dịch thanh toán thành công (Status == ACTIVE)
             decimal totalRevenue = 0;
-            var hasSubscriptions = await _dbContext.UserSubscriptions.AnyAsync(ct);
+            var hasSubscriptions = await _dbContext.UserSubscriptions.AnyAsync(us => us.Status == "ACTIVE", ct);
             if (hasSubscriptions)
             {
                 totalRevenue = await _dbContext.UserSubscriptions
+                    .Where(us => us.Status == "ACTIVE")
                     .Include(us => us.Plan)
                     .SumAsync(us => us.PaidAmount ?? (us.Plan != null ? us.Plan.PriceAmount : 0), ct);
             }
