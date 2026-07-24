@@ -48,7 +48,7 @@ export interface CoOccurringKeyword {
 }
 
 type YearOpts = { fromYear?: number; toYear?: number };
-const yq = (opts: YearOpts = {}) => ({ fromYear: opts.fromYear ?? 2022, toYear: opts.toYear ?? CURRENT_YEAR });
+const yq = (opts: YearOpts = {}) => ({ fromYear: opts.fromYear ?? 2015, toYear: opts.toYear ?? CURRENT_YEAR });
 
 /** GET /api/trend/keyword/papers — top bài báo theo keyword. */
 export function getKeywordTopPapers(keyword: string, opts?: YearOpts): Promise<TrendPremiumPaper[]> {
