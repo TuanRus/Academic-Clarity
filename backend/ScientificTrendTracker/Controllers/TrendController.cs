@@ -55,7 +55,7 @@ namespace ScientificTrendTracker.Controllers
         public async Task<IActionResult> GetSeries(
             [FromQuery] string dimension,
             [FromQuery] string value,
-            [FromQuery] int fromYear = 2022,
+            [FromQuery] int fromYear = 2015,
             [FromQuery] int toYear = 0,
             [FromQuery] string groupBy = "year")
         {
@@ -105,7 +105,7 @@ namespace ScientificTrendTracker.Controllers
         [HttpGet("top")]
         public async Task<IActionResult> GetTop(
             [FromQuery] string dimension,
-            [FromQuery] int fromYear = 2022,
+            [FromQuery] int fromYear = 2015,
             [FromQuery] int toYear = 0,
             [FromQuery] int topN = 20,
             [FromQuery] int minPapers = 3,
@@ -144,7 +144,7 @@ namespace ScientificTrendTracker.Controllers
         [HttpGet("keyword/papers")]
         public async Task<IActionResult> GetKeywordPapersAsync(
             [FromQuery] string keyword,
-            [FromQuery] int fromYear = 2022,
+            [FromQuery] int fromYear = 2015,
             [FromQuery] int toYear = 0,
             CancellationToken ct = default)
         {
@@ -192,7 +192,7 @@ namespace ScientificTrendTracker.Controllers
         [HttpGet("keyword/authors")]
         public async Task<IActionResult> GetKeywordAuthorsAsync(
             [FromQuery] string keyword,
-            [FromQuery] int fromYear = 2022,
+            [FromQuery] int fromYear = 2015,
             [FromQuery] int toYear = 0,
             CancellationToken ct = default)
         {
@@ -240,7 +240,7 @@ namespace ScientificTrendTracker.Controllers
         [HttpGet("keyword/journals")]
         public async Task<IActionResult> GetKeywordJournalsAsync(
             [FromQuery] string keyword,
-            [FromQuery] int fromYear = 2022,
+            [FromQuery] int fromYear = 2015,
             [FromQuery] int toYear = 0,
             CancellationToken ct = default)
         {
@@ -288,7 +288,7 @@ namespace ScientificTrendTracker.Controllers
         [HttpGet("keyword/co-occurring")]
         public async Task<IActionResult> GetCoOccurringKeywordsAsync(
             [FromQuery] string keyword,
-            [FromQuery] int fromYear = 2022,
+            [FromQuery] int fromYear = 2015,
             [FromQuery] int toYear = 0,
             CancellationToken ct = default)
         {

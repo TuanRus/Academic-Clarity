@@ -130,10 +130,10 @@ const TrendDashboardPage = () => {
     }
     setDrillLoading(true);
     Promise.allSettled([
-      getKeywordTopPapers(seriesKeyword),
-      getKeywordTopAuthors(seriesKeyword),
-      getKeywordTopJournals(seriesKeyword),
-      getCoOccurringKeywords(seriesKeyword),
+      getKeywordTopPapers(seriesKeyword, { fromYear: 2015 }),
+      getKeywordTopAuthors(seriesKeyword, { fromYear: 2015 }),
+      getKeywordTopJournals(seriesKeyword, { fromYear: 2015 }),
+      getCoOccurringKeywords(seriesKeyword, { fromYear: 2015 }),
     ])
       .then(([p, a, j, c]) => {
         setTopPapers(p.status === 'fulfilled' ? p.value : []);

@@ -213,10 +213,14 @@ namespace ScientificTrendTracker.Services
             string keyword, int fromYear, int toYear, int limit, CancellationToken ct)
         {
             var normalizedKeyword = KeywordNormalizer.Normalize(keyword);
-            
+            var kwHyphen = normalizedKeyword.Replace(" ", "-");
+
             return await _dbContext.ResearchPapers
-                .Where(p => p.PublicationYear >= fromYear && p.PublicationYear <= toYear)
-                .Where(p => p.PaperKeywords.Any(pk => pk.Keyword.KeywordName == normalizedKeyword))
+                .Where(p => p.PublicationYear == null || (p.PublicationYear >= fromYear && p.PublicationYear <= toYear))
+                .Where(p => p.PaperKeywords.Any(pk =>
+                    pk.Keyword.KeywordName.ToLower() == normalizedKeyword ||
+                    pk.Keyword.KeywordName.ToLower() == kwHyphen ||
+                    pk.Keyword.KeywordName.ToLower().Replace("-", " ") == normalizedKeyword))
                 .OrderByDescending(p => p.CitationCount)
                 .Take(limit)
                 .Select(p => new TrendPremiumPaperDto
@@ -238,10 +242,14 @@ namespace ScientificTrendTracker.Services
             string keyword, int fromYear, int toYear, int limit, CancellationToken ct)
         {
             var normalizedKeyword = KeywordNormalizer.Normalize(keyword);
+            var kwHyphen = normalizedKeyword.Replace(" ", "-");
 
             return await _dbContext.PaperAuthors
-                .Where(pa => pa.Paper.PublicationYear >= fromYear && pa.Paper.PublicationYear <= toYear)
-                .Where(pa => pa.Paper.PaperKeywords.Any(pk => pk.Keyword.KeywordName == normalizedKeyword))
+                .Where(pa => pa.Paper.PublicationYear == null || (pa.Paper.PublicationYear >= fromYear && pa.Paper.PublicationYear <= toYear))
+                .Where(pa => pa.Paper.PaperKeywords.Any(pk =>
+                    pk.Keyword.KeywordName.ToLower() == normalizedKeyword ||
+                    pk.Keyword.KeywordName.ToLower() == kwHyphen ||
+                    pk.Keyword.KeywordName.ToLower().Replace("-", " ") == normalizedKeyword))
                 .GroupBy(pa => new { pa.AuthorId, pa.Author.FullName })
                 .Select(g => new TrendPremiumAuthorDto
                 {
@@ -261,10 +269,14 @@ namespace ScientificTrendTracker.Services
             string keyword, int fromYear, int toYear, int limit, CancellationToken ct)
         {
             var normalizedKeyword = KeywordNormalizer.Normalize(keyword);
+            var kwHyphen = normalizedKeyword.Replace(" ", "-");
 
             return await _dbContext.ResearchPapers
-                .Where(p => p.PublicationYear >= fromYear && p.PublicationYear <= toYear && p.JournalId != null)
-                .Where(p => p.PaperKeywords.Any(pk => pk.Keyword.KeywordName == normalizedKeyword))
+                .Where(p => (p.PublicationYear == null || (p.PublicationYear >= fromYear && p.PublicationYear <= toYear)) && p.JournalId != null)
+                .Where(p => p.PaperKeywords.Any(pk =>
+                    pk.Keyword.KeywordName.ToLower() == normalizedKeyword ||
+                    pk.Keyword.KeywordName.ToLower() == kwHyphen ||
+                    pk.Keyword.KeywordName.ToLower().Replace("-", " ") == normalizedKeyword))
                 .GroupBy(p => new { p.JournalId, p.Journal.JournalName })
                 .Select(g => new TrendPremiumJournalDto
                 {
@@ -284,15 +296,18 @@ namespace ScientificTrendTracker.Services
             string keyword, int fromYear, int toYear, int limit, CancellationToken ct)
         {
             var normalizedKeyword = KeywordNormalizer.Normalize(keyword);
+            var kwHyphen = normalizedKeyword.Replace(" ", "-");
 
             var paperIdsWithTargetKeyword = _dbContext.PaperKeywords
-                .Where(pk => pk.Keyword.KeywordName == normalizedKeyword && 
-                             pk.Paper.PublicationYear >= fromYear && pk.Paper.PublicationYear <= toYear)
+                .Where(pk => (pk.Keyword.KeywordName.ToLower() == normalizedKeyword ||
+                              pk.Keyword.KeywordName.ToLower() == kwHyphen ||
+                              pk.Keyword.KeywordName.ToLower().Replace("-", " ") == normalizedKeyword) &&
+                             (pk.Paper.PublicationYear == null || (pk.Paper.PublicationYear >= fromYear && pk.Paper.PublicationYear <= toYear)))
                 .Select(pk => pk.PaperId);
 
             return await _dbContext.PaperKeywords
                 .Where(pk => paperIdsWithTargetKeyword.Contains(pk.PaperId))
-                .Where(pk => pk.Keyword.KeywordName != normalizedKeyword)
+                .Where(pk => pk.Keyword.KeywordName.ToLower() != normalizedKeyword && pk.Keyword.KeywordName.ToLower() != kwHyphen)
                 .GroupBy(pk => pk.Keyword.KeywordName)
                 .Select(g => new CoOccurringKeywordDto
                 {
