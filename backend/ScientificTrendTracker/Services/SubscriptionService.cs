@@ -31,16 +31,38 @@ public class SubscriptionService : ISubscriptionService
     /// </summary>
     public async Task<SubscriptionStatusResponseDto> GetSubscriptionStatusAsync(int userId, CancellationToken ct)
     {
-        // Lấy thông tin bản ghi đăng ký mới nhất của người dùng
-        var sub = await _dbContext.UserSubscriptions
+        var now = DateTime.UtcNow;
+
+        // 1. Ưu tiên tìm gói ACTIVE còn hiệu lực (mới nhất theo ngày hết hạn EndsAt)
+        var activeSub = await _dbContext.UserSubscriptions
             .Include(us => us.Plan)
-            .Where(us => us.UserId == userId)
-            .OrderByDescending(us => us.StartedAt)
+            .Where(us => us.UserId == userId && us.Status == "ACTIVE" && (!us.EndsAt.HasValue || us.EndsAt.Value > now))
+            .OrderByDescending(us => us.EndsAt)
             .FirstOrDefaultAsync(ct);
 
-        if (sub == null)
+        if (activeSub != null)
         {
-            // Trả về gói Free mặc định nếu chưa đăng ký bao giờ
+            return new SubscriptionStatusResponseDto
+            {
+                IsPremiumActive = true,
+                PlanId = activeSub.PlanId,
+                PlanName = activeSub.Plan?.PlanName ?? "Premium",
+                Status = "ACTIVE",
+                StartedAt = activeSub.StartedAt,
+                EndsAt = activeSub.EndsAt
+            };
+        }
+
+        // 2. Nếu không có gói ACTIVE còn hiệu lực, lấy lịch sử mới nhất để trả về thông tin bổ trợ (EXPIRED/INACTIVE)
+        var latestSub = await _dbContext.UserSubscriptions
+            .Include(us => us.Plan)
+            .Where(us => us.UserId == userId)
+            .OrderByDescending(us => us.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (latestSub == null)
+        {
+            // Trả về gói Free mặc định nếu chưa từng đăng ký
             return new SubscriptionStatusResponseDto
             {
                 IsPremiumActive = false,
@@ -52,18 +74,16 @@ public class SubscriptionService : ISubscriptionService
             };
         }
 
-        // So sánh thời gian UTC hiện tại với ngày hết hạn để kiểm tra hết hạn sử dụng
-        bool isExpired = sub.EndsAt.HasValue && sub.EndsAt.Value < DateTime.UtcNow;
-        bool isPremiumActive = sub.Status == "ACTIVE" && !isExpired;
+        bool isExpired = latestSub.EndsAt.HasValue && latestSub.EndsAt.Value < now;
 
         return new SubscriptionStatusResponseDto
         {
-            IsPremiumActive = isPremiumActive,
-            PlanId = sub.PlanId,
-            PlanName = sub.Plan?.PlanName ?? "Unknown",
-            Status = isPremiumActive ? "ACTIVE" : (isExpired ? "EXPIRED" : sub.Status),
-            StartedAt = sub.StartedAt,
-            EndsAt = sub.EndsAt
+            IsPremiumActive = false,
+            PlanId = latestSub.PlanId,
+            PlanName = latestSub.Plan?.PlanName ?? "Free",
+            Status = isExpired ? "EXPIRED" : latestSub.Status,
+            StartedAt = latestSub.StartedAt,
+            EndsAt = latestSub.EndsAt
         };
     }
 

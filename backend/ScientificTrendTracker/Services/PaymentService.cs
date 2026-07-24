@@ -190,16 +190,26 @@ namespace ScientificTrendTracker.Services
         {
             try
             {
-                // Map orderCode -> user/amount đã lưu lúc tạo link.
-                if (!_cache.TryGetValue(OrderCacheKey(orderCode), out (int userId, decimal amount) info))
+                // 1. Tìm đơn trong DB theo orderCode và UserId trước (không mất khi server restart)
+                var pendingSub = await _context.UserSubscriptions
+                    .FirstOrDefaultAsync(s => s.OrderCode == orderCode && s.UserId == currentUserId);
+
+                decimal amount = 0;
+                if (pendingSub != null)
                 {
-                    _logger.LogWarning("Không tìm thấy map cho orderCode {OrderCode} (cache hết hạn hoặc BE đã restart).", orderCode);
+                    amount = pendingSub.PaidAmount ?? 0;
+                }
+                else if (_cache.TryGetValue(OrderCacheKey(orderCode), out (int userId, decimal amount) info) && info.userId == currentUserId)
+                {
+                    amount = info.amount;
+                }
+                else
+                {
+                    _logger.LogWarning("Không tìm thấy đơn cho orderCode {OrderCode} của UserId {UserId}.", orderCode, currentUserId);
                     return false;
                 }
-                // Chỉ cho phép chính chủ xác nhận đơn của mình.
-                if (info.userId != currentUserId) return false;
 
-                // Hỏi PayOS trạng thái thật của đơn — chỉ thăng cấp khi đã PAID.
+                // 2. Hỏi PayOS trạng thái thật của đơn — chỉ thăng cấp khi đã PAID.
                 var link = await _payOS.PaymentRequests.GetAsync(orderCode);
                 if (link == null || link.Status != PaymentLinkStatus.Paid)
                 {
@@ -211,7 +221,7 @@ namespace ScientificTrendTracker.Services
                     return false;
                 }
 
-                var ok = await UpgradeUserAsync(info.userId, info.amount, orderCode);
+                var ok = await UpgradeUserAsync(currentUserId, amount, orderCode);
                 if (ok) _cache.Remove(OrderCacheKey(orderCode));
                 return ok;
             }
@@ -294,9 +304,24 @@ namespace ScientificTrendTracker.Services
             var user = await _context.Users.FirstOrDefaultAsync(u => u.UserId == userId);
             if (user == null) return false;
 
-            var matchedPlan = await _context.SubscriptionPlans
-                .AsNoTracking()
-                .FirstOrDefaultAsync(p => p.PriceAmount == amountPaid || p.PriceAmount * 0.5m == amountPaid);
+            var existingSub = await _context.UserSubscriptions
+                .FirstOrDefaultAsync(s => s.OrderCode == orderCode);
+
+            SubscriptionPlan? matchedPlan = null;
+            if (existingSub != null)
+            {
+                matchedPlan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.PlanId == existingSub.PlanId);
+            }
+            if (matchedPlan == null && amountPaid > 0)
+            {
+                matchedPlan = await _context.SubscriptionPlans
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(p => p.PriceAmount == amountPaid || p.PriceAmount * 0.5m == amountPaid);
+            }
+            if (matchedPlan == null)
+            {
+                matchedPlan = await _context.SubscriptionPlans.FirstOrDefaultAsync(p => p.IsActive);
+            }
             if (matchedPlan == null) return false;
 
             // Cộng dồn: nếu user còn gói ACTIVE chưa hết hạn, thời hạn mới nối tiếp vào ngày hết hạn
@@ -307,13 +332,10 @@ namespace ScientificTrendTracker.Services
                 .MaxAsync(s => (DateTime?)s.EndsAt);
             var baseDate = currentEndsAt.HasValue && currentEndsAt.Value > now ? currentEndsAt.Value : now;
 
-            var existingSub = await _context.UserSubscriptions
-                .FirstOrDefaultAsync(s => s.OrderCode == orderCode);
-
             if (existingSub != null)
             {
                 existingSub.Status = "ACTIVE";
-                existingSub.PaidAmount = amountPaid;
+                if (amountPaid > 0) existingSub.PaidAmount = amountPaid;
                 existingSub.StartedAt = now;
                 existingSub.EndsAt = baseDate.AddDays(matchedPlan.DurationDays);
                 existingSub.UpdatedAt = now;
@@ -324,7 +346,7 @@ namespace ScientificTrendTracker.Services
                 {
                     UserId = userId,
                     PlanId = matchedPlan.PlanId,
-                    PaidAmount = amountPaid,
+                    PaidAmount = amountPaid > 0 ? amountPaid : matchedPlan.PriceAmount,
                     Status = "ACTIVE",
                     OrderCode = orderCode,
                     StartedAt = now,
@@ -334,7 +356,7 @@ namespace ScientificTrendTracker.Services
                 await _context.UserSubscriptions.AddAsync(newSubscription);
             }
 
-            user.RoleId = 2;
+            user.RoleId = 2; // Nâng vai trò thành Researcher
             user.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
