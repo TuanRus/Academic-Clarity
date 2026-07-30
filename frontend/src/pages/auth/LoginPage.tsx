@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { ApiError } from '../../lib/http';
 import { Role } from '../../types/auth';
+import PasswordInput from '../../components/auth/PasswordInput';
 
 // S-02 · Login Screen (FR-02)
 const LoginPage = () => {
@@ -45,6 +46,7 @@ const LoginPage = () => {
               id="email"
               type="email"
               required
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               placeholder="username@university.edu.vn"
@@ -56,14 +58,15 @@ const LoginPage = () => {
             <label className="text-sm font-medium text-gray-700" htmlFor="password">
               Password
             </label>
-            <input
-              id="password"
-              type="password"
-              required
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-            />
+            <div className="mt-1">
+              <PasswordInput
+                id="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={setPassword}
+              />
+            </div>
           </div>
 
           <div className="text-right">

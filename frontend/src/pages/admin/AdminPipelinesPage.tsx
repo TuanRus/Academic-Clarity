@@ -3,7 +3,7 @@ import AdminBadge from '../../components/admin/AdminBadge';
 import AdminModal from '../../components/admin/AdminModal';
 import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
-import AdminToast from '../../components/admin/AdminToast';
+import { useAdminToast } from '../../context/AdminToastContext';
 import {
   getSyncLogs, startLiveSync, getSyncProgress, getSyncedPapers,
   getSystemConfig, importScimagoUpload, getDataSources,
@@ -26,6 +26,7 @@ type ApiSource = {
 };
 
 const AdminPipelinesPage = () => {
+  const { showSuccess, showError } = useAdminToast();
   const [sources, setSources] = useState<ApiSource[]>([]);
   // Nạp nguồn đồng bộ THẬT từ backend (ApiDataSources) thay vì hardcode 'Daily'/'ACTIVE'.
   useEffect(() => { getDataSources().then(setSources).catch(() => setSources([])); }, []);
@@ -54,7 +55,6 @@ const AdminPipelinesPage = () => {
     return at > 0 ? `***${email.slice(at)}` : '***';
   };
   const [isSyncing, setIsSyncing] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
 
   // ----- SCImago journal-ranking import (upload file CSV: kéo-thả hoặc chọn file) -----
   const [scimagoBusy, setScimagoBusy] = useState(false);
@@ -62,15 +62,15 @@ const AdminPipelinesPage = () => {
 
   const runScimagoUpload = async (file: File) => {
     if (!file.name.toLowerCase().endsWith('.csv')) {
-      setToast('Only .csv files are accepted.');
+      showError('Only .csv files are accepted.');
       return;
     }
     setScimagoBusy(true);
     try {
       const r = await importScimagoUpload(file);
-      setToast(`SCImago import done — ${r.updatedCount} journals updated (${r.totalRowsRead} rows read, ${r.skippedCount} skipped).`);
+      showSuccess(`SCImago import done — ${r.updatedCount} journals updated (${r.totalRowsRead} rows read, ${r.skippedCount} skipped).`);
     } catch {
-      setToast('SCImago import failed — please check the CSV format.');
+      showError('SCImago import failed — please check the CSV format.');
     } finally {
       setScimagoBusy(false);
       if (scimagoInputRef.current) scimagoInputRef.current.value = ''; // cho phép chọn lại cùng file
@@ -130,11 +130,11 @@ const AdminPipelinesPage = () => {
           setHistory(logs);
           const latest = logs.find((l) => l.id === p.syncLogId) ?? logs[0];
           if (latest?.status === 'FAILED') {
-            setToast('Sync failed — OpenAlex API rate limited / out of budget. Try again after the daily reset.');
+            showError('Sync failed — OpenAlex API rate limited / out of budget. Try again after the daily reset.');
           } else if (p.added > 0) {
-            setToast(`Sync finished — ${p.added} new paper(s) imported.`);
+            showSuccess(`Sync finished — ${p.added} new paper(s) imported.`);
           } else {
-            setToast('Sync finished — no new papers.');
+            showSuccess('Sync finished — no new papers.');
           }
         }).catch(() => {});
       } catch { /* bỏ qua 1 nhịp lỗi */ }
@@ -158,18 +158,18 @@ const AdminPipelinesPage = () => {
 
   const runSync = async (title = 'Manual Trigger') => {
     if (!hasActiveEndpoint) {
-      setToast('No active API source. Please activate at least one endpoint before syncing.');
+      showError('No active API source. Please activate at least one endpoint before syncing.');
       return;
     }
     setIsSyncing(true);
     try {
       await startLiveSync(2); // chạy nền → theo dõi realtime
-      setToast(`${title} started — watching live…`);
+      showSuccess(`${title} started — watching live…`);
       getSyncLogs().then(setHistory).catch(() => {});
       openLive();
     } catch {
       setIsSyncing(false);
-      setToast(`${title} could not start (a sync may already be running).`);
+      showError(`${title} could not start (a sync may already be running).`);
     }
   };
 
@@ -182,7 +182,7 @@ const AdminPipelinesPage = () => {
       ),
     );
 
-    setToast(`Retrying ${eventTitle}.`);
+    showSuccess(`Retrying ${eventTitle}.`);
 
     window.setTimeout(() => {
       setHistory((current) =>
@@ -193,14 +193,12 @@ const AdminPipelinesPage = () => {
         ),
       );
 
-      setToast(`${eventTitle} retry completed successfully.`);
+      showSuccess(`${eventTitle} retry completed successfully.`);
     }, 1200);
   };
 
   return (
     <div className="space-y-5">
-      <AdminToast message={toast} onClose={() => setToast(null)} />
-
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">

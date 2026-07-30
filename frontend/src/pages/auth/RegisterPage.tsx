@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Role } from '../../types/auth';
 import { sendOtp, register } from '../../lib/api/auth';
 import { ApiError } from '../../lib/http';
+import PasswordInput from '../../components/auth/PasswordInput';
 
 // Chỉ tài khoản email học thuật (.edu / .edu.vn) mới được chọn vai trò Student / Lecturer.
 // Backend gán RoleId 3 (edu user) cho mọi email edu — Student/Lecturer ở đây chỉ là nhãn hiển thị.
@@ -86,6 +87,7 @@ const RegisterPage = () => {
             <label className="text-sm font-medium text-gray-700">Full Name</label>
             <input
               required
+              autoComplete="name"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               disabled={otpSent}
@@ -99,6 +101,7 @@ const RegisterPage = () => {
             <input
               type="email"
               required
+              autoComplete="username"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={otpSent}
@@ -109,15 +112,16 @@ const RegisterPage = () => {
 
           <div>
             <label className="text-sm font-medium text-gray-700">Password</label>
-            <input
-              type="password"
-              required
-              minLength={6}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={otpSent}
-              className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-500"
-            />
+            <div className="mt-1">
+              <PasswordInput
+                required
+                minLength={6}
+                autoComplete="new-password"
+                value={password}
+                onChange={setPassword}
+                disabled={otpSent}
+              />
+            </div>
           </div>
 
           {/* Vai trò chỉ hiện khi dùng email học thuật (.edu / .edu.vn) */}
@@ -151,6 +155,7 @@ const RegisterPage = () => {
               <input
                 required
                 inputMode="numeric"
+                autoComplete="one-time-code"
                 maxLength={6}
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value)}

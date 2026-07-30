@@ -3,6 +3,7 @@ import { Link, NavLink, Navigate, Outlet } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { getActivityLogs, type ActivityLog } from '../../lib/api/admin';
 import { Role } from '../../types/auth';
+import { AdminToastProvider } from '../../context/AdminToastContext';
 
 const adminSections = [
   {
@@ -246,6 +247,7 @@ const AdminLayout = () => {
     .toUpperCase();
 
   return (
+    <AdminToastProvider>
     <div className="min-h-screen bg-[#f4f7fa] text-slate-900">
       <aside className="fixed left-0 top-0 z-20 flex h-screen w-[244px] flex-col border-r border-slate-200 bg-slate-50 text-slate-700">
         <div className="px-4 pb-5 pt-5">
@@ -488,6 +490,7 @@ const AdminLayout = () => {
         </main>
       </div>
     </div>
+    </AdminToastProvider>
   );
 };
 

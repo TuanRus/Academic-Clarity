@@ -4,7 +4,7 @@ import AdminMetricCard from '../../components/admin/AdminMetricCard';
 import AdminModal from '../../components/admin/AdminModal';
 import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
-import AdminToast from '../../components/admin/AdminToast';
+import { useAdminToast } from '../../context/AdminToastContext';
 import { getUsers, updateUserStatus, updateUserRole, roleIdFromName, sendBroadcast, type UserDirectoryRow } from '../../lib/api/admin';
 import { ApiError } from '../../lib/http';
 
@@ -13,6 +13,7 @@ import { ApiError } from '../../lib/http';
 const roleOptions = ['ADMIN', 'RESEARCHER', 'STUDENT', 'Member'];
 
 const AdminUsersPage = () => {
+  const { showSuccess, showError } = useAdminToast();
   const [users, setUsers] = useState<UserDirectoryRow[]>([]);
   useEffect(() => { getUsers().then(setUsers).catch(() => setUsers([])); }, []);
   const [query, setQuery] = useState('');
@@ -22,21 +23,20 @@ const AdminUsersPage = () => {
   const [newUserName, setNewUserName] = useState('');
   const [newUserEmail, setNewUserEmail] = useState('');
   const [newUserRole, setNewUserRole] = useState(roleOptions[3]);
-  const [toast, setToast] = useState<string | null>(null);
 
   // System broadcast — gửi thông báo tới TOÀN bộ người dùng (chuyển từ Settings sang đây).
   const [bcTitle, setBcTitle] = useState('');
   const [bcMessage, setBcMessage] = useState('');
   const [sending, setSending] = useState(false);
   const handleBroadcast = async () => {
-    if (!bcTitle.trim() || !bcMessage.trim()) { setToast('Title and message are required.'); return; }
+    if (!bcTitle.trim() || !bcMessage.trim()) { showError('Title and message are required.'); return; }
     setSending(true);
     try {
       await sendBroadcast(bcTitle.trim(), bcMessage.trim());
-      setToast('Broadcast sent to all users.');
+      showSuccess('Broadcast sent to all users.');
       setBcTitle(''); setBcMessage('');
     } catch (e) {
-      setToast(e instanceof ApiError ? e.message : 'Failed to send broadcast.');
+      showError(e instanceof ApiError ? e.message : 'Failed to send broadcast.');
     } finally {
       setSending(false);
     }
@@ -55,9 +55,9 @@ const AdminUsersPage = () => {
     updateUserRole(userId, roleIdFromName(role))
       .then(() => {
         setUsers((current) => current.map((user) => (user.id === userId ? { ...user, role } : user)));
-        setToast(`${userId} role updated.`);
+        showSuccess(`${userId} role updated.`);
       })
-      .catch(() => setToast('Update role failed.'));
+      .catch(() => showError('Update role failed.'));
   };
 
   const toggleUserStatus = (user: UserDirectoryRow) => {
@@ -66,24 +66,24 @@ const AdminUsersPage = () => {
     updateUserStatus(user.id, nextStatus === 'ACTIVE')
       .then(() => {
         setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, status: nextStatus } : item)));
-        setToast(`${user.name} is now ${nextStatus}.`);
+        showSuccess(`${user.name} is now ${nextStatus}.`);
       })
-      .catch(() => setToast('Update status failed.'));
+      .catch(() => showError('Update status failed.'));
   };
 
   const approveResearcher = (user: UserDirectoryRow) => {
     setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, role: 'RESEARCHER', status: 'ACTIVE' } : item)));
-    setToast(`${user.name} approved as Researcher.`);
+    showSuccess(`${user.name} approved as Researcher.`);
   };
 
   const denyResearcher = (user: UserDirectoryRow) => {
     setUsers((current) => current.map((item) => (item.id === user.id ? { ...item, status: 'SUSPENDED' } : item)));
-    setToast(`${user.name} request denied.`);
+    showSuccess(`${user.name} request denied.`);
   };
 
   const provisionUser = () => {
     if (!newUserName.trim() || !newUserEmail.includes('@')) {
-      setToast('Please enter a valid full name and email.');
+      showError('Please enter a valid full name and email.');
       return;
     }
 
@@ -109,13 +109,11 @@ const AdminUsersPage = () => {
     setNewUserEmail('');
     setNewUserRole(roleOptions[3]);
     setShowProvisionModal(false);
-    setToast(`${nextUser.name} has been provisioned.`);
+    showSuccess(`${nextUser.name} has been provisioned.`);
   };
 
   return (
     <div className="space-y-5">
-      <AdminToast message={toast} onClose={() => setToast(null)} />
-
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">User Account Management</h1>
         <p className="mt-1 text-xs text-slate-500">Manage user roles, account status, and system access.</p>

@@ -4,7 +4,7 @@ import AdminMetricCard from '../../components/admin/AdminMetricCard';
 import AdminModal from '../../components/admin/AdminModal';
 import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
-import AdminToast from '../../components/admin/AdminToast';
+import { useAdminToast } from '../../context/AdminToastContext';
 import {
   getTransactions,
   getPlans,
@@ -19,6 +19,7 @@ import {
 import { ApiError } from '../../lib/http';
 
 const AdminPaymentPage = () => {
+  const { showSuccess, showError } = useAdminToast();
   const [rows, setRows] = useState<RevenueRow[]>([]);
   const [plans, setPlans] = useState<SubscriptionPlan[]>([]);
   const [payosConfigured, setPayosConfigured] = useState<boolean | null>(null);
@@ -37,7 +38,6 @@ const AdminPaymentPage = () => {
   const [planPrice, setPlanPrice] = useState('');
   const [planDuration, setPlanDuration] = useState('');
   const [planIsActive, setPlanIsActive] = useState(true);
-  const [toast, setToast] = useState<string | null>(null);
 
   const filteredRows =
     statusFilter === 'ALL' ? rows : rows.filter((row) => row.status === statusFilter);
@@ -86,15 +86,15 @@ const AdminPaymentPage = () => {
     anchor.click();
 
     URL.revokeObjectURL(url);
-    setToast('Finance report exported.');
+    showSuccess('Finance report exported.');
   };
 
   const refreshPayments = async () => {
     try {
       setRows(await getTransactions());
-      setToast('Payments refreshed.');
+      showSuccess('Payments refreshed.');
     } catch (e) {
-      setToast(e instanceof ApiError ? e.message : 'Failed to refresh payments.');
+      showError(e instanceof ApiError ? e.message : 'Failed to refresh payments.');
     }
   };
 
@@ -112,9 +112,9 @@ const AdminPaymentPage = () => {
     const amount = Number(planPrice);
     const days = Number(planDuration);
 
-    if (!planName.trim()) { setToast('Plan name is required.'); return; }
-    if (!Number.isFinite(amount) || amount < 0) { setToast('Enter a valid price (number in VND).'); return; }
-    if (!Number.isInteger(days) || days <= 0) { setToast('Enter valid duration days (positive integer).'); return; }
+    if (!planName.trim()) { showError('Plan name is required.'); return; }
+    if (!Number.isFinite(amount) || amount < 0) { showError('Enter a valid price (number in VND).'); return; }
+    if (!Number.isInteger(days) || days <= 0) { showError('Enter valid duration days (positive integer).'); return; }
 
     setSavingPlan(true);
     try {
@@ -126,9 +126,9 @@ const AdminPaymentPage = () => {
       });
       setPlans(await getPlans());
       setEditingPlan(null);
-      setToast(`Plan "${planName.trim()}" updated successfully.`);
+      showSuccess(`Plan "${planName.trim()}" updated successfully.`);
     } catch (e) {
-      setToast(e instanceof ApiError ? e.message : 'Failed to update plan.');
+      showError(e instanceof ApiError ? e.message : 'Failed to update plan.');
     } finally {
       setSavingPlan(false);
     }
@@ -139,9 +139,9 @@ const AdminPaymentPage = () => {
     try {
       await togglePlan(plan.id, nextStatus);
       setPlans(await getPlans());
-      setToast(`Plan "${plan.name}" status changed to ${nextStatus ? 'Active' : 'Inactive'}.`);
+      showSuccess(`Plan "${plan.name}" status changed to ${nextStatus ? 'Active' : 'Inactive'}.`);
     } catch (e) {
-      setToast(e instanceof ApiError ? e.message : 'Failed to change plan status.');
+      showError(e instanceof ApiError ? e.message : 'Failed to change plan status.');
     }
   };
 
@@ -156,9 +156,9 @@ const AdminPaymentPage = () => {
     const amount = Number(createPrice);
     const days = Number(createDuration);
 
-    if (!createName.trim()) { setToast('Plan name is required.'); return; }
-    if (!Number.isFinite(amount) || amount < 0) { setToast('Enter a valid price in VND.'); return; }
-    if (!Number.isInteger(days) || days <= 0) { setToast('Enter valid duration days.'); return; }
+    if (!createName.trim()) { showError('Plan name is required.'); return; }
+    if (!Number.isFinite(amount) || amount < 0) { showError('Enter a valid price in VND.'); return; }
+    if (!Number.isInteger(days) || days <= 0) { showError('Enter valid duration days.'); return; }
 
     setCreatingPlan(true);
     try {
@@ -170,9 +170,9 @@ const AdminPaymentPage = () => {
       setPlans(await getPlans());
       setShowCreateModal(false);
       setCreateName(''); setCreatePrice(''); setCreateDuration('30');
-      setToast(`New plan "${createName.trim()}" created successfully.`);
+      showSuccess(`New plan "${createName.trim()}" created successfully.`);
     } catch (e) {
-      setToast(e instanceof ApiError ? e.message : 'Failed to create plan.');
+      showError(e instanceof ApiError ? e.message : 'Failed to create plan.');
     } finally {
       setCreatingPlan(false);
     }
@@ -183,16 +183,14 @@ const AdminPaymentPage = () => {
     try {
       await deletePlan(plan.id);
       setPlans(await getPlans());
-      setToast(`Plan "${plan.name}" deleted successfully.`);
+      showSuccess(`Plan "${plan.name}" deleted successfully.`);
     } catch (e) {
-      setToast(e instanceof ApiError ? e.message : 'Cannot delete plan — it may have active subscribers.');
+      showError(e instanceof ApiError ? e.message : 'Cannot delete plan — it may have active subscribers.');
     }
   };
 
   return (
     <div className="space-y-5">
-      <AdminToast message={toast} onClose={() => setToast(null)} />
-
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">

@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import * as authApi from '../../lib/api/auth';
 import { ApiError } from '../../lib/http';
+import PasswordInput from '../../components/auth/PasswordInput';
 
 // S-03 · Quên mật khẩu (FR-03): send OTP → verify OTP → reset password.
 const ForgotPasswordPage = () => {
@@ -62,6 +63,7 @@ const ForgotPasswordPage = () => {
             type="email"
             value={email}
             disabled={step !== 1}
+            autoComplete="username"
             onChange={(e) => setEmail(e.target.value)}
             className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm disabled:bg-gray-100"
           />
@@ -74,6 +76,7 @@ const ForgotPasswordPage = () => {
               value={otp}
               onChange={(e) => setOtp(e.target.value)}
               placeholder="6 digits"
+              autoComplete="one-time-code"
               className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
             />
           </div>
@@ -82,12 +85,13 @@ const ForgotPasswordPage = () => {
         {step === 3 && (
           <div>
             <label className="text-sm font-medium text-gray-700">New Password</label>
-            <input
-              type="password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm"
-            />
+            <div className="mt-1">
+              <PasswordInput
+                value={newPassword}
+                onChange={setNewPassword}
+                autoComplete="new-password"
+              />
+            </div>
           </div>
         )}
 

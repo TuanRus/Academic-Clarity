@@ -3,7 +3,6 @@ import { ChevronDown, ChevronUp } from 'lucide-react';
 import { getDashboardStats, getDashboardCharts, getUsers, type DashboardStats, type DashboardCharts, type UserDirectoryRow } from '../../lib/api/admin';
 import AdminMetricCard from '../../components/admin/AdminMetricCard';
 import AdminSectionCard from '../../components/admin/AdminSectionCard';
-import AdminToast from '../../components/admin/AdminToast';
 import AdminModal from '../../components/admin/AdminModal';
 
 const formatRevenue = (value: number) => `${value.toLocaleString('vi-VN')}₫`;
@@ -42,7 +41,6 @@ const growthTooltipClass = (growth: string) => {
 };
 
 const AdminDashboardPage = () => {
-  const [toast, setToast] = useState<string | null>(null);
   // Số liệu THẬT từ BE.
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [charts, setCharts] = useState<DashboardCharts>({ revenue: [], papers: [], plans: [] });
@@ -131,8 +129,6 @@ const AdminDashboardPage = () => {
 
   return (
     <div className="space-y-5">
-      <AdminToast message={toast} onClose={() => setToast(null)} />
-
       <div>
         <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">
           Admin Dashboard Overview

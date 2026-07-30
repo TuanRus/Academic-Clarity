@@ -3,7 +3,7 @@ import AdminModal from '../../components/admin/AdminModal';
 import AdminBadge from '../../components/admin/AdminBadge';
 import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
-import AdminToast from '../../components/admin/AdminToast';
+import { useAdminToast } from '../../context/AdminToastContext';
 import {
   getPapers,
   getKeywords,
@@ -19,6 +19,7 @@ import { suggestKeywords } from '../../lib/api/mindmap';
 import { ApiError } from '../../lib/http';
 
 const AdminRepositoryPage = () => {
+  const { showSuccess, showError } = useAdminToast();
   const [activeTab, setActiveTab] = useState<'papers' | 'keywords'>('papers');
   const [keywords, setKeywords] = useState<RepositoryCategory[]>([]);
   const [papers, setPapers] = useState<RepositoryPaper[]>([]);
@@ -60,7 +61,6 @@ const AdminRepositoryPage = () => {
   const [showKeywordModal, setShowKeywordModal] = useState(false);
   const [keywordName, setKeywordName] = useState('');
   const [keywordDescription, setKeywordDescription] = useState('');
-  const [toast, setToast] = useState<string | null>(null);
 
   // ----- Thêm bài báo (dán link OpenAlex/DOI hoặc nhập tay) -----
   const [showAddModal, setShowAddModal] = useState(false);
@@ -113,7 +113,7 @@ const AdminRepositoryPage = () => {
           keywords: mKeywords.split(/[,;]/).map((s) => s.trim()).filter(Boolean),
         });
       }
-      setToast('Paper added successfully.');
+      showSuccess('Paper added successfully.');
       setShowAddModal(false);
       setAddLink(''); setMTitle(''); setMJournal(''); setMYear(''); setMAuthors(''); setMKeywords(''); setMTopic('');
       setMDoi(''); setMOpenAlexId(''); setMSourceUrl(''); setMPubDate(''); setMCitations('');
@@ -127,7 +127,7 @@ const AdminRepositoryPage = () => {
         ? e.message
         : 'Warning: Failed to add paper. This paper may already exist in the system (duplicate title, DOI, or OpenAlex ID).';
       setAddError(errorMsg);
-      setToast(errorMsg);
+      showError(errorMsg);
     } finally {
       setAdding(false);
     }
@@ -150,16 +150,16 @@ const AdminRepositoryPage = () => {
     if (!window.confirm(`Are you sure you want to delete paper:\n"${title}"?`)) return;
     try {
       await deletePaperApi(paperId);
-      setToast(`Paper deleted successfully: "${title}"`);
+      showSuccess(`Paper deleted successfully: "${title}"`);
       reloadPapers();
     } catch (e) {
-      setToast(`Failed to delete paper: "${title}"`);
+      showError(`Failed to delete paper: "${title}"`);
     }
   };
 
   const createKeyword = async () => {
     if (!keywordName.trim()) {
-      setToast('Keyword name is required.');
+      showError('Keyword name is required.');
       return;
     }
     try {
@@ -167,10 +167,10 @@ const AdminRepositoryPage = () => {
       setKeywordName('');
       setKeywordDescription('');
       setShowKeywordModal(false);
-      setToast('New keyword created successfully.');
+      showSuccess('New keyword created successfully.');
       getKeywords().then(setKeywords).catch(() => { });
     } catch (e) {
-      setToast(e instanceof ApiError ? e.message : 'Failed to create keyword (may already exist).');
+      showError(e instanceof ApiError ? e.message : 'Failed to create keyword (may already exist).');
     }
   };
 
@@ -178,17 +178,15 @@ const AdminRepositoryPage = () => {
     if (!window.confirm(`Are you sure you want to delete keyword:\n"${name}"?`)) return;
     try {
       await deleteKeywordApi(keywordId);
-      setToast('Keyword deleted successfully.');
+      showSuccess('Keyword deleted successfully.');
       getKeywords().then(setKeywords).catch(() => { });
     } catch (e) {
-      setToast('Failed to delete keyword.');
+      showError('Failed to delete keyword.');
     }
   };
 
   return (
     <div className="space-y-5">
-      <AdminToast message={toast} onClose={() => setToast(null)} />
-
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold tracking-tight text-slate-950">
