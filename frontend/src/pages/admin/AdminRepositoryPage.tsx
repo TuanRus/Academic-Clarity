@@ -1,32 +1,21 @@
 import { useEffect, useState } from 'react';
 import AdminModal from '../../components/admin/AdminModal';
-import AdminBadge from '../../components/admin/AdminBadge';
 import AdminSectionCard from '../../components/admin/AdminSectionCard';
 import AdminTable from '../../components/admin/AdminTable';
 import { useAdminToast } from '../../context/AdminToastContext';
 import {
   getPapers,
-  getKeywords,
   createPaperFromLink,
   createPaper,
   deletePaperApi,
-  createKeywordApi,
-  deleteKeywordApi,
-  type RepositoryCategory,
   type RepositoryPaper,
 } from '../../lib/api/admin';
-import { suggestKeywords } from '../../lib/api/mindmap';
 import { ApiError } from '../../lib/http';
 
 const AdminRepositoryPage = () => {
   const { showSuccess, showError } = useAdminToast();
-  const [activeTab, setActiveTab] = useState<'papers' | 'keywords'>('papers');
-  const [keywords, setKeywords] = useState<RepositoryCategory[]>([]);
   const [papers, setPapers] = useState<RepositoryPaper[]>([]);
   const [query, setQuery] = useState('');
-  const [keywordQuery, setKeywordQuery] = useState('');
-  const [suggestions, setSuggestions] = useState<string[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Debounced server-side paper search across ENTIRE database
   useEffect(() => {
@@ -35,32 +24,6 @@ const AdminRepositoryPage = () => {
     }, 300);
     return () => clearTimeout(timer);
   }, [query]);
-
-  // Debounced server-side keyword search across ENTIRE database
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      getKeywords(1, 100, keywordQuery).then(setKeywords).catch(() => setKeywords([]));
-    }, 300);
-    return () => clearTimeout(timer);
-  }, [keywordQuery]);
-
-  // Autocomplete keyword suggestions API call (reusing suggestKeywords)
-  useEffect(() => {
-    const term = query.trim();
-    if (term.length < 2) {
-      setSuggestions([]);
-      return;
-    }
-    const id = setTimeout(() => {
-      suggestKeywords(term, 8)
-        .then(setSuggestions)
-        .catch(() => setSuggestions([]));
-    }, 200);
-    return () => clearTimeout(id);
-  }, [query]);
-  const [showKeywordModal, setShowKeywordModal] = useState(false);
-  const [keywordName, setKeywordName] = useState('');
-  const [keywordDescription, setKeywordDescription] = useState('');
 
   // ----- Thêm bài báo (dán link OpenAlex/DOI hoặc nhập tay) -----
   const [showAddModal, setShowAddModal] = useState(false);
@@ -133,19 +96,6 @@ const AdminRepositoryPage = () => {
     }
   };
 
-  const filteredPapers = papers.filter((paper) =>
-    `${paper.id} ${paper.title} ${paper.authors} ${paper.doi} ${paper.journal} ${paper.year} ${paper.citations}`
-      .toLowerCase()
-      .includes(query.toLowerCase()),
-  );
-
-  const filteredKeywords = keywords.filter((keyword) =>
-    `${keyword.id} ${keyword.name} ${keyword.description} ${keyword.fields} ${keyword.status}`
-      .toLowerCase()
-      .includes(keywordQuery.trim().toLowerCase()),
-  );
-
-
   const handleDeletePaper = async (paperId: string, title: string) => {
     if (!window.confirm(`Are you sure you want to delete paper:\n"${title}"?`)) return;
     try {
@@ -157,34 +107,6 @@ const AdminRepositoryPage = () => {
     }
   };
 
-  const createKeyword = async () => {
-    if (!keywordName.trim()) {
-      showError('Keyword name is required.');
-      return;
-    }
-    try {
-      await createKeywordApi(keywordName.trim());
-      setKeywordName('');
-      setKeywordDescription('');
-      setShowKeywordModal(false);
-      showSuccess('New keyword created successfully.');
-      getKeywords().then(setKeywords).catch(() => { });
-    } catch (e) {
-      showError(e instanceof ApiError ? e.message : 'Failed to create keyword (may already exist).');
-    }
-  };
-
-  const handleDeleteKeyword = async (keywordId: string, name: string) => {
-    if (!window.confirm(`Are you sure you want to delete keyword:\n"${name}"?`)) return;
-    try {
-      await deleteKeywordApi(keywordId);
-      showSuccess('Keyword deleted successfully.');
-      getKeywords().then(setKeywords).catch(() => { });
-    } catch (e) {
-      showError('Failed to delete keyword.');
-    }
-  };
-
   return (
     <div className="space-y-5">
       <div className="flex items-start justify-between gap-4">
@@ -193,7 +115,7 @@ const AdminRepositoryPage = () => {
             Article Repository
           </h1>
           <p className="mt-1 text-xs text-slate-500">
-            Manage OpenAlex paper metadata, journals, citations and research keywords.
+            Manage OpenAlex paper metadata, journals and citations.
           </p>
         </div>
 
@@ -207,200 +129,70 @@ const AdminRepositoryPage = () => {
         </div>
       </div>
 
-      <div className="border-b border-slate-200">
-        <div className="flex gap-8 text-sm font-bold text-slate-500">
-          <button
-            onClick={() => setActiveTab('papers')}
-            className={`pb-3 hover:text-[#0b6fb8] ${activeTab === 'papers' ? 'border-b-2 border-[#0b6fb8] text-[#062b4f]' : ''
-              }`}
-          >
-            Research Papers
-          </button>
-
-          <button
-            onClick={() => setActiveTab('keywords')}
-            className={`pb-3 hover:text-[#0b6fb8] ${activeTab === 'keywords' ? 'border-b-2 border-[#0b6fb8] text-[#062b4f]' : ''
-              }`}
-          >
-            Keywords
-          </button>
-        </div>
-      </div>
-
-      {activeTab === 'papers' ? (
-        <AdminSectionCard
-          title="Research Papers"
-          subtitle="Manage imported paper metadata from OpenAlex."
-          action={
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search database by title, author, journal, DOI..."
-              className="w-80 rounded-md border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#0b6fb8]"
-            />
-          }
-        >
-          <AdminTable headers={['Paper ID', 'Title', 'Authors', 'Journal', 'Year', 'Citations', 'DOI', 'Actions']}>
-            {papers.map((paper) => (
-              <tr key={paper.id} className="hover:bg-slate-50">
-                <td className="px-5 py-4 font-bold text-slate-700">
-                  {paper.id}
-                </td>
-
-                <td className="max-w-sm px-5 py-4">
-                  <p className="font-semibold text-slate-900">
-                    {paper.title}
-                  </p>
-                </td>
-
-                <td className="px-5 py-4 text-sm text-slate-600">
-                  {paper.authors}
-                </td>
-
-                <td className="px-5 py-4 text-slate-600">
-                  {paper.journal}
-                </td>
-
-                <td className="px-5 py-4 font-semibold text-slate-700">
-                  {paper.year}
-                </td>
-
-                <td className="px-5 py-4 font-bold text-slate-900">
-                  {paper.citations}
-                </td>
-
-                <td className="px-5 py-4">
-                  <a
-                    href={`https://doi.org/${paper.doi}`}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-xs font-bold text-[#0b6fb8] hover:underline"
-                  >
-                    {paper.doi}
-                  </a>
-                </td>
-
-                <td className="px-5 py-4">
-                  <button
-                    onClick={() => handleDeletePaper(paper.id, paper.title)}
-                    className="text-xs font-bold text-rose-600 hover:text-rose-800 hover:underline"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </AdminTable>
-        </AdminSectionCard>
-      ) : (
-        <AdminSectionCard
-          title="Keyword Registry"
-          subtitle="Manage research keywords used for trend analysis and search suggestions."
-          action={
-            <div className="flex items-center gap-3">
-              <input
-                value={keywordQuery}
-                onChange={(event) => setKeywordQuery(event.target.value)}
-                placeholder="Search keywords in database..."
-                className="w-72 rounded-md border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#0b6fb8]"
-              />
-
-              <button
-                type="button"
-                onClick={() => setShowKeywordModal(true)}
-                className="whitespace-nowrap rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white hover:bg-[#3730a3]"
-              >
-                + New Keyword
-              </button>
-            </div>
-          }
-        >
-          <AdminTable headers={['Keyword ID', 'Keyword Name', 'Description', 'Related Papers', 'Status', 'Actions']}>
-            {keywords.map((keyword) => (
-              <tr key={keyword.id} className={`hover:bg-slate-50 ${keyword.status === 'DISMISSED' ? 'opacity-50' : ''}`} >
-                <td className="px-5 py-5 font-bold text-slate-500">{keyword.id}</td>
-
-                <td className="px-5 py-5">
-                  <p className="font-bold text-slate-900">{keyword.name}</p>
-                </td>
-
-                <td className="px-5 py-5">
-                  <p className="max-w-md text-xs text-slate-500">{keyword.description}</p>
-                </td>
-
-                <td className="px-5 py-5">
-                  <span className="rounded bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
-                    {keyword.fields} Papers
-                  </span>
-                </td>
-                <td className="px-5 py-5">
-                  <AdminBadge status={keyword.status} />
-                </td>
-
-                <td className="px-5 py-5">
-                  <button
-                    onClick={() => handleDeleteKeyword(keyword.id, keyword.name)}
-                    className="text-xs font-bold text-rose-600 hover:text-rose-800 hover:underline"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </AdminTable>
-        </AdminSectionCard>
-      )}
-
-      <AdminModal
-        open={showKeywordModal}
-        title="Create New Keyword"
-        subtitle="Add a keyword for trend tracking and search suggestion."
-        onClose={() => setShowKeywordModal(false)}
-        footer={
-          <>
-            <button
-              onClick={() => setShowKeywordModal(false)}
-              className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700"
-            >
-              Cancel
-            </button>
-
-            <button
-              onClick={createKeyword}
-              className="rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white"
-            >
-              Create Keyword
-            </button>
-          </>
+      <AdminSectionCard
+        title="Research Papers"
+        subtitle="Manage imported paper metadata from OpenAlex."
+        action={
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search database by title, author, journal, DOI..."
+            className="w-80 rounded-md border border-slate-200 px-3 py-2 text-xs outline-none focus:border-[#0b6fb8]"
+          />
         }
       >
-        <div className="space-y-4">
-          <label className="block text-xs font-bold text-slate-700" htmlFor="keyword-name">
-            Keyword name
-          </label>
+        <AdminTable headers={['Paper ID', 'Title', 'Authors', 'Journal', 'Year', 'Citations', 'DOI', 'Actions']}>
+          {papers.map((paper) => (
+            <tr key={paper.id} className="hover:bg-slate-50">
+              <td className="px-5 py-4 font-bold text-slate-700">
+                {paper.id}
+              </td>
 
-          <input
-            id="keyword-name"
-            value={keywordName}
-            onChange={(event) => setKeywordName(event.target.value)}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]"
-            placeholder="Example: Artificial Intelligence"
-          />
+              <td className="max-w-sm px-5 py-4">
+                <p className="font-semibold text-slate-900">
+                  {paper.title}
+                </p>
+              </td>
 
-          <label className="block text-xs font-bold text-slate-700" htmlFor="keyword-description">
-            Description
-          </label>
+              <td className="px-5 py-4 text-sm text-slate-600">
+                {paper.authors}
+              </td>
 
-          <textarea
-            id="keyword-description"
-            value={keywordDescription}
-            onChange={(event) => setKeywordDescription(event.target.value)}
-            rows={3}
-            className="w-full rounded-md border border-slate-300 px-3 py-2 text-sm outline-none focus:border-[#0b6fb8]"
-            placeholder="Short keyword description..."
-          />
-        </div>
-      </AdminModal>
+              <td className="px-5 py-4 text-slate-600">
+                {paper.journal}
+              </td>
+
+              <td className="px-5 py-4 font-semibold text-slate-700">
+                {paper.year}
+              </td>
+
+              <td className="px-5 py-4 font-bold text-slate-900">
+                {paper.citations}
+              </td>
+
+              <td className="px-5 py-4">
+                <a
+                  href={`https://doi.org/${paper.doi}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-xs font-bold text-[#0b6fb8] hover:underline"
+                >
+                  {paper.doi}
+                </a>
+              </td>
+
+              <td className="px-5 py-4">
+                <button
+                  onClick={() => handleDeletePaper(paper.id, paper.title)}
+                  className="text-xs font-bold text-rose-600 hover:text-rose-800 hover:underline"
+                >
+                  Delete
+                </button>
+              </td>
+            </tr>
+          ))}
+        </AdminTable>
+      </AdminSectionCard>
 
       <AdminModal
         open={showAddModal}

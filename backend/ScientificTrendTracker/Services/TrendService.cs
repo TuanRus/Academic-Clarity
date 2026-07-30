@@ -1,3 +1,4 @@
+using System;
 using Microsoft.EntityFrameworkCore;
 using ScientificTrendTracker.Data;
 using ScientificTrendTracker.Models.DTOs;
@@ -18,6 +19,12 @@ namespace ScientificTrendTracker.Services
     {
         private readonly AppDbContext _dbContext;
         private const double SlopeEpsilon = 0.0001;
+
+        // Số kỳ gần nhất dùng để xác định chiều xu hướng (rising/falling).
+        // Trend phản ánh ĐỘNG THÁI HIỆN TẠI nên chỉ nhìn cửa sổ gần đây, không hồi quy toàn bộ lịch sử
+        // (giai đoạn tăng/giảm xa xưa không còn phản ánh xu hướng bây giờ).
+        private const int SlopeRecentYears = 5;
+        private const int SlopeRecentMonths = 12;
 
         public TrendService(AppDbContext dbContext)
         {
@@ -50,7 +57,7 @@ namespace ScientificTrendTracker.Services
                 })
                 .ToList();
 
-            var slope = ComputeSlope(series);
+            var slope = ComputeRecentSlope(series, byMonth ? SlopeRecentMonths : SlopeRecentYears);
 
             return new TrendSeriesDto
             {
@@ -93,7 +100,7 @@ namespace ScientificTrendTracker.Services
                             return new TrendPointDto { Period = y.ToString(), Share = yearTotals[y] > 0 ? (double)cnt / yearTotals[y] : 0 };
                         })
                         .ToList();
-                    var slope = ComputeSlope(series);
+                    var slope = ComputeRecentSlope(series, SlopeRecentYears);
                     return new TrendTopItemDto
                     {
                         Name = g.Key,
@@ -186,6 +193,34 @@ namespace ScientificTrendTracker.Services
                 .Select(g => new { Year = g.Key, Count = g.Count() })
                 .ToListAsync();
             return years.ToDictionary(r => r.Year.ToString(), r => r.Count);
+        }
+
+        /// <summary>
+        /// Độ dốc xu hướng tính trên CỬA SỔ GẦN ĐÂY thay vì toàn bộ lịch sử.
+        /// - Bỏ kỳ hiện tại (năm/tháng đang diễn ra) vì dữ liệu chưa đủ, tránh điểm tụt giả kéo trend xuống.
+        /// - Chỉ lấy tối đa <paramref name="window"/> kỳ gần nhất để phản ánh động thái hiện tại.
+        /// Chuỗi truyền vào PHẢI đã sắp xếp tăng dần theo Period.
+        /// </summary>
+        private static double ComputeRecentSlope(List<TrendPointDto> series, int window)
+        {
+            if (series == null || series.Count < 2) return 0;
+
+            var trimmed = new List<TrendPointDto>(series);
+
+            // Bỏ kỳ cuối nếu chính là năm/tháng hiện tại (chưa kết thúc → thiếu bài).
+            var nowYear = DateTime.UtcNow.Year.ToString();
+            var nowMonth = DateTime.UtcNow.ToString("yyyy-MM");
+            var lastPeriod = trimmed[trimmed.Count - 1].Period;
+            if (lastPeriod == nowYear || lastPeriod == nowMonth)
+                trimmed.RemoveAt(trimmed.Count - 1);
+
+            if (trimmed.Count < 2) return 0;
+
+            // Chỉ giữ lại window kỳ gần nhất.
+            if (trimmed.Count > window)
+                trimmed = trimmed.GetRange(trimmed.Count - window, window);
+
+            return ComputeSlope(trimmed);
         }
 
         /// <summary>Độ dốc hồi quy tuyến tính của Share theo thứ tự kỳ (least squares).</summary>

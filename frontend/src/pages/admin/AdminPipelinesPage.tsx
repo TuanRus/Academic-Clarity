@@ -239,9 +239,9 @@ const AdminPipelinesPage = () => {
             <button
               onClick={() => runSync('Manual Trigger')}
               disabled={isSyncing}
-              className="rounded-md bg-[#0b6fb8] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
+              className="rounded-md bg-[#4338ca] hover:bg-[#3730a3] px-3 py-1.5 text-xs font-bold text-white disabled:opacity-50"
             >
-              {isSyncing ? 'Syncing…' : '↻ Sync Now'}
+              {isSyncing ? 'Syncing…' : 'Sync Now'}
             </button>
           </div>
         }
@@ -287,7 +287,7 @@ const AdminPipelinesPage = () => {
             type="button"
             onClick={() => scimagoInputRef.current?.click()}
             disabled={scimagoBusy}
-            className="w-fit rounded-md bg-[#062b4f] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
+            className="w-fit rounded-md bg-[#4338ca] hover:bg-[#3730a3] px-4 py-2 text-xs font-bold text-white disabled:opacity-50"
           >
             {scimagoBusy ? 'Importing…' : 'Choose CSV file to import'}
           </button>

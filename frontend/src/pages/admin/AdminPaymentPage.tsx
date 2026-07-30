@@ -65,30 +65,6 @@ const AdminPaymentPage = () => {
   const monthlyCount = rows.filter((r) => /monthly|tháng/i.test(r.plan)).length;
   const yearlyCount = rows.filter((r) => /yearly|năm/i.test(r.plan)).length;
 
-  const exportFinanceReport = () => {
-    const content = rows
-      .map(
-        (row) =>
-          `${row.invoiceId},${row.transactionId},${row.customer},${row.plan},${row.amount},${row.method},${row.paidAt},${row.status}`,
-      )
-      .join('\n');
-
-    const blob = new Blob(
-      [`Invoice,Transaction ID,Customer,Plan,Amount,Method,Paid At,Status\n${content}`],
-      { type: 'text/csv;charset=utf-8;' },
-    );
-
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-
-    anchor.href = url;
-    anchor.download = 'finance-report.csv';
-    anchor.click();
-
-    URL.revokeObjectURL(url);
-    showSuccess('Finance report exported.');
-  };
-
   const refreshPayments = async () => {
     try {
       setRows(await getTransactions());
@@ -211,13 +187,6 @@ const AdminPaymentPage = () => {
         </div>
 
         <div className="flex gap-3">
-          <button
-            onClick={exportFinanceReport}
-            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
-          >
-            ⇩ Export Finance Report
-          </button>
-
           <button
             onClick={refreshPayments}
             className="rounded-md bg-[#4338ca] px-4 py-2 text-xs font-bold text-white hover:bg-[#3730a3]"

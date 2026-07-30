@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
-  Cell,
   Line,
   LineChart,
   ResponsiveContainer,
@@ -167,6 +164,8 @@ const TrendDashboardPage = () => {
     setSeriesKeyword(s);
     setShowSeriesSuggest(false);
   };
+
+  const maxShare = topKeywords.reduce((m, k) => Math.max(m, k.share), 0) || 1;
 
   const [exporting, setExporting] = useState(false);
   const exportCsv = async () => {
@@ -562,38 +561,24 @@ const TrendDashboardPage = () => {
           )}
 
           {!loading && !error && topKeywords.length > 0 && (
-            <div className="mt-4" style={{ height: Math.max(220, topKeywords.length * 36) }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={topKeywords}
-                  layout="vertical"
-                  margin={{ top: 8, right: 24, bottom: 8, left: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#eee" horizontal={false} />
-                  <XAxis type="number" tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} tick={{ fontSize: 12 }} />
-                  <YAxis dataKey="name" type="category" width={140} tick={{ fontSize: 12 }} />
-                  <Tooltip
-                    formatter={(value, _name, item) => [
-                      `${item.payload.count} papers · ${((value as number) * 100).toFixed(1)}%`,
-                      'Share',
-                    ]}
-                  />
-                  <Bar dataKey="share" radius={[0, 4, 4, 0]}>
-                    {topKeywords.map((kw) => (
-                      <Cell
-                        key={kw.name}
-                        fill={
-                          kw.direction === 'rising'
-                            ? '#16a34a'
-                            : kw.direction === 'falling'
-                              ? '#dc2626'
-                              : '#4338ca'
-                        }
-                      />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="mt-4 space-y-2 text-sm text-gray-700">
+              {topKeywords.map((kw) => (
+                <div key={kw.name}>
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{kw.name}</span>
+                    <span className="text-xs text-gray-500">
+                      {kw.count} papers · {(kw.share * 100).toFixed(1)}%
+                      {kw.direction === 'rising' ? ' ▲' : kw.direction === 'falling' ? ' ▼' : ''}
+                    </span>
+                  </div>
+                  <div className="mt-1 h-2 rounded bg-gray-100">
+                    <div
+                      className="h-2 rounded bg-indigo-700"
+                      style={{ width: `${Math.max(4, (kw.share / maxShare) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
             </div>
           )}
         </div>

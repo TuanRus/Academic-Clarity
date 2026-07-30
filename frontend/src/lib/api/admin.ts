@@ -7,11 +7,8 @@ export type AdminStatus =
   | 'SUSPENDED' | 'DRAFT' | 'VERIFIED' | 'REGISTERED' | 'EXPIRED' | 'DISMISSED' | 'REVIEWING'
   | 'RUNNING' | 'CANCELLED';
 
-export interface ExportRequest { id: string; user: string; type: 'CSV' | 'PDF' | 'XLSX'; timestamp: string; status: AdminStatus; }
 export interface PipelineEvent { id?: number; title: string; time: string; status: AdminStatus; recordsImported?: number; }
-export interface RepositoryCategory { id: string; name: string; description: string; fields: number; status: AdminStatus; }
 export interface RepositoryPaper { id: string; title: string; doi: string; journal: string; year: number; citations: number; status: AdminStatus; authors: string; }
-export interface RepositoryAnomaly { id: string; label: string; title: string; tone: 'orange' | 'red'; action: 'Auto-Fill' | 'Review'; status: AdminStatus; }
 export interface UserDirectoryRow { id: string; initials: string; name: string; email: string; role: string; status: AdminStatus; isPremium?: boolean; }
 export interface ActivityLog { id: number; type: 'ELEVATION' | 'LEDGER' | 'AUTH_FAIL' | 'UPDATE'; time: string; title: string; ref: string; }
 export interface RevenueRow { transactionId: string; invoiceId: string; customer: string; customerEmail: string; plan: string; amount: string; method: string; paidAt: string; status: AdminStatus; }
@@ -136,11 +133,6 @@ export async function getSyncLogs(): Promise<PipelineEvent[]> {
     status: mapSyncStatus(s.status),
     recordsImported: s.recordsImported,
   }));
-}
-
-/** DELETE /admin/sync-logs/empty — xoá các nhật ký sync 0 bài (bỏ qua lần đang chạy). */
-export async function deleteEmptySyncLogs(): Promise<{ deleted: number }> {
-  return apiDelete('/admin/sync-logs/empty') as Promise<{ deleted: number }>;
 }
 
 // ---- Chi tiết bài đã sync (GET /admin/sync-logs/{id}/papers) ----
@@ -268,11 +260,6 @@ interface BeCharts {
   paperGrowths?: { month: string; newPapersCount: number }[];
   planDistributions?: { planName: string; count: number }[];
 }
-export async function getRevenueBars(): Promise<{ month: string; amount: number }[]> {
-  const res = await apiGet<BeCharts>('/admin/dashboard/charts');
-  return (res.monthlyRevenues ?? []).map((m) => ({ month: m.month, amount: m.revenue }));
-}
-
 export interface DashboardCharts {
   revenue: { month: string; value: number }[];
   papers: { month: string; value: number }[];
@@ -316,19 +303,6 @@ export function getSystemConfig(): Promise<SystemConfig> {
   return apiGet<SystemConfig>('/admin/settings');
 }
 
-// ---- Keywords (GET /admin/keywords) — cho tab Ontology của Article Repository ----
-interface BeKeyword { keywordId: string; keywordName: string; associatedPapersCount: number; createdAt: string; }
-export async function getKeywords(page = 1, pageSize = 100, search = ''): Promise<RepositoryCategory[]> {
-  const res = await apiGet<Paged<BeKeyword>>('/admin/keywords', { page, pageSize, search: search.trim() || undefined });
-  return res.items.map((k) => ({
-    id: k.keywordId,
-    name: k.keywordName,
-    description: `Used in ${k.associatedPapersCount} paper(s)`,
-    fields: k.associatedPapersCount,
-    status: 'ACTIVE' as AdminStatus,
-  }));
-}
-
 // ---- Thêm bài báo thủ công ----
 /** POST /admin/papers/from-link — dán link OpenAlex/DOI → BE tự fetch metadata & thêm bài. */
 export function createPaperFromLink(link: string): Promise<unknown> {
@@ -357,18 +331,3 @@ export function deletePaperApi(paperId: string): Promise<unknown> {
   return apiDelete(`/admin/papers/${paperId}`);
 }
 
-/** POST /admin/keywords — tạo từ khóa mới lưu vào CSDL. */
-export function createKeywordApi(keywordName: string): Promise<unknown> {
-  return apiPost('/admin/keywords', { keywordName });
-}
-
-/** DELETE /admin/keywords/{id} — xoá từ khóa khỏi CSDL. */
-export function deleteKeywordApi(keywordId: string): Promise<unknown> {
-  return apiDelete(`/admin/keywords/${keywordId}`);
-}
-
-// ---- Chạy sync OpenAlex thủ công (POST /admin/run-weekly-now) ----
-export interface RunSyncResult { added: number; alreadyExists: number; errors: number; }
-export async function runWeeklySync(): Promise<RunSyncResult> {
-  return apiPost<RunSyncResult>('/admin/run-weekly-now', {});
-}

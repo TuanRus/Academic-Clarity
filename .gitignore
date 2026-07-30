@@ -50,9 +50,11 @@ Thumbs.db
 **/settings.local.json
 .cursor/
 
-# ===== Markdown docs (khong push) =====
+# ===== Markdown docs (khong push, tru README) =====
 *.md
 **/*.md
+!README.md
+!/README.md
 
 # ===== Docs folder (khong push) =====
 docs/

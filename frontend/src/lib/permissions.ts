@@ -41,11 +41,3 @@ export function hasFeature(user: User | null, feature: FeaturePermission): boole
   if (user.role === Role.ADMIN) return true; // Admin = auto PREMIUM cho mọi tính năng sản phẩm
   return TIER_PERMISSIONS[user.accessTier].includes(feature);
 }
-
-/**
- * FR-27/28: quyền vào khu vực quản trị chỉ dựa vào role = ADMIN,
- * độc lập hoàn toàn với accessTier.
- */
-export function isAdmin(user: User | null): boolean {
-  return user?.role === Role.ADMIN;
-}
