@@ -42,7 +42,7 @@ const AdvancedSearchPage = () => {
       <aside className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-gray-800">Filter Results</h2>
         <p className="mt-1 text-xs text-gray-400">
-          Year range áp dụng khi bấm Search. Research Field chỉ tham khảo (corpus hiện toàn Computer Science).
+          Year range applies when you click Search. Research Field is for reference only (the corpus is currently all Computer Science).
         </p>
 
         <div className="mt-4">

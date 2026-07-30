@@ -21,7 +21,7 @@ const ForgotPasswordPage = () => {
     try {
       await fn();
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Không kết nối được máy chủ.');
+      setError(e instanceof ApiError ? e.message : 'Unable to connect to the server.');
     } finally {
       setLoading(false);
     }

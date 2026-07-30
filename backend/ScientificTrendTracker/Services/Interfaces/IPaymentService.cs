@@ -35,5 +35,15 @@ namespace ScientificTrendTracker.Services.Interfaces
         /// Cập nhật trạng thái giao dịch thành CANCELLED khi người dùng bấm Hủy hoặc hủy giao dịch trên PayOS.
         /// </summary>
         Task<bool> CancelPaymentByOrderCodeAsync(long orderCode, int currentUserId);
+
+        /// <summary>
+        /// Quét các đơn PENDING đã quá thời hạn (user không hoàn tất/không quay lại ReturnUrl,
+        /// webhook không tới) rồi đối soát trạng thái thật với PayOS: đã PAID → thăng cấp,
+        /// còn lại → chuyển CANCELLED. Dùng cho background reconcile để không còn đơn treo PENDING.
+        /// </summary>
+        /// <param name="olderThan">Chỉ xử lý đơn được tạo cách đây lâu hơn khoảng này (qua thời gian PayOS hết hạn).</param>
+        /// <param name="ct">CancellationToken - NGUỒN: background service - dừng đối soát khi ứng dụng tắt.</param>
+        /// <returns>Số đơn đã được cập nhật trạng thái.</returns>
+        Task<int> ReconcilePendingPaymentsAsync(TimeSpan olderThan, CancellationToken ct = default);
     }
 }

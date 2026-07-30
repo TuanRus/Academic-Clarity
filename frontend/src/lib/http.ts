@@ -91,7 +91,7 @@ async function execute<T>(path: string, makeInit: () => RequestInit, params?: Re
   }
 
   if (!res.ok || !body || body.success === false) {
-    const message = body?.message ?? `Yêu cầu thất bại (HTTP ${res.status}).`;
+    const message = body?.message ?? `Request failed (HTTP ${res.status}).`;
     throw new ApiError(message, body?.statusCode ?? res.status);
   }
 

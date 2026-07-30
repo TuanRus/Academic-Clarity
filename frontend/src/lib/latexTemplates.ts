@@ -12,7 +12,7 @@ export const LATEX_TEMPLATES: LatexTemplate[] = [
   {
     id: 'article',
     name: 'Research Article',
-    description: 'Khung bài báo chuẩn: abstract, sections, tài liệu tham khảo.',
+    description: 'Standard paper skeleton: abstract, sections, references.',
     content: `\\documentclass[11pt]{article}
 \\usepackage[margin=1in]{geometry}
 \\usepackage{amsmath}
@@ -54,7 +54,7 @@ Summarize contributions and future work.
   {
     id: 'ieee',
     name: 'IEEE-style (two column)',
-    description: 'Bố cục 2 cột kiểu hội nghị IEEE (bản đơn giản, không cần IEEEtran).',
+    description: 'Two-column IEEE conference layout (simplified, no IEEEtran needed).',
     content: `\\documentclass[10pt,twocolumn]{article}
 \\usepackage[margin=0.75in]{geometry}
 \\usepackage{amsmath}
@@ -97,7 +97,7 @@ Summary and future directions.
   {
     id: 'blank',
     name: 'Blank',
-    description: 'Tài liệu trống tối thiểu.',
+    description: 'Minimal blank document.',
     content: `\\documentclass{article}
 \\begin{document}
 

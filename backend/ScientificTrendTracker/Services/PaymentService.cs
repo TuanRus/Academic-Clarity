@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
@@ -298,6 +299,83 @@ namespace ScientificTrendTracker.Services
                 _logger.LogError(ex, "Lỗi xảy ra khi hủy giao dịch cho orderCode {OrderCode}.", orderCode);
                 return false;
             }
+        }
+
+        /// <summary>
+        /// Đối soát các đơn PENDING quá hạn với PayOS để dọn "đơn treo".
+        /// - Đã PAID trên cổng  → thăng cấp (UpgradeUserAsync, idempotent).
+        /// - Chưa PAID (hết hạn/hủy/không tồn tại) → chuyển CANCELLED.
+        /// Chỉ đụng đơn tạo cách đây lâu hơn <paramref name="olderThan"/> để không hủy nhầm đơn user đang thanh toán dở.
+        /// </summary>
+        public async Task<int> ReconcilePendingPaymentsAsync(TimeSpan olderThan, CancellationToken ct = default)
+        {
+            var cutoff = DateTime.UtcNow - olderThan;
+
+            var stalePendings = await _context.UserSubscriptions
+                .Where(s => s.Status == "PENDING" && s.CreatedAt < cutoff)
+                .ToListAsync(ct);
+
+            if (stalePendings.Count == 0) return 0;
+
+            int changed = 0;
+            foreach (var sub in stalePendings)
+            {
+                if (ct.IsCancellationRequested) break;
+
+                // Đơn không có orderCode (dữ liệu cũ/bất thường) không thể đối soát → hủy để không treo.
+                if (sub.OrderCode is not long orderCode)
+                {
+                    sub.Status = "CANCELLED";
+                    sub.UpdatedAt = DateTime.UtcNow;
+                    await _context.SaveChangesAsync(ct);
+                    changed++;
+                    continue;
+                }
+
+                bool paid = false;
+                try
+                {
+                    var link = await _payOS.PaymentRequests.GetAsync(orderCode);
+                    paid = link != null && link.Status == PaymentLinkStatus.Paid;
+                }
+                catch (Exception ex)
+                {
+                    // Không hỏi được PayOS lần này → giữ PENDING, thử lại ở nhịp reconcile sau.
+                    _logger.LogWarning(ex, "Reconcile: không lấy được trạng thái PayOS cho orderCode {OrderCode}, bỏ qua lần này.", orderCode);
+                    continue;
+                }
+
+                try
+                {
+                    if (paid)
+                    {
+                        // Đã trả tiền thật nhưng webhook/return lỡ → thăng cấp bù.
+                        var ok = await UpgradeUserAsync(sub.UserId, sub.PaidAmount ?? 0, orderCode);
+                        if (ok)
+                        {
+                            _cache.Remove(OrderCacheKey(orderCode));
+                            changed++;
+                            _logger.LogInformation("Reconcile: đơn treo {OrderCode} thực chất đã PAID → đã thăng cấp UserId {UserId}.", orderCode, sub.UserId);
+                        }
+                    }
+                    else
+                    {
+                        // Quá hạn mà chưa PAID → coi như bỏ dở, hủy để không treo bảng giao dịch.
+                        sub.Status = "CANCELLED";
+                        sub.UpdatedAt = DateTime.UtcNow;
+                        await _context.SaveChangesAsync(ct);
+                        _cache.Remove(OrderCacheKey(orderCode));
+                        changed++;
+                        _logger.LogInformation("Reconcile: đơn treo {OrderCode} chưa PAID quá hạn → chuyển CANCELLED.", orderCode);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, "Reconcile: lỗi khi cập nhật đơn {OrderCode}.", orderCode);
+                }
+            }
+
+            return changed;
         }
 
         /// <summary>

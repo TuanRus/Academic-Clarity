@@ -11,7 +11,7 @@ const RequireAuth = () => {
 
   // Đang khôi phục phiên từ token → chờ, tránh redirect sớm về /login.
   if (loading) {
-    return <div className="flex min-h-screen items-center justify-center text-sm text-gray-400">Đang tải…</div>;
+    return <div className="flex min-h-screen items-center justify-center text-sm text-gray-400">Loading…</div>;
   }
 
   if (!user) {

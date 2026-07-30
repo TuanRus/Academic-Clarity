@@ -44,9 +44,9 @@ const RegisterPage = () => {
     try {
       await sendOtp(email.trim());
       setOtpSent(true);
-      setInfo('Mã OTP đã được gửi tới email của bạn. Vui lòng kiểm tra hộp thư.');
+      setInfo('An OTP code has been sent to your email. Please check your inbox.');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Không gửi được mã OTP.');
+      setError(err instanceof ApiError ? err.message : 'Failed to send OTP code.');
     } finally {
       setSubmitting(false);
     }
@@ -67,7 +67,7 @@ const RegisterPage = () => {
       });
       navigate('/login');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Đăng ký tài khoản thất bại.');
+      setError(err instanceof ApiError ? err.message : 'Account registration failed.');
     } finally {
       setSubmitting(false);
     }
@@ -89,7 +89,7 @@ const RegisterPage = () => {
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               disabled={otpSent}
-              placeholder="e.g., Hoàng Tiến Đạt"
+              placeholder="e.g., John Smith"
               className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-500"
             />
           </div>
@@ -154,7 +154,7 @@ const RegisterPage = () => {
                 maxLength={6}
                 value={otpCode}
                 onChange={(e) => setOtpCode(e.target.value)}
-                placeholder="6 chữ số"
+                placeholder="6 digits"
                 className="mt-1 w-full rounded-md border border-gray-200 px-3 py-2 text-sm tracking-widest"
               />
             </div>
@@ -169,7 +169,7 @@ const RegisterPage = () => {
             className="w-full rounded-md bg-indigo-700 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-800 disabled:opacity-50"
           >
             {submitting
-              ? 'Đang xử lý…'
+              ? 'Processing…'
               : otpSent
                 ? 'Register Account'
                 : 'Send OTP'}
