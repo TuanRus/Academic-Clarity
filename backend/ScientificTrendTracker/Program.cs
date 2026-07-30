@@ -175,6 +175,7 @@ namespace ScientificTrendTracker
                 };
             });
             builder.Services.AddHostedService<WeeklySyncService>();
+            builder.Services.AddHostedService<PendingPaymentReconcileService>();
 
             var app = builder.Build();
 

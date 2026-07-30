@@ -23,7 +23,7 @@ const LoginPage = () => {
       // Admin đăng nhập thì vào thẳng khu quản trị (FR-27/28)
       navigate(u?.role === Role.ADMIN ? '/admin' : '/');
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'Đăng nhập thất bại.');
+      setError(err instanceof ApiError ? err.message : 'Login failed.');
     } finally {
       setSubmitting(false);
     }
