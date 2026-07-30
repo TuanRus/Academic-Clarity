@@ -92,8 +92,8 @@ namespace ScientificTrendTracker.Services
                 .ToArray();
             if (keys.Length == 0)
             {
-                _logger.LogInformation("Không cấu hình Gemini:ApiKeys → phân tích trùng ý tưởng bằng Ollama.");
-                return await _ollamaFallback.CompleteAsync(prompt, ct);
+                _logger.LogInformation("Không cấu hình Gemini:ApiKeys → phân tích trùng ý tưởng bằng OverlapAi/Ollama.");
+                return await AnalyzeWithOverlapAiAsync(prompt, ct) ?? await _ollamaFallback.CompleteAsync(prompt, ct);
             }
 
             var model = _config["Gemini:Model"] ?? "gemini-2.0-flash";
@@ -108,8 +108,71 @@ namespace ScientificTrendTracker.Services
                 if (ok) return text;
             }
 
-            _logger.LogWarning("Cả {N} Gemini key đều thất bại → fallback Ollama cho phân tích trùng ý tưởng.", keys.Length);
-            return await _ollamaFallback.CompleteAsync(prompt, ct);
+            _logger.LogWarning("Cả {N} Gemini key đều thất bại → thử OverlapAi/Ollama cho phân tích trùng ý tưởng.", keys.Length);
+            return await AnalyzeWithOverlapAiAsync(prompt, ct) ?? await _ollamaFallback.CompleteAsync(prompt, ct);
+        }
+
+        /// <summary>
+        /// Gọi model riêng cho Idea Overlap qua endpoint OpenAI-compatible (section "OverlapAi").
+        /// Tính năng này chạy ít lần nhưng cần suy luận ngữ nghĩa → dùng model mạnh hơn keyword extraction.
+        /// Trả null nếu chưa cấu hình hoặc lỗi → caller tự fallback.
+        /// </summary>
+        private async Task<string> AnalyzeWithOverlapAiAsync(string prompt, CancellationToken ct)
+        {
+            var baseUrl = _config["OverlapAi:BaseUrl"];
+            var model = _config["OverlapAi:Model"];
+            var apiKey = _config["OverlapAi:ApiKey"];
+            if (string.IsNullOrWhiteSpace(baseUrl) || string.IsNullOrWhiteSpace(model)) return null;
+
+            var timeoutSec = _config.GetValue("OverlapAi:TimeoutSeconds", 60);
+            var url = baseUrl.TrimEnd('/') + "/chat/completions";
+            var payload = new
+            {
+                model,
+                messages = new[] { new { role = "user", content = prompt } },
+                temperature = 0.2,
+                max_tokens = 800
+            };
+
+            using var reqCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            reqCts.CancelAfter(TimeSpan.FromSeconds(timeoutSec));
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Post, url)
+                {
+                    Content = new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json")
+                };
+                if (!string.IsNullOrWhiteSpace(apiKey))
+                    req.Headers.TryAddWithoutValidation("Authorization", $"Bearer {apiKey}");
+
+                using var resp = await _http.SendAsync(req, reqCts.Token);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning("OverlapAi model={Model} lỗi HTTP {Code}.", model, (int)resp.StatusCode);
+                    return null;
+                }
+
+                var json = await resp.Content.ReadAsStringAsync(reqCts.Token);
+                using var doc = JsonDocument.Parse(json);
+                if (doc.RootElement.TryGetProperty("choices", out var choices) && choices.GetArrayLength() > 0
+                    && choices[0].TryGetProperty("message", out var msg)
+                    && msg.TryGetProperty("content", out var contentEl))
+                {
+                    var text = contentEl.GetString();
+                    return string.IsNullOrWhiteSpace(text) ? null : text;
+                }
+                return null;
+            }
+            catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+            {
+                _logger.LogWarning("OverlapAi model={Model} timeout sau {Sec}s.", model, timeoutSec);
+                return null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "OverlapAi model={Model} lỗi khi gọi API.", model);
+                return null;
+            }
         }
 
         /// <summary>Gọi Gemini 1 key với prompt bất kỳ, trả (ok, rawText). ok=false khi 429/lỗi/timeout.</summary>

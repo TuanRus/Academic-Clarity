@@ -11,16 +11,23 @@ namespace ScientificTrendTracker.Services
     public class KeywordReprocessService : IKeywordReprocessService
     {
         private const int BatchSize = 50; // số bài load mỗi lần query DB
+        private const int DefaultDelayBetweenPapersMs = 200; // van an toàn giữa 2 request AI (đọc từ config)
 
         private readonly IServiceScopeFactory _scopeFactory;
         private readonly ILogger<KeywordReprocessService> _logger;
         private readonly ReprocessJobState _state = new();
         private readonly object _lock = new();
+        private readonly int _delayBetweenPapersMs;
 
-        public KeywordReprocessService(IServiceScopeFactory scopeFactory, ILogger<KeywordReprocessService> logger)
+        public KeywordReprocessService(IServiceScopeFactory scopeFactory, ILogger<KeywordReprocessService> logger,
+            IConfiguration configuration)
         {
             _scopeFactory = scopeFactory;
             _logger = logger;
+            // Ưu tiên khóa riêng Sync:ReprocessDelayMs; nếu không có, fallback về Sync:DelayBetweenPapersMs
+            // (dùng chung nhịp với sync inline) rồi mới tới mặc định.
+            _delayBetweenPapersMs = configuration.GetValue<int?>("Sync:ReprocessDelayMs")
+                ?? configuration.GetValue("Sync:DelayBetweenPapersMs", DefaultDelayBetweenPapersMs);
         }
 
         public bool StartBackground()
@@ -145,6 +152,11 @@ namespace ScientificTrendTracker.Services
                             dbContext.ChangeTracker.Clear();
                             lock (_lock) { _state.Failed++; _state.LastError = ex.Message; }
                         }
+
+                        // Van throttle giữa 2 request AI (bài không abstract đã continue nên không tới đây).
+                        // Giữ nhịp gọi provider ổn định, tránh 429 nếu sau này đổi sang model siết RPM.
+                        if (_delayBetweenPapersMs > 0)
+                            await Task.Delay(_delayBetweenPapersMs);
                     }
 
                     _logger.LogInformation("Reprocess-all tiến độ: processed={P} failed={F} remaining={R}",

@@ -7,8 +7,10 @@ namespace ScientificTrendTracker.Services
 {
     public class SyncOrchestratorService : ISyncOrchestratorService
     {
-        private const int DelayBetweenPagesMs = 500;
-        private const int DelayBetweenPapersMs = 4000; // ~15 req/phút, dưới Gemini flash RPM (15)
+        // Delay mặc định khi không cấu hình "Sync" trong appsettings.
+        // 600ms/bài hợp với API trả phí (OpenRouter); tăng lên nếu provider bắt đầu trả 429.
+        private const int DefaultDelayBetweenPagesMs = 500;
+        private const int DefaultDelayBetweenPapersMs = 600;
 
         private readonly IOpenAlexService _openAlexService;
         private readonly IKeywordExtractionService _keywordService;
@@ -17,13 +19,17 @@ namespace ScientificTrendTracker.Services
         private readonly ISyncProgressTracker _progress;
         private readonly INotificationService _notificationService;
 
+        private readonly int _delayBetweenPagesMs;
+        private readonly int _delayBetweenPapersMs;
+
         public SyncOrchestratorService(
             IOpenAlexService openAlexService,
             IKeywordExtractionService keywordService,
             AppDbContext dbContext,
             ILogger<SyncOrchestratorService> logger,
             ISyncProgressTracker progress,
-            INotificationService notificationService)
+            INotificationService notificationService,
+            IConfiguration configuration)
         {
             _openAlexService = openAlexService;
             _keywordService = keywordService;
@@ -31,6 +37,9 @@ namespace ScientificTrendTracker.Services
             _logger = logger;
             _progress = progress;
             _notificationService = notificationService;
+
+            _delayBetweenPagesMs = configuration.GetValue("Sync:DelayBetweenPagesMs", DefaultDelayBetweenPagesMs);
+            _delayBetweenPapersMs = configuration.GetValue("Sync:DelayBetweenPapersMs", DefaultDelayBetweenPapersMs);
         }
 
         /// <summary>
@@ -125,7 +134,7 @@ namespace ScientificTrendTracker.Services
                         {
                             // ĐẶT Ở FINALLY: delay luôn chạy dù try ném exception → không bao giờ spin
                             if (throttle)
-                                await Task.Delay(DelayBetweenPapersMs, cancellationToken);
+                                await Task.Delay(_delayBetweenPapersMs, cancellationToken);
                         }
                     }
 
@@ -136,7 +145,7 @@ namespace ScientificTrendTracker.Services
                     if (pausedByQuota) break;
 
                     if (page < maxPages)
-                        await Task.Delay(DelayBetweenPagesMs, cancellationToken);
+                        await Task.Delay(_delayBetweenPagesMs, cancellationToken);
                 }
 
                 _logger.LogInformation(
@@ -271,7 +280,7 @@ namespace ScientificTrendTracker.Services
                             }
                         }
 
-                        await Task.Delay(DelayBetweenPagesMs, cancellationToken);
+                        await Task.Delay(_delayBetweenPagesMs, cancellationToken);
                     }
 
                     _logger.LogInformation("Backfill năm {Year}: fetched={Fetched} (added tổng={Added}, exists={Exists})",
