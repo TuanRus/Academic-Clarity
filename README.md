@@ -10,7 +10,7 @@ actionable insight for researchers. It synchronizes Computer Science papers from
 corpus, and draft papers in a built-in **LaTeX writer** — all behind a Free / Premium model
 with real payments via **PayOS**.
 
-> **Live demo:** https://academicclarity.tuanvo13072005.top
+> **Live demo:** ~~https://academicclarity.tuanvo13072005.top~~ *(no longer available)*
 
 ---
 
